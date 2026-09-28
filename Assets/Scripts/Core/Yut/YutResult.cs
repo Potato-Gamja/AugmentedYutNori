@@ -1,4 +1,6 @@
-ï»¿public enum YutResult { BackDo, Do, Gae, Geol, Yut, Mo }
+using UnityEngine;
+
+public enum YutResult { BackDo, Do, Gae, Geol, Yut, Mo }
 
 /*int steps   = result.Steps();
 bool extra  = result.GrantsExtraThrow();
@@ -16,17 +18,17 @@ public static class YutResultExtensions
         _ => 0
     };
 
-    public static bool GrantsExtraThrow(this YutResult r) //ì¶”ê°€ ê¸°íšŒ ì²´í¬
+    public static bool GrantsExtraThrow(this YutResult r) //Ãß°¡ ±âÈ¸ Ã¼Å©
         => r == YutResult.Yut || r == YutResult.Mo;
 
-    public static string DisplayName(this YutResult r) => r switch //í‘œê¸°í•  ì´ë¦„ ì²´í¬
+    public static string DisplayName(this YutResult r) => r switch //Ç¥±âÇÒ ÀÌ¸§ Ã¼Å©
     {
-        YutResult.BackDo => "ë¹½ë„",
-        YutResult.Do => "ë„",
-        YutResult.Gae => "ê°œ",
-        YutResult.Geol => "ê±¸",
-        YutResult.Yut => "ìœ·",
-        YutResult.Mo => "ëª¨",
+        YutResult.BackDo => "»ªµµ",
+        YutResult.Do => "µµ",
+        YutResult.Gae => "°³",
+        YutResult.Geol => "°É",
+        YutResult.Yut => "À·",
+        YutResult.Mo => "¸ð",
         _ => throw new System.ArgumentOutOfRangeException(nameof(r), r, null)
     };
 }
