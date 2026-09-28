@@ -1,4 +1,4 @@
-﻿public enum YutResult { BackDo, Do, Gae, Geol, Yut, Mo }
+public enum YutResult { BackDo, Do, Gae, Geol, Yut, Mo }
 
 /*int steps   = result.Steps();
 bool extra  = result.GrantsExtraThrow();
@@ -13,7 +13,7 @@ public static class YutResultExtensions
         YutResult.Geol => 3,
         YutResult.Yut => 4,
         YutResult.Mo => 5,
-        _ => 0
+        _ => throw new System.ArgumentOutOfRangeException(nameof(r), r, null)
     };
 
     public static bool GrantsExtraThrow(this YutResult r) //추가 기회 체크

@@ -1,5 +1,3 @@
-﻿using UnityEngine;
-
 public readonly struct YutThrowOutcome
 {
     public readonly bool[] Sticks;     // true = 평평한 면(배)
@@ -20,7 +18,7 @@ public interface IGetResult //차후 윷가락이 늘어날지도 모르기 때�
 public class StandardGetResult : IGetResult // 윷이 4개일 경우 사용할 로직
 {
     public const int StickCount = 4;
-    private const int MarkedStick = 0;   // 표시된 윷가락 1번째 윷
+    public const int MarkedStick = 0;   // 표시된 윷가락 1번째 윷
     private readonly bool useBackDo;
 
     public StandardGetResult(bool useBackDo = true)
