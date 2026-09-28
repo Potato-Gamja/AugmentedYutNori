@@ -1,8 +1,6 @@
-using UnityEngine;
-
 public readonly struct YutThrowOutcome
 {
-    public readonly bool[] Sticks;     // true = ÆòÆòÇÑ ¸é(¹è)
+    public readonly bool[] Sticks;     // true = í‰í‰í•œ ë©´(ë°°)
     public readonly YutResult Result;
 
     public YutThrowOutcome(bool[] sticks, YutResult result)
@@ -11,16 +9,16 @@ public readonly struct YutThrowOutcome
         Result = result;
     }
 }
-public interface IGetResult //Â÷ÈÄ À·°¡¶ôÀÌ ´Ã¾î³¯Áöµµ ¸ğ¸£±â ¶§¹®¿¡ ¸Ş¼­µå ºĞ¸®
+public interface IGetResult //ì°¨í›„ ìœ·ê°€ë½ì´ ëŠ˜ì–´ë‚ ì§€ë„ ëª¨ë¥´ê¸° ë•Œë¬¸ì— ë©”ì„œë“œ ë¶„ë¦¬
 {
     YutResult GetResult(bool[] sticks);
 }
 
-//var rule = new StandardGetResult(); ¹éµµ ²ô·Á¸é useBackDo: false
-public class StandardGetResult : IGetResult // À·ÀÌ 4°³ÀÏ °æ¿ì »ç¿ëÇÒ ·ÎÁ÷
+//var rule = new StandardGetResult(); ë°±ë„ ë„ë ¤ë©´ useBackDo: false
+public class StandardGetResult : IGetResult // ìœ·ì´ 4ê°œì¼ ê²½ìš° ì‚¬ìš©í•  ë¡œì§
 {
     public const int StickCount = 4;
-    private const int MarkedStick = 0;   // Ç¥½ÃµÈ À·°¡¶ô 1¹øÂ° À·
+    public const int MarkedStick = 0;   // í‘œì‹œëœ ìœ·ê°€ë½ 1ë²ˆì§¸ ìœ·
     private readonly bool useBackDo;
 
     public StandardGetResult(bool useBackDo = true)
@@ -31,7 +29,7 @@ public class StandardGetResult : IGetResult // À·ÀÌ 4°³ÀÏ °æ¿ì »ç¿ëÇÒ ·ÎÁ÷
     public YutResult GetResult(bool[] sticks)
     {
         if (sticks.Length != StickCount)
-            throw new System.ArgumentException($"±âº» ±ÔÄ¢Àº À·°¡¶ô {StickCount}°³¸¸ ÆÇÁ¤ÇÕ´Ï´Ù. ¹ŞÀº °³¼ö: {sticks.Length}");
+            throw new System.ArgumentException($"ê¸°ë³¸ ê·œì¹™ì€ ìœ·ê°€ë½ {StickCount}ê°œë§Œ íŒì •í•©ë‹ˆë‹¤. ë°›ì€ ê°œìˆ˜: {sticks.Length}");
 
         int flatCount = 0;
         foreach (bool isFlat in sticks)
@@ -49,12 +47,12 @@ public class StandardGetResult : IGetResult // À·ÀÌ 4°³ÀÏ °æ¿ì »ç¿ëÇÒ ·ÎÁ÷
             case 3: return YutResult.Geol;
             case 4: return YutResult.Yut;
             default:
-                throw new System.InvalidOperationException($"ÆÇÁ¤ÇÒ ¼ö ¾ø´Â ÆòÆòÇÑ ¸é °³¼ö: {flatCount}");
+                throw new System.InvalidOperationException($"íŒì •í•  ìˆ˜ ì—†ëŠ” í‰í‰í•œ ë©´ ê°œìˆ˜: {flatCount}");
         }
     }
 }
 
-// var thrower = new YutThrower(new SystemRandomProvider()); Çü½ÄÀ¸·Î È£Ãâ
+// var thrower = new YutThrower(new SystemRandomProvider()); í˜•ì‹ìœ¼ë¡œ í˜¸ì¶œ
 // YutThrowOutcome outcome = thrower.Throw(StandardGetResult.StickCount, rule);
 public class YutThrower
 {

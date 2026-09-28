@@ -58,7 +58,8 @@ public class PieceView : MonoBehaviour
         RefreshHighlight();
     }
 
-    // 현재 차례에 선택할 수 있는 말을 은은하게 표시한다.
+    // 현재 차례에 선택 가능한 말은 청록색 외곽선으로 표시한다.
+    // 선택된 말은 RefreshHighlight에서 selectedColor(노란색)를 우선 적용한다.
     public void SetTurnHighlighted(bool highlighted)
     {
         isTurnHighlighted = highlighted;
@@ -71,6 +72,13 @@ public class PieceView : MonoBehaviour
         if (highlightOutline == null) return;
         highlightOutline.color = isSelected ? selectedColor : turnHighlightColor;
         highlightOutline.enabled = isSelected || isTurnHighlighted;
+    }
+
+    // 이동 애니메이션 후 같은 노드의 팀별 표시 위치를 보정할 때 사용한다.
+    // Core의 Piece.Node는 바꾸지 않고 View 좌표만 변경한다.
+    public void SetBoardPosition(Vector3 position)
+    {
+        transform.position = new Vector3(position.x, position.y, transform.position.z);
     }
 
     // 업힌 말 수. 2개 이상일 때만 숫자 표시
@@ -147,10 +155,12 @@ public class PieceView : MonoBehaviour
 
     private SpriteRenderer CreateHighlightOutline()
     {
-        var outlineObject = new GameObject("TurnHighlightOutline");
-        outlineObject.transform.SetParent(spriteRenderer.transform, false);
-        outlineObject.transform.localScale = Vector3.one * highlightOutlineScale;
-        var outline = outlineObject.AddComponent<SpriteRenderer>();
+        // 원본 말 색을 바꾸지 않고 테두리만 빛나게 보이도록
+        // 같은 스프라이트를 뒤에 조금 크게 배치한다.
+        var go = new GameObject("TurnHighlightOutline");
+        go.transform.SetParent(spriteRenderer.transform, false);
+        go.transform.localScale = Vector3.one * highlightOutlineScale;
+        var outline = go.AddComponent<SpriteRenderer>();
         outline.sprite = spriteRenderer.sprite;
         outline.sortingLayerID = spriteRenderer.sortingLayerID;
         outline.sortingOrder = spriteRenderer.sortingOrder - 1;
