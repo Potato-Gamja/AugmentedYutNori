@@ -1,11 +1,3 @@
-// 말 상태. (팀 분담상 PieceState.cs 담당이 생기면 이 enum만 그 파일로 옮기면 된다)
-public enum PieceState
-{
-    Waiting,  // 판에 안 나온 말 (Start 칸, 대기석)
-    OnBoard,  // 판 위
-    Finished, // 골인
-}
-
 // 말 데이터. 판 위 위치와 방향(직전 칸)만 들고, 상태 변경은 BoardState만 한다.
 public class Piece
 {
