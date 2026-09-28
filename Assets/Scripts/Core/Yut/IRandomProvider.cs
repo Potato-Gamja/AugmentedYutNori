@@ -1,22 +1,20 @@
-using UnityEngine;
-
-public interface IRandomProvider
+ï»¿public interface IRandomProvider
 {
-    double NextDouble();   // 0.0 ÀÌ»ó 1.0 ¹Ì¸¸
+    double NextDouble();   // 0.0 ì´ìƒ 1.0 ë¯¸ë§Œ
 }
 
-// ½ÇÁ¦ °ÔÀÓ¿ë
+// ì‹¤ì œ ê²Œì„ìš©
 public class SystemRandomProvider : IRandomProvider
 {
     private readonly System.Random random;
 
     public SystemRandomProvider() => random = new System.Random();
-    public SystemRandomProvider(int seed) => random = new System.Random(seed); // À·ÀÌ³ª ¸ğ °­Á¦?
+    public SystemRandomProvider(int seed) => random = new System.Random(seed); // ìœ·ì´ë‚˜ ëª¨ ê°•ì œ?
 
     public double NextDouble() => random.NextDouble();
 }
 
-// Å×½ºÆ®¿ë: ³Ö¾îµĞ °ªÀ» Â÷·Ê·Î ¹İÈ¯ var random = new SequenceRandomProvider(0.1, 0.5, 0.9); °°Àº °ÍÀ¸·Î »ç¿ë
+// í…ŒìŠ¤íŠ¸ìš©: ë„£ì–´ë‘” ê°’ì„ ì°¨ë¡€ë¡œ ë°˜í™˜ var random = new SequenceRandomProvider(0.1, 0.5, 0.9); ê°™ì€ ê²ƒìœ¼ë¡œ ì‚¬ìš©
 public class SequenceRandomProvider : IRandomProvider
 {
     private readonly double[] values;
@@ -25,13 +23,13 @@ public class SequenceRandomProvider : IRandomProvider
     public SequenceRandomProvider(params double[] values)
     {
         if (values == null || values.Length == 0)
-            throw new System.ArgumentException("°ªÀ» ÃÖ¼Ò 1°³ ³Ö¾î¾ß ÇÕ´Ï´Ù.");
+            throw new System.ArgumentException("ê°’ì„ ìµœì†Œ 1ê°œ ë„£ì–´ì•¼ í•©ë‹ˆë‹¤.");
         this.values = values;
     }
 
     public double NextDouble()
     {
-        double v = values[index % values.Length];  // ³¡±îÁö ¾²¸é Ã³À½ºÎÅÍ ´Ù½Ã
+        double v = values[index % values.Length];  // ëê¹Œì§€ ì“°ë©´ ì²˜ìŒë¶€í„° ë‹¤ì‹œ
         index++;
         return v;
     }
