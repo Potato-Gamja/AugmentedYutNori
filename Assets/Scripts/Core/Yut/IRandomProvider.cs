@@ -9,7 +9,7 @@ public class SystemRandomProvider : IRandomProvider
     private readonly System.Random random;
 
     public SystemRandomProvider() => random = new System.Random();
-    public SystemRandomProvider(int seed) => random = new System.Random(seed); // 윷이나 모 강제?
+    public SystemRandomProvider(int seed) => random = new System.Random(seed); // 같은 seed면 같은 결과 순서가 재현됨 (버그 재현용)
 
     public double NextDouble() => random.NextDouble();
 }
