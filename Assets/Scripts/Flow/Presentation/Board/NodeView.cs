@@ -72,7 +72,8 @@ public class NodeView : MonoBehaviour
         var renderer = go.AddComponent<SpriteRenderer>();
         renderer.sprite = source.sprite;
         renderer.sortingLayerID = source.sortingLayerID;
-        renderer.sortingOrder = source.sortingOrder - 1;
+        // 판 배경 이미지보다 앞에 표시되어야 이동 가능한 칸이 선명하게 보인다.
+        renderer.sortingOrder = source.sortingOrder + 20;
         return renderer;
     }
 }

@@ -4,6 +4,8 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
+using TMPro;
 
 public static class YutNoriIntegrationTool
 {
@@ -106,6 +108,90 @@ public static class YutNoriIntegrationTool
         EditorSceneManager.CloseScene(sourceScene, true);
         Selection.activeGameObject = controller.gameObject;
         Debug.Log("[YutIntegration] Game 씬 통합 완료: BoardGraph 30노드, 팀별 말 2개, PathView, GameFlowController 연결");
+    }
+
+    [MenuItem("Tools/YutNori/Add Turn And Result UI")]
+    public static void AddTurnAndResultUI()
+    {
+        Scene gameScene = EditorSceneManager.OpenScene(GamePath, OpenSceneMode.Single);
+        Canvas canvas = Object.FindFirstObjectByType<Canvas>();
+        GameFlowController controller = Object.FindFirstObjectByType<GameFlowController>();
+        if (canvas == null || controller == null)
+            throw new System.InvalidOperationException("Game 씬에서 Canvas 또는 GameFlowController를 찾지 못했습니다.");
+
+        Transform existing = canvas.transform.Find("GameStatusPanel");
+        if (existing != null) Object.DestroyImmediate(existing.gameObject);
+
+        var panelObject = new GameObject("GameStatusPanel", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        panelObject.transform.SetParent(canvas.transform, false);
+        RectTransform panel = panelObject.GetComponent<RectTransform>();
+        panel.anchorMin = new Vector2(0.5f, 1f);
+        panel.anchorMax = new Vector2(0.5f, 1f);
+        panel.pivot = new Vector2(0.5f, 1f);
+        panel.anchoredPosition = new Vector2(0f, -24f);
+        panel.sizeDelta = new Vector2(620f, 145f);
+        Image background = panelObject.GetComponent<Image>();
+        background.color = new Color(0.06f, 0.12f, 0.22f, 0.88f);
+        background.raycastTarget = false;
+
+        TMP_Text turn = CreateText(panel, "TurnText", new Vector2(0f, -35f), new Vector2(590f, 45f), 28f);
+        turn.text = "Team 1 Turn  |  Throw Yut";
+        turn.color = new Color(0.55f, 0.95f, 1f);
+
+        TMP_Text result = CreateText(panel, "YutResultText", new Vector2(0f, -91f), new Vector2(590f, 65f), 38f);
+        result.text = "Result: -";
+        result.color = new Color(1f, 0.88f, 0.35f);
+        result.fontStyle = FontStyles.Bold;
+
+        var serialized = new SerializedObject(controller);
+        serialized.FindProperty("turnText").objectReferenceValue = turn;
+        serialized.FindProperty("yutResultText").objectReferenceValue = result;
+        serialized.ApplyModifiedPropertiesWithoutUndo();
+
+        // 컨트롤러에 연결되지 않은 PJWScene 테스트용 말은 Game 씬에서 제거한다.
+        var connectedPieces = new HashSet<PieceView>();
+        SerializedProperty connectedProperty = serialized.FindProperty("pieceViews");
+        for (int i = 0; i < connectedProperty.arraySize; i++)
+        {
+            PieceView connected = connectedProperty.GetArrayElementAtIndex(i).objectReferenceValue as PieceView;
+            if (connected != null) connectedPieces.Add(connected);
+        }
+        foreach (PieceView piece in Object.FindObjectsByType<PieceView>(FindObjectsSortMode.None))
+        {
+            if (!connectedPieces.Contains(piece)) Object.DestroyImmediate(piece.gameObject);
+        }
+
+        foreach (NodeView node in Object.FindObjectsByType<NodeView>(FindObjectsSortMode.None))
+        {
+            var nodeSerialized = new SerializedObject(node);
+            nodeSerialized.FindProperty("outlineScale").floatValue = 1.55f;
+            nodeSerialized.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        EditorSceneManager.MarkSceneDirty(gameScene);
+        EditorSceneManager.SaveScene(gameScene);
+        Selection.activeGameObject = panelObject;
+        Debug.Log("[YutIntegration] 턴/윷 결과 UI와 말·노드 강조 표시를 연결했습니다.");
+    }
+
+    private static TMP_Text CreateText(RectTransform parent, string name, Vector2 position, Vector2 size, float fontSize)
+    {
+        var textObject = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+        textObject.transform.SetParent(parent, false);
+        RectTransform rect = textObject.GetComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0.5f, 1f);
+        rect.anchorMax = new Vector2(0.5f, 1f);
+        rect.pivot = new Vector2(0.5f, 1f);
+        rect.anchoredPosition = position;
+        rect.sizeDelta = size;
+        TMP_Text text = textObject.GetComponent<TMP_Text>();
+        text.alignment = TextAlignmentOptions.Center;
+        text.fontSize = fontSize;
+        text.enableAutoSizing = true;
+        text.fontSizeMin = 18f;
+        text.fontSizeMax = fontSize;
+        text.raycastTarget = false;
+        return text;
     }
 
     private static void PositionNodes(IEnumerable<NodeView> nodes, IReadOnlyList<Vector3> positions)

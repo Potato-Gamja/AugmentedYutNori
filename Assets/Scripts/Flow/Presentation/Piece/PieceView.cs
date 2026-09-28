@@ -10,6 +10,8 @@ public class PieceView : MonoBehaviour
     [SerializeField] private SpriteRenderer spriteRenderer;
     [SerializeField] private float stepDuration = 0.15f;
     [SerializeField] private Color selectedColor = new Color(1f, 0.85f, 0.3f);
+    [SerializeField] private Color turnHighlightColor = new Color(0.35f, 1f, 1f);
+    [SerializeField] private float highlightOutlineScale = 1.3f;
 
     [Header("업기 숫자")]
     [SerializeField] private Color stackTextColor = Color.white;
@@ -18,6 +20,9 @@ public class PieceView : MonoBehaviour
     private Vector3 homePosition;
     private Color normalColor;
     private TextMesh stackText;
+    private SpriteRenderer highlightOutline;
+    private bool isSelected;
+    private bool isTurnHighlighted;
 
     public int Team => team;
     public Piece Piece { get; private set; }
@@ -28,6 +33,7 @@ public class PieceView : MonoBehaviour
         if (spriteRenderer == null) spriteRenderer = GetComponentInChildren<SpriteRenderer>();
         homePosition = transform.position;
         normalColor = spriteRenderer.color;
+        highlightOutline = CreateHighlightOutline();
         stackText = CreateStackText();
         SetStackCount(1);
     }
@@ -48,7 +54,23 @@ public class PieceView : MonoBehaviour
 
     public void SetSelected(bool selected)
     {
-        spriteRenderer.color = selected ? selectedColor : normalColor;
+        isSelected = selected;
+        RefreshHighlight();
+    }
+
+    // 현재 차례에 선택할 수 있는 말을 은은하게 표시한다.
+    public void SetTurnHighlighted(bool highlighted)
+    {
+        isTurnHighlighted = highlighted;
+        RefreshHighlight();
+    }
+
+    private void RefreshHighlight()
+    {
+        spriteRenderer.color = normalColor;
+        if (highlightOutline == null) return;
+        highlightOutline.color = isSelected ? selectedColor : turnHighlightColor;
+        highlightOutline.enabled = isSelected || isTurnHighlighted;
     }
 
     // 업힌 말 수. 2개 이상일 때만 숫자 표시
@@ -61,6 +83,7 @@ public class PieceView : MonoBehaviour
     public void SetSortingOrder(int order)
     {
         spriteRenderer.sortingOrder = order;
+        if (highlightOutline != null) highlightOutline.sortingOrder = order - 1;
         stackText.GetComponent<MeshRenderer>().sortingOrder = order + 1;
     }
 
@@ -120,5 +143,18 @@ public class PieceView : MonoBehaviour
         textRenderer.sortingLayerID = spriteRenderer.sortingLayerID;
         textRenderer.sortingOrder = spriteRenderer.sortingOrder + 1;
         return text;
+    }
+
+    private SpriteRenderer CreateHighlightOutline()
+    {
+        var outlineObject = new GameObject("TurnHighlightOutline");
+        outlineObject.transform.SetParent(spriteRenderer.transform, false);
+        outlineObject.transform.localScale = Vector3.one * highlightOutlineScale;
+        var outline = outlineObject.AddComponent<SpriteRenderer>();
+        outline.sprite = spriteRenderer.sprite;
+        outline.sortingLayerID = spriteRenderer.sortingLayerID;
+        outline.sortingOrder = spriteRenderer.sortingOrder - 1;
+        outline.enabled = false;
+        return outline;
     }
 }
