@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "com.coplaydev.unity-mcp": "https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity",
     "com.unity.2d.animation": "10.1.4",
     "com.unity.2d.aseprite": "1.2.1",
     "com.unity.2d.psdimporter": "10.0.0",
