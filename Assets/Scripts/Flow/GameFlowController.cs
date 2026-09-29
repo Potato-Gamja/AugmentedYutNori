@@ -25,7 +25,12 @@ public class GameFlowController : MonoBehaviour
 
     // 한 도착점에 도달할 수 있는 '저장 결과 + 경로' 조합.
     // 서로 다른 결과가 같은 노드에 도착할 수 있으므로 노드마다 목록으로 보관한다.
-    private sealed class MoveOption { public YutResult Result; public BoardPath Path; }
+    private sealed class MoveOption
+    {
+        public YutResult Result;
+        public BoardPath Path;
+        public int ModifiedMoveCount;
+    }
     private readonly Dictionary<Piece, PieceView> views = new();
     private readonly Dictionary<NodeView, List<MoveOption>> targets = new();
     private readonly HashSet<NodeView> highlighted = new();
@@ -62,7 +67,12 @@ public class GameFlowController : MonoBehaviour
         }
 
         hud = uiManager != null ? uiManager.Open<GameHudPanel>() : null;
-        if (hud != null) hud.ThrowClicked += OnThrowButtonClicked;
+        if (hud != null)
+        {
+            hud.ThrowClicked += OnThrowButtonClicked;
+            hud.RethrowClicked += OnRethrowButtonClicked;
+            hud.SetRethrowVisible(false);
+        }
 
         boardView.Graph.AllowSkipShortcut = allowSkipShortcut;
         state = new BoardState(boardView.Graph);
@@ -81,7 +91,11 @@ public class GameFlowController : MonoBehaviour
 
     private void OnDestroy()
     {
-        if (hud != null) hud.ThrowClicked -= OnThrowButtonClicked;
+        if (hud != null)
+        {
+            hud.ThrowClicked -= OnThrowButtonClicked;
+            hud.RethrowClicked -= OnRethrowButtonClicked;
+        }
         if (state != null) state.Moved -= OnMoved;
     }
 
@@ -110,6 +124,21 @@ public class GameFlowController : MonoBehaviour
             return;
         }
         BeginMoveSelectionOrEndTurn();
+    }
+
+    // Rethrow 증강은 마지막 일반 결과를 버리고 Throw 상태로 되돌린다.
+    // 윷/모로 얻은 이전 저장 결과는 유지되며, 증강은 성공한 순간 한 번만 소모된다.
+    public void OnRethrowButtonClicked()
+    {
+        if (currentState != GameFlowState.Move || storedResults.Count == 0) return;
+
+        YutResult latest = storedResults[storedResults.Count - 1];
+        RethrowAugment rethrow = GetRethrowAugment();
+        if (rethrow == null || !rethrow.TryUse(state, currentTeam, latest)) return;
+
+        storedResults.RemoveAt(storedResults.Count - 1);
+        RefreshStoredResultText();
+        ChangeState(GameFlowState.Throw);
     }
 
     public void OnAugmentSelected(string augmentId)
@@ -158,6 +187,7 @@ public class GameFlowController : MonoBehaviour
             hud?.SetTurn($"Team {currentTeam + 1} Turn");
             hud?.SetInstruction(storedResults.Count > 0 ? "Bonus throw." : "Throw Yut.");
             hud?.SetThrowInteractable(true);
+            hud?.SetRethrowVisible(false);
         }
         else if (next == GameFlowState.Move)
         {
@@ -166,6 +196,7 @@ public class GameFlowController : MonoBehaviour
             hud?.SetTurn($"Team {currentTeam + 1} Turn");
             hud?.SetInstruction("Select a piece.");
             hud?.SetThrowInteractable(false);
+            hud?.SetRethrowVisible(CanUseRethrow());
         }
         else if (next == GameFlowState.EndTurn) EndTurn();
         else if (next == GameFlowState.Finish)
@@ -173,6 +204,7 @@ public class GameFlowController : MonoBehaviour
             ClearSelection();
             RefreshTurnHighlights(false);
             hud?.SetInstruction($"Team {currentTeam + 1} wins!");
+            hud?.SetRethrowVisible(false);
             uiManager?.Open<ResultPopup>()?.SetWinner($"Team {currentTeam + 1}", currentTeam == 0 ? Color.blue : Color.red);
         }
         else if (next == GameFlowState.AugmentSelect)
@@ -180,6 +212,11 @@ public class GameFlowController : MonoBehaviour
             AugmentSelectPanel panel = uiManager.Get<AugmentSelectPanel>();
             panel.Setup(augmentPool, currentTeam, OnAugmentSelected);
             uiManager.Open<AugmentSelectPanel>();
+//<<<<<<< HEAD
+            hud?.SetThrowInteractable(false);
+            hud?.SetRethrowVisible(false);
+//=======
+//>>>>>>> dev
         }
     }
 
@@ -211,6 +248,7 @@ public class GameFlowController : MonoBehaviour
         if (piece == null) return;
         piece.SetSelected(true);
         hud?.SetInstruction("Select a destination.");
+        RefreshStoredResultText(piece.Piece);
         // 선택한 말에 대해 저장된 모든 윷 결과의 경로를 한 번에 계산한다.
         // 증강으로 경로/칸 수가 바뀌는 경우도 BoardState.GetMovePaths 결과에 반영된다.
         foreach (YutResult result in storedResults)
@@ -224,7 +262,12 @@ public class GameFlowController : MonoBehaviour
                     options = new List<MoveOption>();
                     targets.Add(destination, options);
                 }
-                options.Add(new MoveOption { Result = result, Path = path });
+                options.Add(new MoveOption
+                {
+                    Result = result,
+                    Path = path,
+                    ModifiedMoveCount = state.GetModifiedMoveCount(piece.Piece, result.Steps())
+                });
             }
         }
         foreach (KeyValuePair<NodeView, List<MoveOption>> pair in targets)
@@ -262,7 +305,10 @@ public class GameFlowController : MonoBehaviour
         text.fontStyle = FontStyle.Bold;
         var names = new List<string>();
         foreach (MoveOption option in options)
-            if (!names.Contains(ResultLabel(option.Result))) names.Add(ResultLabel(option.Result));
+        {
+            string name = MoveOptionLabel(option);
+            if (!names.Contains(name)) names.Add(name);
+        }
         text.text = string.Join("/", names);
         text.color = options.Count == 1 ? ResultColor(options[0].Result) : Color.white;
         MeshRenderer renderer = go.GetComponent<MeshRenderer>();
@@ -397,13 +443,43 @@ public class GameFlowController : MonoBehaviour
             view.SetTurnHighlighted(enabled && view.Team == currentTeam && view.Piece != null && !view.Piece.IsFinished);
     }
 
-    private void RefreshStoredResultText()
+    private void RefreshStoredResultText(Piece contextPiece = null)
     {
         if (hud == null) return;
         if (storedResults.Count == 0) { hud.SetResults("Stored Results: -"); return; }
         var results = new List<string>();
-        foreach (YutResult result in storedResults) results.Add($"{ResultLabel(result)}({result.Steps()})");
+        foreach (YutResult result in storedResults)
+        {
+            int baseCount = result.Steps();
+            int modified = contextPiece != null ? state.GetModifiedMoveCount(contextPiece, baseCount) : baseCount;
+            int bonus = modified - baseCount;
+            string bonusText = bonus != 0 ? $" ({bonus:+0;-0})" : "";
+            results.Add($"{ResultLabel(result)} {baseCount}{bonusText}");
+        }
         hud.SetResults($"Stored: {string.Join("  ", results)}");
+    }
+
+    private RethrowAugment GetRethrowAugment()
+    {
+        if (state == null) return null;
+        foreach (IAugment augment in state.GetAugments(currentTeam))
+            if (augment is RethrowAugment rethrow) return rethrow;
+        return null;
+    }
+
+    private bool CanUseRethrow()
+    {
+        if (storedResults.Count == 0) return false;
+        RethrowAugment rethrow = GetRethrowAugment();
+        return rethrow != null && rethrow.CanUse(state, currentTeam, storedResults[storedResults.Count - 1]);
+    }
+
+    private static string MoveOptionLabel(MoveOption option)
+    {
+        int baseCount = option.Result.Steps();
+        int bonus = option.ModifiedMoveCount - baseCount;
+        string bonusText = bonus != 0 ? $" ({bonus:+0;-0})" : "";
+        return $"{ResultLabel(option.Result)} {baseCount}{bonusText}";
     }
 
     private static Color ResultColor(YutResult result) => result switch

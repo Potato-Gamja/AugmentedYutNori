@@ -88,6 +88,14 @@ public class BoardState
         return GetMovePaths(context);
     }
 
+    // UI에서 기본 윷 값과 증강 적용 후 값을 함께 표시할 때 사용한다.
+    // 예: 모 5칸에 +1 증강이 적용되면 6을 반환한다.
+    public int GetModifiedMoveCount(Piece piece, int rolledMoveCount)
+    {
+        if (piece == null || piece.IsFinished) return rolledMoveCount;
+        return CreateContext(piece, rolledMoveCount).MoveCount;
+    }
+
     private List<BoardPath> GetMovePaths(AugmentContext context)
     {
         List<BoardPath> paths = Graph.GetMovePaths(context.Piece.Node, context.Piece.CameFrom, context.MoveCount);

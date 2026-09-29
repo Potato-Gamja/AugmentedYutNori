@@ -1436,7 +1436,7 @@ MonoBehaviour:
   - {fileID: 2051617683}
   pathView: {fileID: 1254029478}
   uiManager: {fileID: 1699083470}
-  skipAugmentSelection: 1
+  skipAugmentSelection: 0
   allowSkipShortcut: 0
 --- !u!4 &498729574
 Transform:
@@ -4989,7 +4989,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 828511336472889071, guid: e44c14272cc20f148b45da5696d1af57, type: 3}
       propertyPath: prefabs.Array.size
-      value: 2
+      value: 3
       objectReference: {fileID: 0}
     - target: {fileID: 828511336472889071, guid: e44c14272cc20f148b45da5696d1af57, type: 3}
       propertyPath: 'prefabs.Array.data[1]'
