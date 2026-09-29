@@ -1,11 +1,7 @@
-﻿// 게임당 1회, 방금 던진 윷 결과를 버리고 다시 던질 수 있게 해 주는 1회용 증강
+// 게임당 1회, 방금 던진 윷 결과를 버리고 다시 던질 수 있게 해 주는 1회용 증강
 public class RethrowAugment : Augment
 {
     public override string Id => "Rethrow";
-
-    // TODO: 카드 UI용. 이름/설명을 둘 곳(ScriptableObject 등)이 정해지면 옮긴다
-    public string Name => "다시 던지기";
-    public string Description => "방금 던진 윷 결과를 버리고 다시 던집니다.";
 
     public RethrowAugment(int ownerTeam) : base(ownerTeam) { }
 
