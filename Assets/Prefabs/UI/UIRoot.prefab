@@ -336,5 +336,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::UIManager
   prefabs:
   - {fileID: -5093606790927913108, guid: 67b49554e0d8ba04e869a2c9a0e3b8a0, type: 3}
+  - {fileID: 3902274386178256672, guid: 1244c9c7d6980d64d8e8a644e68ffd23, type: 3}
+  - {fileID: 3902274386178256672, guid: 1244c9c7d6980d64d8e8a644e68ffd23, type: 3}
   panelRoot: {fileID: 4442013605130105907}
   popupRoot: {fileID: 907884088127722632}
