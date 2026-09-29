@@ -212,11 +212,9 @@ public class GameFlowController : MonoBehaviour
             AugmentSelectPanel panel = uiManager.Get<AugmentSelectPanel>();
             panel.Setup(augmentPool, currentTeam, OnAugmentSelected);
             uiManager.Open<AugmentSelectPanel>();
-//<<<<<<< HEAD
+            
             hud?.SetThrowInteractable(false);
             hud?.SetRethrowVisible(false);
-//=======
-//>>>>>>> dev
         }
     }
 
