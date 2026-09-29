@@ -10,14 +10,16 @@ public class YutResultPanel : MonoBehaviour
     private GameObject Root => panelRoot != null ? panelRoot : gameObject;
 
     // 빽도면 "빽도 - 뒤로 1칸", 나머지는 "개 - 앞으로 2칸"
-    public void Show(YutResult result, int remainingThrows)
+    public void Show(YutResult result, int remainingThrows, int bonus = 0)
     {
         int steps = result.Steps();
         string direction = steps < 0 ? "뒤로" : "앞으로";
+        string bonusText = bonus != 0 ? $" ({bonus:+0;-0})" : "";
 
-        resultText.text = $"{result.DisplayName()} - {direction} {Mathf.Abs(steps)}칸";
+        resultText.text = $"{result.DisplayName()} - {direction} {Mathf.Abs(steps)}칸{bonusText}";
+        // 예: "개 - 앞으로 2칸 (+1)"
+
         remainingText.text = $"남은 던지기 기회 : {remainingThrows}회";
-
         Root.SetActive(true);
     }
 
