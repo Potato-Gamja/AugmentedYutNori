@@ -31,6 +31,7 @@ public class GameFlowController : MonoBehaviour
     private readonly HashSet<NodeView> highlighted = new();
     private readonly List<GameObject> labels = new();
     private readonly List<YutResult> storedResults = new();
+    private readonly AugmentPool augmentPool = new();
     private BoardState state;
     private GameHudPanel hud;
     private PieceView selectedPiece;
@@ -74,6 +75,7 @@ public class GameFlowController : MonoBehaviour
             pieceViews[i].Bind(piece);
             pieceViews[i].SetSortingOrder(10);
         }
+        RegisterAugments();
         ChangeState(GameFlowState.GameStart);
     }
 
@@ -114,26 +116,20 @@ public class GameFlowController : MonoBehaviour
     {
         // 증강 선택 UI는 문자열 ID만 넘기면 된다.
         // 실제 효과는 BoardState에 등록된 뒤 GetMovePaths/TryMove 과정에서 자동 적용된다.
-        IAugment augment = CreateAugment(augmentId, currentTeam);
-        if (state == null || augment == null)
-        {
-            Debug.LogWarning($"[GameFlow] 알 수 없는 증강 ID: {augmentId}");
-            return;
-        }
-        state.AddAugment(augment);
+        if (state == null) return;
+        state.AddAugment(augmentPool.Pick(currentTeam, augmentId));
         ChangeState(GameFlowState.Throw);
     }
 
-    private static IAugment CreateAugment(string id, int team) => id switch
+    private void RegisterAugments()
     {
-        "BackDoSwitch" => new BackDoSwitchAugment(team),
-        "QuickStart" => new QuickStartAugment(team),
-        "WeakBoost" => new WeakBoostAugment(team),
-        "Shield" => new ShieldAugment(team),
-        "SturdyCarry" => new SturdyCarryAugment(team),
-        "Rethrow" => new RethrowAugment(team),
-        _ => null
-    };
+        augmentPool.Register("BackDoSwitch", team => new BackDoSwitchAugment(team));
+        augmentPool.Register("QuickStart", team => new QuickStartAugment(team));
+        augmentPool.Register("WeakBoost", team => new WeakBoostAugment(team));
+        augmentPool.Register("Shield", team => new ShieldAugment(team));
+        augmentPool.Register("SturdyCarry", team => new SturdyCarryAugment(team));
+        augmentPool.Register("Rethrow", team => new RethrowAugment(team));
+    }
 
     private void BeginMoveSelectionOrEndTurn()
     {
@@ -178,6 +174,12 @@ public class GameFlowController : MonoBehaviour
             RefreshTurnHighlights(false);
             hud?.SetInstruction($"Team {currentTeam + 1} wins!");
             uiManager?.Open<ResultPopup>()?.SetWinner($"Team {currentTeam + 1}", currentTeam == 0 ? Color.blue : Color.red);
+        }
+        else if (next == GameFlowState.AugmentSelect)
+        {
+            AugmentSelectPanel panel = uiManager.Get<AugmentSelectPanel>();
+            panel.Setup(augmentPool, currentTeam, OnAugmentSelected);
+            uiManager.Open<AugmentSelectPanel>();
         }
     }
 
