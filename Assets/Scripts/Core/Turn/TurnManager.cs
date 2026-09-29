@@ -22,18 +22,20 @@ public class TurnManager
     public void StartTurn()
     {
         state.RemainingThrows = 1;
-        state.CurrentYutResult = null;
+        state.StoredResults.Clear();
         state.HasMovedThisTurn = false;
     }
 
-    // YutResult가 도라면 1-1 해서 RemainingThrows = 0
-    // YutResult가 윷이라면 1-1 하고, 다시 +1을 해서 RemainingThrows = 1
+    // 윷을 한 번 던졌을 때 호출
     public void ConsumeThrow(YutResult result)
     {
+        if (state.RemainingThrows <= 0)
+            return;
         state.RemainingThrows--;
+
         if (result.GrantsExtraThrow())
         {
-            state.RemainingThrows++;
+            state.RemainingThrows++;    
         }
     }
 
@@ -49,11 +51,26 @@ public class TurnManager
         return state.RemainingThrows > 0;
     }
 
+    // 재던지기로 기존 결과가 새 결과로 교체됐을 때
+    // 기본 던지기 횟수는 다시 소비하지 않고, 윷/모 추가 기회만 다시 계산한다.
+    public void ReplaceThrowResult(
+        YutResult oldResult,
+        YutResult newResult)
+    {
+        if (oldResult.GrantsExtraThrow())
+        {
+            state.RemainingThrows--;
+        }
+
+        if (newResult.GrantsExtraThrow())
+        {
+            state.RemainingThrows++;
+        }
+    }
+
     public void NextTurn()
     {
         CurrentTeam++;
-
-        // 한바퀴 돌면 다시 첫번째 팀의 턴으로
         if (CurrentTeam >= TeamCount)
         {
             CurrentTeam = 0;

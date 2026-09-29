@@ -3,8 +3,8 @@ using System;
     
 public class GameEvents
 {
-    // 윷 던졌을 때 YutResult 하나 전달하는 이벤트
-    public event Action<YutResult> Thrown;
+    // 윷을 던졌을 때
+    public event Action<YutThrowOutcome> Thrown;
     // 말 이동, 아웃, 완주 시 발생 이벤트
     public event Action<MoveResult> PieceMoved;
     public event Action<Piece> PieceCaptured;
@@ -17,9 +17,9 @@ public class GameEvents
 
     // Thrown 이벤트 직접 호출하는 메서드
     // events.RaiseThrown(result)로 여러 곳에서 직접 호출하는 대신 통일해서 사용 가능
-    public void RaiseThrown(YutResult result)
+    public void RaiseThrown(YutThrowOutcome outcome)
     {
-        Thrown?.Invoke(result);
+        Thrown?.Invoke(outcome);
     }
 
     public void RaisePieceMoved(MoveResult result)

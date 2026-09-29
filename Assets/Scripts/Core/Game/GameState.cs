@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Android;
 
@@ -6,7 +7,7 @@ public class GameState
     // 현재 보드의 상태를 연결
     public BoardState Board { get; }
     // 방금 던진 윷 결과 기억
-    public YutResult? CurrentYutResult { get; set; }
+    public List<YutResult> StoredResults { get; } = new List<YutResult>();
 
     // 플레이어가 앞으로 윷을 던질 수 있는 횟수
     // 윷이나 모가 나오면 추가 기회는 result.GrantsExtraThrow에
@@ -19,5 +20,16 @@ public class GameState
     public GameState(BoardState board)  
     {
         Board = board;
+    }
+
+    // 가장 최근에 던진 결과
+    public YutResult? LatestYutResult
+    {
+        get
+        {
+            if (StoredResults.Count == 0)
+                return null;
+            return StoredResults[StoredResults.Count - 1];
+        }
     }
 }
