@@ -14,13 +14,16 @@ public class GameHudPanel : UIBase
     [SerializeField] private TMP_Text resultText;
     [SerializeField] private TMP_Text instructionText;
     [SerializeField] private Button throwButton;
+    [SerializeField] private Button rethrowButton;
 
     public event Action ThrowClicked;
+    public event Action RethrowClicked;
 
     // UIManager가 프리팹을 처음 생성했을 때 한 번 호출한다.
     public override void Init()
     {
         if (throwButton != null) throwButton.onClick.AddListener(() => ThrowClicked?.Invoke());
+        if (rethrowButton != null) rethrowButton.onClick.AddListener(() => RethrowClicked?.Invoke());
     }
 
     // Controller가 상태를 바꿀 때 호출하는 최소 표시 API.
@@ -28,4 +31,8 @@ public class GameHudPanel : UIBase
     public void SetResults(string value) { if (resultText != null) resultText.text = value; }
     public void SetInstruction(string value) { if (instructionText != null) instructionText.text = value; }
     public void SetThrowInteractable(bool value) { if (throwButton != null) throwButton.interactable = value; }
+    public void SetRethrowVisible(bool value)
+    {
+        if (rethrowButton != null) rethrowButton.gameObject.SetActive(value);
+    }
 }
