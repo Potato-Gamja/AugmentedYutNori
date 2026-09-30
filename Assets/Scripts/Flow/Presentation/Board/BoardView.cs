@@ -6,15 +6,13 @@ using UnityEngine;
 //  - Layout이 비어 있으면: 씬에 놓인 칸의 연결로 그래프를 만든다
 //  - Layout이 있으면: 그 판 배치를 적용한다 (같은 번호·같은 종류의 칸 오브젝트는 다시 쓰고, 없는 칸은 프리팹으로 만든다)
 //  - 실행 중 SwitchLayout: 판 모양만 제자리에서 바꾼다. 게임 상태는 그대로이고, 말은 같은 번호의 칸에 남는다
+// 출발 칸은 종류가 Start인 칸(판에 하나)이고, 칸은 Node Root 아래에서 찾는다 (비워 두면 씬 전체)
 public class BoardView : MonoBehaviour
 {
-    [Tooltip("판 밖 출발 칸. 앞으로 가다가 이 칸에 들어오면 골인")]
-    [SerializeField] private NodeView startNode;
-
     [Header("Layout")]
     [Tooltip("적용할 판. 비워 두면 씬에 놓인 칸을 그대로 사용")]
     [SerializeField] private BoardLayoutSO layout;
-    [Tooltip("칸을 둘 부모. 위치는 이 부모 기준 로컬 좌표로 저장/복원된다")]
+    [Tooltip("칸을 둘 부모. 위치는 이 부모 기준 로컬 좌표로 저장/복원된다. 비워 두면 칸은 씬 전체에서 찾고, 새 칸은 이 오브젝트 아래에 만든다")]
     [SerializeField] private Transform nodeRoot;
     [Tooltip("칸 종류별 프리팹. 판에 쓰이는 종류는 모두 있어야 한다")]
     [SerializeField] private List<NodePrefabEntry> nodePrefabs = new List<NodePrefabEntry>();
@@ -30,6 +28,9 @@ public class BoardView : MonoBehaviour
     private const float TeamSpacing = 0.55f;
 
     private readonly Dictionary<BoardNode, NodeView> views = new Dictionary<BoardNode, NodeView>();
+
+    // Destroy는 프레임 끝에 지워지므로, 그 전에 다시 칸을 찾을 때 빼기 위해 기억한다
+    private readonly HashSet<NodeView> destroying = new HashSet<NodeView>();
 
     public BoardGraph Graph { get; private set; }
     public BoardLayoutSO Layout => layout;
@@ -47,8 +48,34 @@ public class BoardView : MonoBehaviour
 
     public NodeView GetView(BoardNode node) => node != null && views.TryGetValue(node, out NodeView view) ? view : null;
 
-    // 시작 칸에서 연결된 모든 칸 (그래프를 만들기 전인 에디터에서도 사용 가능)
-    public List<NodeView> GetNodeViews() => startNode != null ? CollectReachable(startNode) : new List<NodeView>();
+    // 판의 모든 칸 오브젝트 (Node Root 아래, 비워 두면 씬 전체). 그래프를 만들기 전인 에디터에서도 사용 가능
+    public List<NodeView> GetNodeViews()
+    {
+        var result = new List<NodeView>();
+        if (nodeRoot != null)
+        {
+            result.AddRange(nodeRoot.GetComponentsInChildren<NodeView>(true));
+        }
+        else
+        {
+            foreach (GameObject root in gameObject.scene.GetRootGameObjects())
+                result.AddRange(root.GetComponentsInChildren<NodeView>(true));
+        }
+
+        destroying.RemoveWhere(view => view == null); // 이미 지워진 것 정리
+        result.RemoveAll(view => view == null || destroying.Contains(view));
+        return result;
+    }
+
+    // 종류가 Start인 칸. 없거나 둘 이상이면 null (로그 출력)
+    private NodeView FindStartNode(List<NodeView> nodeViews, bool logError = true)
+    {
+        List<NodeView> starts = nodeViews.FindAll(view => view.Type == BoardNodeType.Start);
+        if (starts.Count == 1) return starts[0];
+
+        if (logError) Debug.LogError($"[BoardView] 종류가 Start인 칸이 {starts.Count}개입니다. 판에 하나만 있어야 합니다.", this);
+        return null;
+    }
 
     // ---------- 판 바꾸기 ----------
 
@@ -133,10 +160,11 @@ public class BoardView : MonoBehaviour
         }
 
         // 편집 중이거나 처음이면 씬의 칸으로 그래프부터 만든다 (그래야 기존 칸 오브젝트를 다시 쓸 수 있다)
-        if (Graph == null && startNode != null) Graph = BuildGraphFromScene();
+        List<NodeView> sceneNodes = GetNodeViews();
+        if (Graph == null && sceneNodes.Count > 0) Graph = BuildGraphFromScene();
 
         var existing = new Dictionary<int, NodeView>();
-        foreach (NodeView view in NodeRoot.GetComponentsInChildren<NodeView>(true))
+        foreach (NodeView view in sceneNodes)
         {
             if (existing.ContainsKey(view.Id)) DestroyNode(view);
             else existing.Add(view.Id, view);
@@ -164,8 +192,15 @@ public class BoardView : MonoBehaviour
 
         ConfigureLinks(definition, placed);
         BindViews(placed);
-        startNode = placed[definition.startNodeId];
         layout = source;
+
+        // 씬에서 판을 만들 때와 같은 기준으로 시작 칸 확인 (정의 검사를 통과했으면 항상 성공해야 한다)
+        NodeView start = FindStartNode(new List<NodeView>(placed.Values));
+        if (start == null || start.Node != Graph.StartNode)
+        {
+            Debug.LogError($"[BoardView] {source.name}을(를) 불러온 뒤 시작 칸이 맞지 않습니다.", source);
+            return false;
+        }
 
         LayoutReloaded?.Invoke();
         return true;
@@ -220,13 +255,15 @@ public class BoardView : MonoBehaviour
         }
     }
 
-    private static void DestroyNode(NodeView view)
+    private void DestroyNode(NodeView view)
     {
         if (Application.isPlaying)
         {
-            // Destroy는 프레임 끝에 지워진다. 같은 프레임에 판을 다시 바꿀 때 '다시 쓸 칸'으로 잡히지 않도록 끄고 부모에서 뗀다
+            // Destroy는 프레임 끝에 지워진다. 같은 프레임에 판을 다시 바꿀 때 '다시 쓸 칸'으로 잡히지 않도록
+            // 끄고, 부모에서 떼고, GetNodeViews가 빼도록 기억해 둔다
             view.gameObject.SetActive(false);
             view.transform.SetParent(null, false);
+            destroying.Add(view);
             Destroy(view.gameObject);
         }
         else
@@ -241,13 +278,10 @@ public class BoardView : MonoBehaviour
     private BoardGraph BuildGraphFromScene()
     {
         views.Clear();
-        if (startNode == null)
-        {
-            Debug.LogError("[BoardView] startNode가 지정되지 않았습니다.", this);
-            return null;
-        }
-
         List<NodeView> nodeViews = GetNodeViews();
+        NodeView start = FindStartNode(nodeViews);
+        if (start == null) return null;
+
         var byId = new Dictionary<int, NodeView>();
         foreach (NodeView view in nodeViews)
         {
@@ -258,7 +292,7 @@ public class BoardView : MonoBehaviour
             return null;
         }
 
-        BoardDefinition definition = CaptureDefinition(nodeViews);
+        BoardDefinition definition = CaptureDefinition(nodeViews, start);
         if (!definition.Validate(out string error))
         {
             Debug.LogError($"[BoardView] 씬의 판이 잘못됐습니다: {error}", this);
@@ -268,12 +302,12 @@ public class BoardView : MonoBehaviour
         BoardGraph graph = definition.CreateGraph();
         Graph = graph;
         BindViews(byId);
-        WarnMissingPrevLinks(nodeViews);
+        WarnMissingPrevLinks(nodeViews, start);
         return graph;
     }
 
     // 칸 오브젝트들의 번호/종류/연결을 판 정의로 옮긴다
-    private BoardDefinition CaptureDefinition(List<NodeView> nodeViews)
+    private static BoardDefinition CaptureDefinition(List<NodeView> nodeViews, NodeView start)
     {
         List<int> ToIds(IReadOnlyList<NodeView> nodes)
         {
@@ -282,7 +316,7 @@ public class BoardView : MonoBehaviour
             return ids;
         }
 
-        var definition = new BoardDefinition { startNodeId = startNode.Id };
+        var definition = new BoardDefinition { startNodeId = start.Id };
         foreach (NodeView view in nodeViews)
         {
             definition.nodes.Add(new NodeDefinition
@@ -298,37 +332,13 @@ public class BoardView : MonoBehaviour
         return definition;
     }
 
-    // 시작 칸에서 연결을 따라가며 닿는 칸을 전부 모은다
-    private static List<NodeView> CollectReachable(NodeView start)
-    {
-        var result = new List<NodeView>();
-        var visited = new HashSet<NodeView>();
-        var queue = new Queue<NodeView>();
-
-        void Enqueue(NodeView view)
-        {
-            if (view != null && visited.Add(view)) queue.Enqueue(view);
-        }
-
-        Enqueue(start);
-        while (queue.Count > 0)
-        {
-            NodeView view = queue.Dequeue();
-            result.Add(view);
-            foreach (NodeView next in view.NextNodes) Enqueue(next);
-            foreach (NodeView next in view.ShortcutNodes) Enqueue(next);
-            foreach (NodeView prev in view.PrevNodes) Enqueue(prev);
-        }
-        return result;
-    }
-
     // A → B로 가는 연결이 있는데 B의 Prev에 A가 없으면 빽도/방향 판정이 틀어지므로 경고
     // Start에서 나가는 연결은 제외: 첫 칸에서 빽도하면 Start가 아니라 End로 가야 하므로 첫 칸의 Prev에 Start를 넣지 않는다
-    private void WarnMissingPrevLinks(List<NodeView> nodeViews)
+    private static void WarnMissingPrevLinks(List<NodeView> nodeViews, NodeView start)
     {
         foreach (NodeView view in nodeViews)
         {
-            if (view == startNode) continue;
+            if (view == start) continue;
 
             foreach (NodeView next in view.NextNodes) WarnIfMissingPrev(view, next);
             foreach (NodeView next in view.ShortcutNodes) WarnIfMissingPrev(view, next);
@@ -369,14 +379,11 @@ public class BoardView : MonoBehaviour
     [ContextMenu("현재 판을 레이아웃으로 저장")]
     private void SaveLayout()
     {
-        if (startNode == null)
-        {
-            Debug.LogError("[BoardView] startNode가 지정되지 않았습니다.", this);
-            return;
-        }
-
         List<NodeView> nodeViews = GetNodeViews();
-        BoardDefinition definition = CaptureDefinition(nodeViews);
+        NodeView start = FindStartNode(nodeViews);
+        if (start == null) return;
+
+        BoardDefinition definition = CaptureDefinition(nodeViews, start);
         if (!definition.Validate(out string error))
         {
             Debug.LogError($"[BoardView] 저장할 수 없습니다: {error} (번호가 없거나 겹치는 칸은 NodeView 인스펙터의 Id를 직접 지정)", this);

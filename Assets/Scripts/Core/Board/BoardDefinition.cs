@@ -12,17 +12,23 @@ public class BoardDefinition
 
     public NodeDefinition Find(int id) => nodes.Find(node => node.id == id);
 
-    // 번호 중복, 없는 칸으로의 연결, 시작 칸 누락을 검사한다
+    // 번호 중복, 없는 칸으로의 연결, 시작 칸(Start 종류, 판에 하나)을 검사한다
     public bool Validate(out string error)
     {
         var ids = new HashSet<int>();
+        int startCount = 0;
         foreach (NodeDefinition node in nodes)
         {
             if (node.id < 0) { error = $"칸 번호가 음수입니다: {node.id}"; return false; }
             if (!ids.Add(node.id)) { error = $"칸 번호가 겹칩니다: {node.id}"; return false; }
+            if (node.type == BoardNodeType.Start) startCount++;
         }
 
-        if (!ids.Contains(startNodeId)) { error = $"시작 칸({startNodeId})이 없습니다."; return false; }
+        if (startCount != 1) { error = $"종류가 Start인 칸이 {startCount}개입니다. 판에 하나만 있어야 합니다."; return false; }
+
+        NodeDefinition start = Find(startNodeId);
+        if (start == null) { error = $"시작 칸({startNodeId})이 없습니다."; return false; }
+        if (start.type != BoardNodeType.Start) { error = $"시작 칸({startNodeId})의 종류가 Start가 아니라 {start.type}입니다."; return false; }
 
         foreach (NodeDefinition node in nodes)
         {

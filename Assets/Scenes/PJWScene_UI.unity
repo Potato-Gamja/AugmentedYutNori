@@ -3389,7 +3389,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ebd6a274a5f7b8c429a7e2771f608101, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BoardView
-  startNode: {fileID: 274045756}
   layout: {fileID: 11400000, guid: 1c4e6431af1faab48868ef1fec10e917, type: 2}
   nodeRoot: {fileID: 750917846}
   nodePrefabs:
