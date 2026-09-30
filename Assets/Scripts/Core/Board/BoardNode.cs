@@ -12,7 +12,7 @@ public enum BoardNodeType
 public class BoardNode
 {
     public int Id { get; } // 고정 번호. 저장/네트워크/증강 효과에서 칸을 가리킬 때 사용
-    public BoardNodeType Type { get; }
+    public BoardNodeType Type { get; internal set; } // 판을 제자리에서 바꿀 때(BoardGraph.Rebuild)만 변경
 
     // PrevNodes[i]에서 들어온 말은 NextNodes[i]로 나간다. 짝이 없으면 NextNodes[0]
     public List<BoardNode> NextNodes { get; } = new List<BoardNode>();

@@ -48,7 +48,14 @@ public class PathView : Graphic
     {
         base.OnEnable();
         raycastTarget = false; // 판 클릭을 가로막지 않도록
+        if (boardView != null) boardView.LayoutReloaded += Refresh; // 실행 중 판이 바뀌면 다시 그린다
         SetVerticesDirty();
+    }
+
+    protected override void OnDisable()
+    {
+        if (boardView != null) boardView.LayoutReloaded -= Refresh;
+        base.OnDisable();
     }
 
     private void Update()

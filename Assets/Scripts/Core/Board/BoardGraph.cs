@@ -1,25 +1,63 @@
+using System;
 using System.Collections.Generic;
 
 public class BoardGraph
 {
-    private readonly Dictionary<int, BoardNode> nodes;
+    private readonly Dictionary<int, BoardNode> nodes = new Dictionary<int, BoardNode>();
 
     // 판 밖 출발 칸. 앞으로 가다가 이 칸에 들어오면 골인
-    public BoardNode StartNode { get; }
+    public BoardNode StartNode { get; private set; }
 
     // 모서리/방에 멈췄을 때 지름길 말고 원래 길도 고를 수 있게 할지
     public bool AllowSkipShortcut { get; set; }
 
     public IReadOnlyCollection<BoardNode> Nodes => nodes.Values;
 
-    public BoardGraph(Dictionary<int, BoardNode> nodes, BoardNode startNode)
-    {
-        this.nodes = nodes;
-        StartNode = startNode;
-    }
+    // 빈 그래프. 판 모양은 Rebuild(BoardDefinition)로 채운다 (보통 BoardDefinition.CreateGraph() 사용)
+    public BoardGraph() { }
 
     // 저장/네트워크로 받은 칸 번호로 칸을 찾는다. 없으면 null
     public BoardNode GetNode(int id) => nodes.TryGetValue(id, out BoardNode node) ? node : null;
+
+    // 이 그래프에 들어 있는 칸인지 (판이 바뀌어 빠진 칸이면 false)
+    public bool Contains(BoardNode node) => node != null && GetNode(node.Id) == node;
+
+    // Rebuild로 판 모양이 바뀐 뒤. BoardState가 구독해 없어진 칸의 말을 정리한다
+    public event Action Rebuilt;
+
+    // 판 모양을 제자리에서 바꾼다. 같은 번호의 BoardNode 객체는 그대로 두고 종류/연결만 바꾸므로,
+    // 그 칸을 가리키는 말(Piece)과 BoardState/GameState는 다시 만들 필요 없이 같은 번호의 칸에 그대로 남는다.
+    // 새 판에 없는 번호의 칸은 빠진다 (그 칸에 있던 말은 갈 곳이 없어지므로, 번호가 같은 판끼리 바꿀 것)
+    public void Rebuild(BoardDefinition definition)
+    {
+        if (!definition.Validate(out string error)) throw new InvalidOperationException($"[BoardGraph] {error}");
+
+        var ids = new HashSet<int>();
+        foreach (NodeDefinition def in definition.nodes)
+        {
+            ids.Add(def.id);
+            if (nodes.TryGetValue(def.id, out BoardNode node)) node.Type = def.type;
+            else nodes.Add(def.id, new BoardNode(def.id, def.type));
+        }
+
+        var removed = new List<int>();
+        foreach (int id in nodes.Keys) if (!ids.Contains(id)) removed.Add(id);
+        foreach (int id in removed) nodes.Remove(id);
+
+        foreach (NodeDefinition def in definition.nodes)
+        {
+            BoardNode node = nodes[def.id];
+            node.NextNodes.Clear();
+            node.PrevNodes.Clear();
+            node.ShortcutNodes.Clear();
+            foreach (int id in def.next) node.NextNodes.Add(nodes[id]);
+            foreach (int id in def.prev) node.PrevNodes.Add(nodes[id]);
+            foreach (int id in def.shortcut) node.ShortcutNodes.Add(nodes[id]);
+        }
+
+        StartNode = nodes[definition.startNodeId];
+        Rebuilt?.Invoke();
+    }
 
     // start: 말의 현재 칸 (판에 안 나온 말은 StartNode)
     // cameFrom: 말이 직전에 있던 칸 (판에 안 나온 말은 null)

@@ -1,0 +1,256 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b67cf3789f0e59446bf0fbd782116ed4, type: 3}
+  m_Name: BoardLayout_LongDiagonal
+  m_EditorClassIdentifier: Assembly-CSharp::BoardLayoutSO
+  definition:
+    startNodeId: 0
+    nodes:
+    - id: 0
+      type: 1
+      next: 01000000
+      prev: 14000000
+      shortcut: 
+    - id: 1
+      type: 0
+      next: 02000000
+      prev: 14000000
+      shortcut: 
+    - id: 2
+      type: 0
+      next: 03000000
+      prev: 01000000
+      shortcut: 
+    - id: 3
+      type: 0
+      next: 04000000
+      prev: 02000000
+      shortcut: 
+    - id: 4
+      type: 0
+      next: 05000000
+      prev: 03000000
+      shortcut: 
+    - id: 5
+      type: 3
+      next: 06000000
+      prev: 04000000
+      shortcut: 15000000
+    - id: 6
+      type: 0
+      next: 07000000
+      prev: 05000000
+      shortcut: 
+    - id: 7
+      type: 0
+      next: 08000000
+      prev: 06000000
+      shortcut: 
+    - id: 8
+      type: 0
+      next: 09000000
+      prev: 07000000
+      shortcut: 
+    - id: 9
+      type: 0
+      next: 0a000000
+      prev: 08000000
+      shortcut: 
+    - id: 10
+      type: 3
+      next: 0b000000
+      prev: 09000000
+      shortcut: 1a000000
+    - id: 11
+      type: 0
+      next: 0c000000
+      prev: 0a000000
+      shortcut: 
+    - id: 12
+      type: 0
+      next: 0d000000
+      prev: 0b000000
+      shortcut: 
+    - id: 13
+      type: 0
+      next: 0e000000
+      prev: 0c000000
+      shortcut: 
+    - id: 14
+      type: 0
+      next: 0f000000
+      prev: 0d000000
+      shortcut: 
+    - id: 15
+      type: 3
+      next: 10000000
+      prev: 0e00000019000000
+      shortcut: 
+    - id: 16
+      type: 0
+      next: 11000000
+      prev: 0f000000
+      shortcut: 
+    - id: 17
+      type: 0
+      next: 12000000
+      prev: 10000000
+      shortcut: 
+    - id: 18
+      type: 0
+      next: 13000000
+      prev: 11000000
+      shortcut: 
+    - id: 19
+      type: 0
+      next: 14000000
+      prev: 12000000
+      shortcut: 
+    - id: 20
+      type: 2
+      next: 00000000
+      prev: 130000001d000000
+      shortcut: 
+    - id: 21
+      type: 0
+      next: 1e000000
+      prev: 05000000
+      shortcut: 
+    - id: 22
+      type: 0
+      next: 17000000
+      prev: 1e000000
+      shortcut: 
+    - id: 23
+      type: 4
+      next: 180000001c000000
+      prev: 160000001b000000
+      shortcut: 1c000000
+    - id: 24
+      type: 0
+      next: 1f000000
+      prev: 17000000
+      shortcut: 
+    - id: 25
+      type: 0
+      next: 0f000000
+      prev: 1f000000
+      shortcut: 
+    - id: 26
+      type: 0
+      next: 20000000
+      prev: 0a000000
+      shortcut: 
+    - id: 27
+      type: 0
+      next: 17000000
+      prev: 20000000
+      shortcut: 
+    - id: 28
+      type: 0
+      next: 21000000
+      prev: 17000000
+      shortcut: 
+    - id: 29
+      type: 0
+      next: 14000000
+      prev: 21000000
+      shortcut: 
+    - id: 30
+      type: 0
+      next: 16000000
+      prev: 15000000
+      shortcut: 
+    - id: 31
+      type: 0
+      next: 19000000
+      prev: 18000000
+      shortcut: 
+    - id: 32
+      type: 0
+      next: 1b000000
+      prev: 1a000000
+      shortcut: 
+    - id: 33
+      type: 0
+      next: 1d000000
+      prev: 1c000000
+      shortcut: 
+  layouts:
+  - nodeId: 0
+    localPosition: {x: 4.4500003, y: -3.28, z: 0}
+  - nodeId: 1
+    localPosition: {x: 2.9699998, y: -1.74, z: 0}
+  - nodeId: 2
+    localPosition: {x: 2.9699998, y: -0.34, z: 0}
+  - nodeId: 3
+    localPosition: {x: 2.9699998, y: 0.89, z: 0}
+  - nodeId: 4
+    localPosition: {x: 2.9699998, y: 2.38, z: 0}
+  - nodeId: 5
+    localPosition: {x: 2.9699998, y: 3.65, z: 0}
+  - nodeId: 6
+    localPosition: {x: 1.65, y: 3.74, z: 0}
+  - nodeId: 7
+    localPosition: {x: 0.28999996, y: 3.74, z: 0}
+  - nodeId: 8
+    localPosition: {x: -1.49, y: 3.74, z: 0}
+  - nodeId: 9
+    localPosition: {x: -3.06, y: 3.74, z: 0}
+  - nodeId: 10
+    localPosition: {x: -4.46, y: 3.65, z: 0}
+  - nodeId: 11
+    localPosition: {x: -4.59, y: 2.26, z: 0}
+  - nodeId: 12
+    localPosition: {x: -4.55, y: 0.85, z: 0}
+  - nodeId: 13
+    localPosition: {x: -4.5, y: -0.51, z: 0}
+  - nodeId: 14
+    localPosition: {x: -4.42, y: -1.95, z: 0}
+  - nodeId: 15
+    localPosition: {x: -4.46, y: -3.31, z: 0}
+  - nodeId: 16
+    localPosition: {x: -2.98, y: -3.44, z: 0}
+  - nodeId: 17
+    localPosition: {x: -1.57, y: -3.48, z: 0}
+  - nodeId: 18
+    localPosition: {x: 0.16999996, y: -3.39, z: 0}
+  - nodeId: 19
+    localPosition: {x: 1.4400002, y: -3.35, z: 0}
+  - nodeId: 20
+    localPosition: {x: 2.9699998, y: -3.27, z: 0}
+  - nodeId: 21
+    localPosition: {x: 2.0349998, y: 2.76, z: 0}
+  - nodeId: 22
+    localPosition: {x: 0.16499996, y: 0.98, z: 0}
+  - nodeId: 23
+    localPosition: {x: -0.77, y: 0.09, z: 0}
+  - nodeId: 24
+    localPosition: {x: -1.6925, y: -0.76, z: 0}
+  - nodeId: 25
+    localPosition: {x: -3.5375, y: -2.46, z: 0}
+  - nodeId: 26
+    localPosition: {x: -3.5375, y: 2.76, z: 0}
+  - nodeId: 27
+    localPosition: {x: -1.6925, y: 0.98, z: 0}
+  - nodeId: 28
+    localPosition: {x: 0.16499996, y: -0.75, z: 0}
+  - nodeId: 29
+    localPosition: {x: 2.0349998, y: -2.43, z: 0}
+  - nodeId: 30
+    localPosition: {x: 1.0999999, y: 1.87, z: 0}
+  - nodeId: 31
+    localPosition: {x: -2.615, y: -1.61, z: 0}
+  - nodeId: 32
+    localPosition: {x: -2.615, y: 1.87, z: 0}
+  - nodeId: 33
+    localPosition: {x: 1.0999999, y: -1.59, z: 0}

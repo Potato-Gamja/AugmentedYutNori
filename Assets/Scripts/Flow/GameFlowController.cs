@@ -101,6 +101,10 @@ public class GameFlowController : MonoBehaviour
         gameEvents.AugmentSelected += OnAugmentSelectedEvent;
         gameEvents.GameEnded += OnGameEnded;
 
+        // 실행 중 판이 바뀌면(BoardView.SwitchLayout) 잡혔을 때처럼 화면에 바로 반영
+        boardState.PiecesReturnedByBoardChange += OnPiecesReturnedByBoardChange;
+        boardView.LayoutReloaded += OnBoardLayoutReloaded;
+
         RefreshPieceLayout();
         RefreshPlayerPanels();
         ChangeState(GameFlowState.GameStart);
@@ -123,6 +127,28 @@ public class GameFlowController : MonoBehaviour
             gameEvents.AugmentSelected -= OnAugmentSelectedEvent;
             gameEvents.GameEnded -= OnGameEnded;
         }
+
+        if (boardState != null) boardState.PiecesReturnedByBoardChange -= OnPiecesReturnedByBoardChange;
+        if (boardView != null) boardView.LayoutReloaded -= OnBoardLayoutReloaded;
+    }
+
+    // 판이 바뀌어 서 있던 칸이 없어진 말: 잡혔을 때처럼 대기석으로.
+    // 판 데이터가 바뀌는 도중에 오므로 말 오브젝트만 다루고, 화면 갱신은 OnBoardLayoutReloaded에서 한다
+    private void OnPiecesReturnedByBoardChange(IReadOnlyList<Piece> returned)
+    {
+        foreach (Piece piece in returned)
+            if (views.TryGetValue(piece, out PieceView view))
+                view.ReturnHome();
+    }
+
+    // 판 배치가 끝난 뒤: 옛 판 기준 선택/후보를 지우고 말 위치와 플레이어 패널을 다시 그린다
+    private void OnBoardLayoutReloaded()
+    {
+        ClearSelection();
+        RefreshPieceLayout();
+        RefreshPlayerPanels();
+        RefreshTurnHighlights(currentState != GameFlowState.Finish);
+        if (currentState == GameFlowState.Move) hud?.SetInstruction("Select a piece.");
     }
 
     private void Update()
