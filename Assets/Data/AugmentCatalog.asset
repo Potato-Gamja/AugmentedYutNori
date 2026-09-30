@@ -12,4 +12,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8570c651b9aba944896d80506c4bc123, type: 3}
   m_Name: AugmentCatalog
   m_EditorClassIdentifier: Assembly-CSharp::AugmentCatalogSO
-  augments: []
+  augments:
+  - {fileID: 11400000, guid: fe82bd179b355d74e8608b931b35312e, type: 2}
+  - {fileID: 11400000, guid: f3d74215c273dd34080fec23160aeed5, type: 2}
+  - {fileID: 11400000, guid: f55b5e930aa85c9488a9b01b0bf3417e, type: 2}
+  - {fileID: 11400000, guid: 669d282e5feecca4eabdcbf359c40018, type: 2}
+  - {fileID: 11400000, guid: 0deb92c7de1ee894c96f6c9354e0fdb1, type: 2}
+  - {fileID: 11400000, guid: 788ef7d1743222b44b209c2805b4a24b, type: 2}

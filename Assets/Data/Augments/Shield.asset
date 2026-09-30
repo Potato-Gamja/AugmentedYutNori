@@ -12,5 +12,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a59876e420e912c418266b5e36eb9911, type: 3}
   m_Name: Shield
   m_EditorClassIdentifier: Assembly-CSharp::AugmentDataSO
-  augmentName: 
-  augmentDescription: 
+  augmentId: Shield
+  augmentName: "\uBC29\uD328"
+  augmentDescription: "\uD55C \uBC88\uC740 \uBD10\uC900\uB2E4, \uB531 \uD55C \uBC88\uB9CC"

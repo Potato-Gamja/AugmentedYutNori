@@ -12,5 +12,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a59876e420e912c418266b5e36eb9911, type: 3}
   m_Name: BackDoSwitch
   m_EditorClassIdentifier: Assembly-CSharp::AugmentDataSO
-  augmentName: 
-  augmentDescription: 
+  augmentId: BackDoSwitch
+  augmentName: "\uBE7D\uB3C4 \uC804\uD658"
+  augmentDescription: "\uBE7D\uB3C4\uB3C4 \uC55E\uC73C\uB85C \uAC08 \uC218 \uC788\uB2E4"
