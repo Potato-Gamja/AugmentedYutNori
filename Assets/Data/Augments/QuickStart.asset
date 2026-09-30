@@ -12,5 +12,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a59876e420e912c418266b5e36eb9911, type: 3}
   m_Name: QuickStart
   m_EditorClassIdentifier: Assembly-CSharp::AugmentDataSO
-  augmentName: 
-  augmentDescription: 
+  augmentId: QuickStart
+  augmentName: "\uBE60\uB978 \uCD9C\uBC1C"
+  augmentDescription: "\uCD9C\uBC1C\uBD80\uD130 \uD55C \uBC1C \uC55E\uC11C"

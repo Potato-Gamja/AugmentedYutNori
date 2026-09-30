@@ -12,5 +12,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a59876e420e912c418266b5e36eb9911, type: 3}
   m_Name: WeakBoost
   m_EditorClassIdentifier: Assembly-CSharp::AugmentDataSO
-  augmentName: 
-  augmentDescription: 
+  augmentId: WeakBoost
+  augmentName: "\uC794\uAC78\uC74C \uAC15\uD654"
+  augmentDescription: "\uC791\uC740 \uAC78\uC74C\uB3C4 \uD55C \uCE78 \uB354"
