@@ -12,10 +12,10 @@ public class TestBoardTests
 
         // 실행
         bool moved = board.State.TryMove(piece, YutResult.Do.Steps(), board.Node(1), out MoveResult result);
-        TestContext.WriteLine(result.Path);
 
         // 검증
         Assert.IsTrue(moved);
+        TestContext.WriteLine(result.Path);
         Assert.AreEqual(board.Node(1), piece.Node);
         Assert.IsTrue(piece.IsOnBoard);    
     }
@@ -30,10 +30,10 @@ public class TestBoardTests
 
         // 실행
         bool moved = board.State.TryMove(piece, YutResult.BackDo.Steps(), board.Node(10), out MoveResult result);
-        TestContext.WriteLine(result.Path);
 
         // 검증: 첫 칸에서 빽도하면 대기석이 아니라 참먹이(End)로 간다
         Assert.IsTrue(moved);
+        TestContext.WriteLine(result.Path);
         Assert.AreEqual(board.Node(10), piece.Node);
         Assert.IsTrue(piece.IsOnBoard);
     }
@@ -48,10 +48,10 @@ public class TestBoardTests
 
         // 실행
         bool moved = board.State.TryMove(piece, YutResult.Gae.Steps(), board.Node(10), out MoveResult result);
-        TestContext.WriteLine(result.Path);
 
         // 검증: 참먹이에 멈춘 것만으로는 골인이 아니다
         Assert.IsTrue(moved);
+        TestContext.WriteLine(result.Path);
         Assert.AreEqual(board.Node(10), piece.Node);
         Assert.IsFalse(piece.IsFinished);
     }
@@ -66,10 +66,10 @@ public class TestBoardTests
 
         // 실행: 9 → 10(End) → 0(Start)으로 들어가며 골인. 골인 경로의 도착 칸은 Start
         bool moved = board.State.TryMove(piece, YutResult.Geol.Steps(), board.Node(0), out MoveResult result);
-        TestContext.WriteLine(result.Path);
 
         // 검증
         Assert.IsTrue(moved);
+        TestContext.WriteLine(result.Path);
         Assert.IsTrue(result.Path.IsFinished);
         Assert.IsTrue(piece.IsFinished);
     }
