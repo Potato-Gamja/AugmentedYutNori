@@ -281,6 +281,7 @@ public class GameFlowController : MonoBehaviour
 
             panel.Setup(gameRules.GetAugmentChoices(augmentSelectionTeam, 3), OnAugmentSelected);
             uiManager.Open<AugmentSelectPanel>();
+            
             hud?.SetTurn($"Team {augmentSelectionTeam + 1} Augment");
             hud?.SetInstruction("Select an augment.");
             hud?.SetThrowInteractable(false);

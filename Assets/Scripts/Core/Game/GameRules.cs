@@ -6,11 +6,9 @@ public readonly struct MoveOption
 {
     public int ResultIndex { get; }
     public YutResult Result { get; }
-    
-    
     public bool IsFinished { get; }
-public int ModifiedMoveCount { get; }
-public int DestinationNodeId { get; }
+    public int ModifiedMoveCount { get; }
+    public int DestinationNodeId { get; }
 
     public MoveOption(
         int resultIndex,
@@ -124,11 +122,11 @@ public class GameRules
             {
                 options.Add(
                     new MoveOption(
-                        resultIndex,
-                        yutResult,
-                        path.Destination.Id,
-                        state.Board.GetModifiedMoveCount(piece, moveCount),
-                        path.IsFinished
+                    resultIndex,
+                    yutResult,
+                    path.Destination.Id,
+                    state.Board.GetModifiedMoveCount(piece, moveCount),
+                    path.IsFinished
                     )
                 );
             }
@@ -277,23 +275,24 @@ public class GameRules
     }
 
     // 증강 선택
-public List<string> GetAugmentChoices(int count)
+    // 현재 팀의 증강 후보를 조회할 때 사용하는 기본 API.
+    public List<string> GetAugmentChoices(int count)
     {
         return GetAugmentChoices(turnManager.CurrentTeam, count);
     }
 
-    // 게임 시작 준비 단계에서는 실제 턴을 넘기지 않고 팀별 후보를 조회한다.
+    // 게임 시작 단계에서 플레이어별 증강 후보를 조회한다.
     public List<string> GetAugmentChoices(int team, int count)
     {
         return augmentPool.GetRandomIds(team, count);
     }
 
-public IAugment SelectAugment(string id)
+    public IAugment SelectAugment(string id)
     {
         return SelectAugment(turnManager.CurrentTeam, id);
     }
 
-    // MVP 시작 화면에서 양쪽 팀이 순서대로 선택할 때 사용하는 명시적 팀 API.
+    // MVP에서 두 플레이어가 순서대로 증강을 선택할 때 사용한다.
     public IAugment SelectAugment(int team, string id)
     {
         IAugment augment = augmentPool.Pick(team, id);
@@ -350,8 +349,11 @@ public IAugment SelectAugment(string id)
         );
 
         gameEvents.RaiseThrown(outcome);
-        // 교체 결과가 이동 불가이고 추가 던지기도 없으면 일반 던지기와 동일하게 턴을 종료한다.
+        gameEvents.RaiseThrown(outcome);
+
+        // 교체된 결과도 이동할 수 없고 추가 던지기가 없다면 턴을 종료한다.
         TryEndTurnIfNoAction();
+
         return true;
     }
 
@@ -421,20 +423,21 @@ public IAugment SelectAugment(string id)
 
         return pool;
     }
-
-
-// Controller가 구체적인 RethrowAugment를 찾지 않도록 현재 팀의 증강을 내부에서 조회한다.
+    // Controller가 구체적인 RethrowAugment를 찾지 않도록
+    // 현재 팀이 가진 재던지기 증강을 내부에서 조회한다.
     public bool TryRethrow(out YutThrowOutcome outcome)
     {
-        RethrowAugment rethrow = null;
-        foreach (IAugment augment in state.Board.GetAugments(turnManager.CurrentTeam))
+    RethrowAugment rethrow = null;
+
+    foreach (IAugment augment in state.Board.GetAugments(turnManager.CurrentTeam))
+    {
+        if (augment is RethrowAugment found)
         {
-            if (augment is RethrowAugment found)
-            {
-                rethrow = found;
-                break;
-            }
+            rethrow = found;
+            break;
         }
-        return TryRethrow(rethrow, out outcome);
     }
+
+    return TryRethrow(rethrow, out outcome);
+}
 }
