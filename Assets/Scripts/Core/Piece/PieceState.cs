@@ -1,5 +1,3 @@
-using UnityEngine;
-
 public enum PieceState
 {
     Waiting, // 대기
