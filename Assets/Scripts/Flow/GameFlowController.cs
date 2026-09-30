@@ -1,18 +1,15 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 
 public enum GameFlowState { GameStart, AugmentSelect, Throw, Move, EndTurn, Finish }
 
 /// <summary>
-/// LSU_Game의 입력과 화면을 Core 규칙(BoardState)에 연결하는 조립 담당 Controller.
-///
-/// 기본 흐름:
-/// Throw → 결과 저장 → 말 선택 → 저장된 결과별 도착지 표시
-/// → 도착지 선택/결과 소비 → 이동 → 추가 던지기 또는 턴 종료.
-///
-/// BoardState가 실제 이동·업기·잡기·증강 규칙을 처리하고,
-/// 이 클래스는 상태 전환, 입력 전달, PieceView/HUD 갱신만 담당한다.
+/// Core의 GameRules를 화면과 입력에 연결하는 Controller.
+/// 규칙 계산은 GameRules/GameState/TurnManager가 담당하고,
+/// 이 클래스는 상태 화면 전환, 말 선택, 이동 애니메이션과 HUD 갱신만 담당한다.
 /// </summary>
 public class GameFlowController : MonoBehaviour
 {
@@ -23,39 +20,38 @@ public class GameFlowController : MonoBehaviour
     [SerializeField] private bool skipAugmentSelection = true;
     [SerializeField] private bool allowSkipShortcut;
 
-    // 한 도착점에 도달할 수 있는 '저장 결과 + 경로' 조합.
-    // 서로 다른 결과가 같은 노드에 도착할 수 있으므로 노드마다 목록으로 보관한다.
-    private sealed class MoveOption
-    {
-        public YutResult Result;
-        public BoardPath Path;
-        public int ModifiedMoveCount;
-    }
     private readonly Dictionary<Piece, PieceView> views = new();
     private readonly Dictionary<NodeView, List<MoveOption>> targets = new();
     private readonly HashSet<NodeView> highlighted = new();
     private readonly List<GameObject> labels = new();
-    private readonly List<YutResult> storedResults = new();
-    private readonly AugmentPool augmentPool = new();
-    private BoardState state;
+
+    private BoardState boardState;
+    private GameState gameState;
+    private TurnManager turnManager;
+    private GameEvents gameEvents;
+    private GameRules gameRules;
+
     private GameHudPanel hud;
     private PieceView selectedPiece;
     private Camera mainCamera;
     private GameFlowState currentState;
-    private int currentTeam;
     private bool isMoving;
+    private int augmentSelectionTeam;
+    private int? pendingTurnTeam;
+    private int? pendingWinnerTeam;
 
     public GameFlowState CurrentState => currentState;
-    public int CurrentTeam => currentTeam;
-    public IReadOnlyList<YutResult> StoredResults => storedResults;
+    public int CurrentTeam => turnManager != null ? turnManager.CurrentTeam : 0;
+    public IReadOnlyList<YutResult> StoredResults =>
+        gameState != null ? gameState.StoredResults : Array.Empty<YutResult>();
 
     private void Start()
     {
-        // 씬에 말이 추가되어도 Inspector 목록을 다시 채우지 않아도 되도록 자동 수집한다.
         mainCamera = Camera.main;
         if (boardView == null) boardView = FindFirstObjectByType<BoardView>();
         if (pathView == null) pathView = FindFirstObjectByType<PathView>();
         if (uiManager == null) uiManager = FindFirstObjectByType<UIManager>();
+
         foreach (PieceView view in FindObjectsByType<PieceView>(FindObjectsSortMode.None))
             if (!pieceViews.Contains(view)) pieceViews.Add(view);
 
@@ -71,21 +67,42 @@ public class GameFlowController : MonoBehaviour
         {
             hud.ThrowClicked += OnThrowButtonClicked;
             hud.RethrowClicked += OnRethrowButtonClicked;
+            hud.WaitingPieceClicked += OnWaitingPieceClicked;
             hud.SetRethrowVisible(false);
         }
 
         boardView.Graph.AllowSkipShortcut = allowSkipShortcut;
-        state = new BoardState(boardView.Graph);
-        state.Moved += OnMoved;
-        pieceViews.Sort((a, b) => a.Team != b.Team ? a.Team.CompareTo(b.Team) : string.CompareOrdinal(a.name, b.name));
+        boardState = new BoardState(boardView.Graph);
+
+        pieceViews.Sort((a, b) =>
+            a.Team != b.Team ? a.Team.CompareTo(b.Team) : string.CompareOrdinal(a.name, b.name));
+
         for (int i = 0; i < pieceViews.Count; i++)
         {
-            Piece piece = state.AddPiece(i, pieceViews[i].Team);
+            Piece piece = boardState.AddPiece(i, pieceViews[i].Team);
             views.Add(piece, pieceViews[i]);
             pieceViews[i].Bind(piece);
             pieceViews[i].SetSortingOrder(10);
         }
-        RegisterAugments();
+
+        gameState = new GameState(boardState);
+        turnManager = new TurnManager(gameState, 2);
+        gameEvents = new GameEvents();
+        gameRules = new GameRules(
+            gameState,
+            turnManager,
+            gameEvents,
+            new YutThrower(new SystemRandomProvider()),
+            new StandardGetResult());
+
+        gameEvents.Thrown += OnThrown;
+        gameEvents.PieceMoved += OnMoved;
+        gameEvents.TurnChanged += OnTurnChanged;
+        gameEvents.AugmentSelected += OnAugmentSelectedEvent;
+        gameEvents.GameEnded += OnGameEnded;
+
+        RefreshPieceLayout();
+        RefreshPlayerPanels();
         ChangeState(GameFlowState.GameStart);
     }
 
@@ -95,150 +112,260 @@ public class GameFlowController : MonoBehaviour
         {
             hud.ThrowClicked -= OnThrowButtonClicked;
             hud.RethrowClicked -= OnRethrowButtonClicked;
+            hud.WaitingPieceClicked -= OnWaitingPieceClicked;
         }
-        if (state != null) state.Moved -= OnMoved;
+
+        if (gameEvents != null)
+        {
+            gameEvents.Thrown -= OnThrown;
+            gameEvents.PieceMoved -= OnMoved;
+            gameEvents.TurnChanged -= OnTurnChanged;
+            gameEvents.AugmentSelected -= OnAugmentSelectedEvent;
+            gameEvents.GameEnded -= OnGameEnded;
+        }
     }
 
     private void Update()
     {
         if (currentState != GameFlowState.Move || isMoving || Mouse.current == null || mainCamera == null ||
             !Mouse.current.leftButton.wasPressedThisFrame) return;
+
+        // PlayerPanel 버튼을 누른 프레임에는 같은 클릭을 월드 보드 입력으로 다시 처리하지 않는다.
+        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
+
         Vector2 screen = Mouse.current.position.ReadValue();
-        Vector3 world = mainCamera.ScreenToWorldPoint(new Vector3(screen.x, screen.y, -mainCamera.transform.position.z));
+        Vector3 world = mainCamera.ScreenToWorldPoint(
+            new Vector3(screen.x, screen.y, -mainCamera.transform.position.z));
         world.z = 0f;
         HandleClick(world);
     }
 
     public void OnThrowButtonClicked()
     {
-        if (currentState != GameFlowState.Throw) return;
-        YutThrowOutcome outcome = new YutThrower(new SystemRandomProvider())
-            .Throw(StandardGetResult.StickCount, new StandardGetResult());
-        // 윷/모와 잡기 때문에 결과가 여러 개 쌓일 수 있다.
-        // 결과를 먼저 고르지 않고, 말과 도착지를 고를 때 대응하는 결과를 소비한다.
-        storedResults.Add(outcome.Result);
-        RefreshStoredResultText();
-        if (outcome.Result.GrantsExtraThrow())
+        if (currentState != GameFlowState.Throw || gameRules == null) return;
+
+        try
         {
-            hud?.SetInstruction($"{ResultLabel(outcome.Result)}! Throw again.");
-            return;
+            gameRules.ThrowYut();
         }
-        BeginMoveSelectionOrEndTurn();
+        catch (InvalidOperationException exception)
+        {
+            Debug.LogWarning($"[GameFlow] {exception.Message}", this);
+        }
     }
 
-    // Rethrow 증강은 마지막 일반 결과를 버리고 Throw 상태로 되돌린다.
-    // 윷/모로 얻은 이전 저장 결과는 유지되며, 증강은 성공한 순간 한 번만 소모된다.
+    private void OnThrown(YutThrowOutcome outcome)
+    {
+        hud?.ShowThrowResult(outcome.Result, gameState.RemainingThrows, CurrentTeam);
+        RefreshStoredResultText();
+
+        if (gameState.RemainingThrows > 0)
+        {
+            ChangeState(GameFlowState.Throw);
+            hud?.SetInstruction($"{ResultLabel(outcome.Result)}! Throw again.");
+        }
+        else if (gameRules.HasAnyStoredMove())
+        {
+            ChangeState(GameFlowState.Move);
+        }
+        // 이동할 수 없는 결과라면 GameRules가 이어서 TurnChanged를 발생시킨다.
+    }
+
     public void OnRethrowButtonClicked()
     {
-        if (currentState != GameFlowState.Move || storedResults.Count == 0) return;
-
-        YutResult latest = storedResults[storedResults.Count - 1];
-        RethrowAugment rethrow = GetRethrowAugment();
-        if (rethrow == null || !rethrow.TryUse(state, currentTeam, latest)) return;
-
-        storedResults.RemoveAt(storedResults.Count - 1);
-        RefreshStoredResultText();
-        ChangeState(GameFlowState.Throw);
+        if (currentState != GameFlowState.Move || gameRules == null) return;
+        if (gameRules.TryRethrow(out _))
+        {
+            RefreshStoredResultText();
+            RefreshPlayerPanels();
+        }
     }
 
     public void OnAugmentSelected(string augmentId)
     {
-        // 증강 선택 UI는 문자열 ID만 넘기면 된다.
-        // 실제 효과는 BoardState에 등록된 뒤 GetMovePaths/TryMove 과정에서 자동 적용된다.
-        if (state == null) return;
-        state.AddAugment(augmentPool.Pick(currentTeam, augmentId));
+        if (currentState != GameFlowState.AugmentSelect || gameRules == null) return;
+
+        gameRules.SelectAugment(augmentSelectionTeam, augmentId);
+
+        if (augmentSelectionTeam == 0)
+        {
+            augmentSelectionTeam = 1;
+            ChangeState(GameFlowState.AugmentSelect);
+            return;
+        }
+
+        augmentSelectionTeam = 0;
         ChangeState(GameFlowState.Throw);
     }
 
-    private void RegisterAugments()
+    private void OnAugmentSelectedEvent(IAugment augment)
     {
-        augmentPool.Register("BackDoSwitch", team => new BackDoSwitchAugment(team));
-        augmentPool.Register("QuickStart", team => new QuickStartAugment(team));
-        augmentPool.Register("WeakBoost", team => new WeakBoostAugment(team));
-        augmentPool.Register("Shield", team => new ShieldAugment(team));
-        augmentPool.Register("SturdyCarry", team => new SturdyCarryAugment(team));
-        augmentPool.Register("Rethrow", team => new RethrowAugment(team));
+        RefreshPlayerPanels();
     }
 
-    private void BeginMoveSelectionOrEndTurn()
+    private void OnTurnChanged(int team)
     {
-        if (HasAnyStoredMove()) ChangeState(GameFlowState.Move);
-        else
+        RefreshStoredResultText();
+        RefreshPlayerPanels();
+
+        if (isMoving)
         {
-            storedResults.Clear();
-            RefreshStoredResultText();
-            ChangeState(GameFlowState.EndTurn);
+            pendingTurnTeam = team;
+            return;
         }
+
+        ChangeState(GameFlowState.Throw);
     }
 
+    private void OnGameEnded(int winnerTeam)
+    {
+        pendingWinnerTeam = winnerTeam;
+        if (!isMoving) ChangeState(GameFlowState.Finish);
+    }
     private void ChangeState(GameFlowState next)
     {
+        // 증강 선택을 마치고 다른 단계로 넘어가면 Popup 레이어를 즉시 닫는다.
+        if (next != GameFlowState.AugmentSelect) uiManager?.Close<AugmentSelectPanel>();
         currentState = next;
+
         if (next == GameFlowState.GameStart)
         {
-            currentTeam = 0;
-            storedResults.Clear();
+            augmentSelectionTeam = 0;
             ChangeState(skipAugmentSelection ? GameFlowState.Throw : GameFlowState.AugmentSelect);
         }
         else if (next == GameFlowState.Throw)
         {
             ClearSelection();
             RefreshTurnHighlights();
-            hud?.SetTurn($"Team {currentTeam + 1} Turn");
-            hud?.SetInstruction(storedResults.Count > 0 ? "Bonus throw." : "Throw Yut.");
-            hud?.SetThrowInteractable(true);
+            RefreshPlayerPanels();
+            hud?.SetTurn($"Team {CurrentTeam + 1} Turn");
+            hud?.SetInstruction(gameState.StoredResults.Count > 0 ? "Bonus throw." : "Throw Yut.");
+            hud?.SetThrowInteractable(gameState.RemainingThrows > 0);
             hud?.SetRethrowVisible(false);
+            hud?.SetTimerRunning(true);
         }
         else if (next == GameFlowState.Move)
         {
             ClearSelection();
             RefreshTurnHighlights();
-            hud?.SetTurn($"Team {currentTeam + 1} Turn");
+            RefreshPlayerPanels();
+            hud?.SetTurn($"Team {CurrentTeam + 1} Turn");
             hud?.SetInstruction("Select a piece.");
             hud?.SetThrowInteractable(false);
             hud?.SetRethrowVisible(CanUseRethrow());
+            hud?.SetTimerRunning(true);
         }
-        else if (next == GameFlowState.EndTurn) EndTurn();
         else if (next == GameFlowState.Finish)
         {
             ClearSelection();
             RefreshTurnHighlights(false);
-            hud?.SetInstruction($"Team {currentTeam + 1} wins!");
+            RefreshPlayerPanels();
+            int winner = pendingWinnerTeam ?? gameState.WinnerTeam ?? CurrentTeam;
+            hud?.SetInstruction($"Team {winner + 1} wins!");
+            hud?.SetThrowInteractable(false);
             hud?.SetRethrowVisible(false);
-            uiManager?.Open<ResultPopup>()?.SetWinner($"Team {currentTeam + 1}", currentTeam == 0 ? Color.blue : Color.red);
+            hud?.SetTimerRunning(false);
+            uiManager?.Open<ResultPopup>()?.SetWinner(
+                $"Team {winner + 1}",
+                winner == 0 ? Color.red : Color.blue);
         }
         else if (next == GameFlowState.AugmentSelect)
         {
-            AugmentSelectPanel panel = uiManager.Get<AugmentSelectPanel>();
-            panel.Setup(augmentPool, currentTeam, OnAugmentSelected);
+            ClearSelection();
+            AugmentSelectPanel panel = uiManager != null ? uiManager.Get<AugmentSelectPanel>() : null;
+            if (panel == null)
+            {
+                Debug.LogError("[GameFlow] AugmentSelectPanel이 UIManager에 등록되지 않았습니다.", this);
+                return;
+            }
+
+            panel.Setup(gameRules.GetAugmentChoices(augmentSelectionTeam, 3), OnAugmentSelected);
             uiManager.Open<AugmentSelectPanel>();
-//<<<<<<< HEAD
+            hud?.SetTurn($"Team {augmentSelectionTeam + 1} Augment");
+            hud?.SetInstruction("Select an augment.");
             hud?.SetThrowInteractable(false);
             hud?.SetRethrowVisible(false);
-//=======
-//>>>>>>> dev
+            hud?.SetTimerRunning(false);
         }
     }
 
     private void HandleClick(Vector3 world)
     {
-        // 조작 순서: 자신의 말 클릭 → 강조된 도착 노드 클릭.
-        // 도착 노드 위에 다른 말이 있어도 그 말을 누르면 해당 노드를 선택한 것으로 처리한다.
         NodeView node = PickNode(world);
         PieceView clicked = PickPiece(world);
+
         if (selectedPiece != null)
         {
             NodeView target = node;
-            if ((target == null || !targets.ContainsKey(target)) && clicked != null && clicked.Piece.IsOnBoard)
+            if ((target == null || !targets.ContainsKey(target)) &&
+                clicked != null && clicked.Piece.IsOnBoard)
                 target = boardView.GetView(clicked.Piece.Node);
-            if (target != null && targets.TryGetValue(target, out List<MoveOption> options) && options.Count > 0)
+
+            if (target != null &&
+                targets.TryGetValue(target, out List<MoveOption> options) &&
+                options.Count > 0)
             {
-                MoveUsingOption(options[0]);
+                // 모+모처럼 결과와 증강 적용값이 완전히 같은 선택지는 어느 것을
+                // 소비해도 이후 상태가 같으므로 별도 선택창 없이 첫 결과를 사용한다.
+                // 도(+1)와 개처럼 서로 다른 결과가 증강 때문에 같은 칸에 도착한
+                // 경우에는 아래 선택창을 열어 플레이어가 소비할 결과를 고르게 한다.
+                bool equivalentOptions = AreEquivalentMoveOptions(options);
+                if (options.Count == 1 || equivalentOptions)
+                {
+                    MoveUsingOption(options[0]);
+                }
+                else
+                {
+                    // 서로 다른 윷 결과가 같은 칸에 도착하면 자동으로 첫 결과를 쓰지 않고
+                    // 플레이어가 소비할 결과를 직접 고르게 한다.
+                    var choices = new List<MoveOption>(options);
+                    var labels = new List<string>(choices.Count);
+                    foreach (MoveOption option in choices) labels.Add(MoveOptionLabel(option));
+                    hud?.ShowMoveOptionChoices(labels, CurrentTeam, index =>
+                    {
+                        if (index >= 0 && index < choices.Count) MoveUsingOption(choices[index]);
+                    });
+                }
                 return;
             }
         }
-        if (clicked != null && clicked.Team == currentTeam && !clicked.Piece.IsFinished)
+
+        if (clicked != null && clicked.Team == CurrentTeam && !clicked.Piece.IsFinished)
             SelectPiece(clicked == selectedPiece ? null : clicked);
+    }
+
+    private static bool AreEquivalentMoveOptions(IReadOnlyList<MoveOption> options)
+    {
+        if (options == null || options.Count < 2) return true;
+
+        MoveOption first = options[0];
+        for (int i = 1; i < options.Count; i++)
+        {
+            MoveOption other = options[i];
+            if (other.Result != first.Result ||
+                other.ModifiedMoveCount != first.ModifiedMoveCount ||
+                other.DestinationNodeId != first.DestinationNodeId ||
+                other.IsFinished != first.IsFinished)
+                return false;
+        }
+        return true;
+    }
+
+    private void OnWaitingPieceClicked(int team, int slotIndex)
+    {
+        if (currentState != GameFlowState.Move || isMoving || team != CurrentTeam) return;
+
+        int waitingIndex = 0;
+        foreach (PieceView view in pieceViews)
+        {
+            if (view.Team != team || view.Piece == null || !view.Piece.IsWaiting) continue;
+            if (waitingIndex == slotIndex)
+            {
+                SelectPiece(view == selectedPiece ? null : view);
+                return;
+            }
+            waitingIndex++;
+        }
     }
 
     private void SelectPiece(PieceView piece)
@@ -246,56 +373,81 @@ public class GameFlowController : MonoBehaviour
         ClearSelection();
         selectedPiece = piece;
         if (piece == null) return;
+
         piece.SetSelected(true);
+        if (piece.Piece.IsWaiting)
+            hud?.SetSelectedWaitingPiece(piece.Team, GetWaitingSlotIndex(piece));
+
         hud?.SetInstruction("Select a destination.");
         RefreshStoredResultText(piece.Piece);
-        // 선택한 말에 대해 저장된 모든 윷 결과의 경로를 한 번에 계산한다.
-        // 증강으로 경로/칸 수가 바뀌는 경우도 BoardState.GetMovePaths 결과에 반영된다.
-        foreach (YutResult result in storedResults)
+
+        foreach (MoveOption option in gameRules.GetMoveOptions(piece.Piece.Id))
         {
-            foreach (BoardPath path in state.GetMovePaths(piece.Piece, result.Steps()))
+            BoardNode destinationNode = boardState.Graph.GetNode(option.DestinationNodeId);
+            NodeView destination = boardView.GetView(destinationNode);
+            if (destination == null) continue;
+
+            if (!targets.TryGetValue(destination, out List<MoveOption> options))
             {
-                NodeView destination = boardView.GetView(path.Destination);
-                if (destination == null) continue;
-                if (!targets.TryGetValue(destination, out List<MoveOption> options))
-                {
-                    options = new List<MoveOption>();
-                    targets.Add(destination, options);
-                }
-                options.Add(new MoveOption
-                {
-                    Result = result,
-                    Path = path,
-                    ModifiedMoveCount = state.GetModifiedMoveCount(piece.Piece, result.Steps())
-                });
+                options = new List<MoveOption>();
+                targets.Add(destination, options);
             }
+            options.Add(option);
         }
+
         foreach (KeyValuePair<NodeView, List<MoveOption>> pair in targets)
         {
             Color color = pair.Value.Count == 1 ? ResultColor(pair.Value[0].Result) : Color.white;
-            pair.Key.SetHighlight(color);
+            
+            pair.Key.SetDestinationBadge(GetDestinationBadge(pair.Key, pair.Value, piece.Team), piece.Team);
+pair.Key.SetHighlight(color);
             highlighted.Add(pair.Key);
             CreateLabel(pair.Key, pair.Value);
         }
     }
 
+    private int GetWaitingSlotIndex(PieceView target)
+    {
+        int index = 0;
+        foreach (PieceView view in pieceViews)
+        {
+            if (view.Team != target.Team || view.Piece == null || !view.Piece.IsWaiting) continue;
+            if (view == target) return index;
+            index++;
+        }
+        return -1;
+    }
+
     private void MoveUsingOption(MoveOption option)
     {
-        // 사용자가 선택한 도착지에 대응하는 결과 하나만 제거한다.
-        // 같은 결과가 여러 번 저장되어 있으면 List.Remove가 한 개만 소비한다.
-        Piece moving = selectedPiece.Piece;
-        storedResults.Remove(option.Result);
-        RefreshStoredResultText();
+        PieceView movingView = selectedPiece;
+        if (movingView == null) return;
+
+        
+        hud?.MarkResultPending(option.ResultIndex, CurrentTeam);
+bool entersBoard = movingView.Piece.IsWaiting;
         ClearSelection();
-        if (!state.TryMove(moving, option.Result.Steps(), option.Path.Destination, out _))
-            BeginMoveSelectionOrEndTurn();
+        if (entersBoard) movingView.SetWorldVisible(true);
+
+        if (!gameRules.MovePiece(
+                movingView.Piece.Id,
+                option.ResultIndex,
+                option.DestinationNodeId))
+        {
+            if (entersBoard) movingView.SetWorldVisible(false);
+            RefreshStoredResultText();
+            ChangeState(gameState.RemainingThrows > 0
+                ? GameFlowState.Throw
+                : GameFlowState.Move);
+        }
     }
 
     private void CreateLabel(NodeView destination, IReadOnlyList<MoveOption> options)
     {
         var go = new GameObject("MoveResultLabel");
         go.transform.SetParent(destination.transform, false);
-        go.transform.localPosition = new Vector3(0f, 0.62f, 0f);
+        go.transform.localPosition = new Vector3(0f, 1.02f, 0f);
+
         TextMesh text = go.AddComponent<TextMesh>();
         text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         text.fontSize = 54;
@@ -303,14 +455,17 @@ public class GameFlowController : MonoBehaviour
         text.anchor = TextAnchor.MiddleCenter;
         text.alignment = TextAlignment.Center;
         text.fontStyle = FontStyle.Bold;
+
         var names = new List<string>();
         foreach (MoveOption option in options)
         {
             string name = MoveOptionLabel(option);
             if (!names.Contains(name)) names.Add(name);
         }
+
         text.text = string.Join("/", names);
         text.color = options.Count == 1 ? ResultColor(options[0].Result) : Color.white;
+
         MeshRenderer renderer = go.GetComponent<MeshRenderer>();
         renderer.sharedMaterial = text.font.material;
         renderer.sortingOrder = 35;
@@ -319,92 +474,118 @@ public class GameFlowController : MonoBehaviour
 
     private void OnMoved(MoveResult result)
     {
-        // Core의 이동은 이미 끝난 상태다. 여기서는 계산된 노드 경로를 화면 애니메이션으로 재생한다.
         var points = new List<Vector3>();
         foreach (BoardNode node in result.Path.Nodes)
         {
             NodeView view = boardView.GetView(node);
             if (view != null) points.Add(view.Position);
         }
+
         isMoving = true;
         int remaining = result.MovedPieces.Count;
         foreach (Piece piece in result.MovedPieces)
         {
             PieceView view = views[piece];
+            view.SetWorldVisible(true);
             view.SetSortingOrder(20);
-            view.PlayMove(points, result.Path.IsFinished, () => { if (--remaining == 0) FinishMove(result); });
+            view.PlayMove(points, result.Path.IsFinished, () =>
+            {
+                if (--remaining == 0) FinishMove(result);
+            });
         }
     }
 
     private void FinishMove(MoveResult result)
     {
-        // Shield/SturdyCarry가 잡기 목록을 수정한 최종 결과만 화면에 반영한다.
-        foreach (Piece captured in result.CapturedPieces) views[captured].ReturnHome();
+        foreach (Piece captured in result.CapturedPieces)
+            if (views.TryGetValue(captured, out PieceView capturedView))
+                capturedView.ReturnHome();
+
         RefreshPieceLayout();
+        RefreshPlayerPanels();
+        RefreshStoredResultText();
         isMoving = false;
-        if (TeamFinished(currentTeam)) ChangeState(GameFlowState.Finish);
-        else if (result.CapturedPieces.Count > 0) ChangeState(GameFlowState.Throw);
-        else if (storedResults.Count > 0) BeginMoveSelectionOrEndTurn();
-        else ChangeState(GameFlowState.EndTurn);
+
+        if (pendingWinnerTeam.HasValue || gameState.WinnerTeam.HasValue)
+        {
+            ChangeState(GameFlowState.Finish);
+            return;
+        }
+
+        if (pendingTurnTeam.HasValue)
+        {
+            pendingTurnTeam = null;
+            ChangeState(GameFlowState.Throw);
+            return;
+        }
+
+        if (gameState.RemainingThrows > 0)
+            ChangeState(GameFlowState.Throw);
+        else if (gameState.StoredResults.Count > 0 && gameRules.HasAnyStoredMove())
+            ChangeState(GameFlowState.Move);
     }
 
     private void RefreshPieceLayout()
     {
-        // 같은 팀 말은 업힌 묶음이므로 같은 좌표와 개수 표시를 사용한다.
-        // Shield/SturdyCarry로 서로 다른 팀이 같은 노드에 남으면 팀 묶음을 좌우로 분리한다.
         foreach (PieceView view in pieceViews)
         {
             view.SetSortingOrder(10);
-            if (view.Piece != null && view.Piece.IsOnBoard) view.SetStackCount(state.GetStack(view.Piece).Count);
+            bool onBoard = view.Piece != null && view.Piece.IsOnBoard;
+            view.SetWorldVisible(onBoard);
+            if (onBoard) view.SetStackCount(boardState.GetStack(view.Piece).Count);
         }
+
         foreach (BoardNode node in boardView.Graph.Nodes)
         {
-            List<Piece> pieces = state.GetPiecesAt(node);
+            List<Piece> pieces = boardState.GetPiecesAt(node);
             var teams = new List<int>();
-            foreach (Piece piece in pieces) if (!teams.Contains(piece.Team)) teams.Add(piece.Team);
+            foreach (Piece piece in pieces)
+                if (!teams.Contains(piece.Team)) teams.Add(piece.Team);
+
             teams.Sort();
             for (int i = 0; i < teams.Count; i++)
             {
-                float x = teams.Count == 1 ? 0f : (i - (teams.Count - 1) * 0.5f) * 0.55f;
+                float x = teams.Count == 1
+                    ? 0f
+                    : (i - (teams.Count - 1) * 0.5f) * 0.55f;
                 Vector3 position = boardView.GetView(node).Position + new Vector3(x, 0f, 0f);
-                foreach (Piece piece in pieces) if (piece.Team == teams[i]) views[piece].SetBoardPosition(position);
+                foreach (Piece piece in pieces)
+                    if (piece.Team == teams[i]) views[piece].SetBoardPosition(position);
             }
         }
     }
 
-    private void EndTurn()
+    private void RefreshPlayerPanels()
     {
-        storedResults.Clear();
-        currentTeam = currentTeam == 0 ? 1 : 0;
-        RefreshStoredResultText();
-        ChangeState(GameFlowState.Throw);
-    }
+        if (hud == null || boardState == null) return;
 
-    private bool HasAnyStoredMove()
-    {
-        foreach (YutResult result in storedResults)
-            foreach (PieceView view in pieceViews)
-                if (view.Team == currentTeam && !view.Piece.IsFinished &&
-                    state.GetMovePaths(view.Piece, result.Steps()).Count > 0) return true;
-        return false;
-    }
-
-    private bool TeamFinished(int team)
-    {
-        bool found = false;
-        foreach (PieceView view in pieceViews)
+        for (int team = 0; team < 2; team++)
         {
-            if (view.Team != team) continue;
-            found = true;
-            if (!view.Piece.IsFinished) return false;
+            int waiting = 0;
+            int onBoard = 0;
+            int finished = 0;
+
+            foreach (Piece piece in boardState.Pieces)
+            {
+                if (piece.Team != team) continue;
+                if (piece.IsWaiting) waiting++;
+                else if (piece.IsOnBoard) onBoard++;
+                else if (piece.IsFinished) finished++;
+            }
+
+            var augmentIds = new List<string>();
+            foreach (IAugment augment in boardState.GetAugments(team))
+                augmentIds.Add(augment.Id);
+
+            hud.SetPlayerState(team, waiting, onBoard, finished, augmentIds);
         }
-        return found;
     }
 
     private PieceView PickPiece(Vector3 world)
     {
         foreach (PieceView view in pieceViews)
-            if (view != null && view.gameObject.activeInHierarchy && view.Contains(world)) return view;
+            if (view != null && view.gameObject.activeInHierarchy && view.Contains(world))
+                return view;
         return null;
     }
 
@@ -412,46 +593,67 @@ public class GameFlowController : MonoBehaviour
     {
         NodeView best = null;
         float distanceBest = float.MaxValue;
+
         foreach (BoardNode node in boardView.Graph.Nodes)
         {
             NodeView view = boardView.GetView(node);
             if (view == null) continue;
+
             SpriteRenderer sprite = view.GetComponentInChildren<SpriteRenderer>();
             float radius = sprite != null ? sprite.bounds.extents.x : 0.5f;
             float distance = Vector2.Distance(world, view.Position);
-            if (distance <= radius && distance < distanceBest) { best = view; distanceBest = distance; }
+            if (distance <= radius && distance < distanceBest)
+            {
+                best = view;
+                distanceBest = distance;
+            }
         }
         return best;
     }
-
     private void ClearSelection()
     {
-        // 말 선택이 바뀌거나 상태가 전환될 때 임시 강조와 결과 라벨을 모두 정리한다.
+        hud?.HideMoveOptionChoices();
         if (selectedPiece != null) selectedPiece.SetSelected(false);
         selectedPiece = null;
+        hud?.SetSelectedWaitingPiece(-1, -1);
+
         foreach (NodeView view in highlighted) view.ClearHighlight();
         highlighted.Clear();
         targets.Clear();
-        foreach (GameObject label in labels) if (label != null) Destroy(label);
+
+        foreach (GameObject label in labels)
+            if (label != null) Destroy(label);
         labels.Clear();
+
         if (pathView != null) pathView.ClearHighlights();
     }
 
     private void RefreshTurnHighlights(bool enabled = true)
     {
         foreach (PieceView view in pieceViews)
-            view.SetTurnHighlighted(enabled && view.Team == currentTeam && view.Piece != null && !view.Piece.IsFinished);
+            view.SetTurnHighlighted(
+                enabled &&
+                view.Team == CurrentTeam &&
+                view.Piece != null &&
+                !view.Piece.IsFinished);
     }
 
     private void RefreshStoredResultText(Piece contextPiece = null)
     {
-        if (hud == null) return;
-        if (storedResults.Count == 0) { hud.SetResults("Stored Results: -"); return; }
+        if (hud == null || gameState == null) return;
+        if (gameState.StoredResults.Count == 0)
+        {
+            hud.SetResults("Stored Results: -");
+            return;
+        }
+
         var results = new List<string>();
-        foreach (YutResult result in storedResults)
+        foreach (YutResult result in gameState.StoredResults)
         {
             int baseCount = result.Steps();
-            int modified = contextPiece != null ? state.GetModifiedMoveCount(contextPiece, baseCount) : baseCount;
+            int modified = contextPiece != null
+                ? boardState.GetModifiedMoveCount(contextPiece, baseCount)
+                : baseCount;
             int bonus = modified - baseCount;
             string bonusText = bonus != 0 ? $" ({bonus:+0;-0})" : "";
             results.Add($"{ResultLabel(result)} {baseCount}{bonusText}");
@@ -461,17 +663,22 @@ public class GameFlowController : MonoBehaviour
 
     private RethrowAugment GetRethrowAugment()
     {
-        if (state == null) return null;
-        foreach (IAugment augment in state.GetAugments(currentTeam))
+        if (boardState == null) return null;
+        foreach (IAugment augment in boardState.GetAugments(CurrentTeam))
             if (augment is RethrowAugment rethrow) return rethrow;
         return null;
     }
 
     private bool CanUseRethrow()
     {
-        if (storedResults.Count == 0) return false;
+        if (gameState == null || gameState.StoredResults.Count == 0) return false;
         RethrowAugment rethrow = GetRethrowAugment();
-        return rethrow != null && rethrow.CanUse(state, currentTeam, storedResults[storedResults.Count - 1]);
+        return rethrow != null &&
+               !gameState.HasMovedThisTurn &&
+               rethrow.CanUse(
+                   boardState,
+                   CurrentTeam,
+                   gameState.StoredResults[gameState.StoredResults.Count - 1]);
     }
 
     private static string MoveOptionLabel(MoveOption option)
@@ -503,4 +710,31 @@ public class GameFlowController : MonoBehaviour
         YutResult.Mo => "모",
         _ => "-"
     };
+
+
+/// <summary>
+    /// 목적지에 표시할 의미를 현재 보드 상태에서 계산한다.
+    /// 완주를 우선하고, 같은 팀은 업기, 상대 팀은 잡기로 표시한다.
+    /// </summary>
+    private DestinationBadgeType GetDestinationBadge(
+        NodeView destination,
+        IReadOnlyList<MoveOption> options,
+        int movingTeam)
+    {
+        foreach (MoveOption option in options)
+            if (option.IsFinished) return DestinationBadgeType.Finish;
+
+        BoardNode node = destination.Node ?? boardState.Graph.GetNode(destination.Id);
+        if (node == null) return DestinationBadgeType.None;
+
+        bool hasSameTeam = false;
+        foreach (Piece occupant in boardState.GetPiecesAt(node))
+        {
+            if (occupant.Team != movingTeam) return DestinationBadgeType.Capture;
+            hasSameTeam = true;
+        }
+
+        return hasSameTeam ? DestinationBadgeType.Carry : DestinationBadgeType.None;
+    }
 }
+

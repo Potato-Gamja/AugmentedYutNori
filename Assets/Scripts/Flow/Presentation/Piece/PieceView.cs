@@ -13,7 +13,12 @@ public class PieceView : MonoBehaviour
     [SerializeField] private Color turnHighlightColor = new Color(0.35f, 1f, 1f);
     [SerializeField] private float highlightOutlineScale = 1.3f;
 
-    [Header("업기 숫자")]
+    [Header("P0 UI Art (선택 사항)")]
+    [SerializeField] private Sprite bodySprite;
+    [SerializeField] private Sprite availableGlowSprite;
+    [SerializeField] private Sprite selectedRingSprite;
+    [SerializeField] private Sprite selectedFloorSprite;
+    [SerializeField] private Sprite selectedFloorShadowSprite;
     [SerializeField] private Color stackTextColor = Color.white;
     [SerializeField] private float stackTextSize = 0.08f;
 
@@ -21,40 +26,59 @@ public class PieceView : MonoBehaviour
     private Color normalColor;
     private TextMesh stackText;
     private SpriteRenderer highlightOutline;
+    private SpriteRenderer availableGlow;
+    private SpriteRenderer selectedRing;
+    private SpriteRenderer selectedFloor;
+    private SpriteRenderer selectedFloorShadow;
     private bool isSelected;
-    private bool isTurnHighlighted;
+    
+    private bool worldVisible = true;
+private bool isTurnHighlighted;
 
     public int Team => team;
     public Piece Piece { get; private set; }
     public bool IsMoving { get; private set; }
 
-    private void Awake()
+private void Awake()
     {
         if (spriteRenderer == null) spriteRenderer = GetComponentInChildren<SpriteRenderer>();
+        if (bodySprite != null) spriteRenderer.sprite = bodySprite;
         homePosition = transform.position;
         normalColor = spriteRenderer.color;
-        highlightOutline = CreateHighlightOutline();
+        if (availableGlowSprite != null)
+        {
+            selectedFloor = CreateEffectRenderer("SelectedFloor", selectedFloorSprite, -3);
+            selectedFloorShadow = CreateEffectRenderer("SelectedFloorShadow", selectedFloorShadowSprite, -2);
+            availableGlow = CreateEffectRenderer("AvailableGlow", availableGlowSprite, -1);
+            selectedRing = CreateEffectRenderer("SelectedRing", selectedRingSprite, 1);
+        }
+        else highlightOutline = CreateHighlightOutline();
         stackText = CreateStackText();
         SetStackCount(1);
+        RefreshHighlight();
     }
 
-    public void Bind(Piece piece)
+public void Bind(Piece piece)
     {
         Piece = piece;
         transform.position = homePosition;
         gameObject.SetActive(true);
+        // 대기 말은 PlayerPanel 슬롯으로 표시한다. 월드 말은 판에 진입할 때 켠다.
+        SetWorldVisible(!piece.IsWaiting);
     }
 
     // 잡혔을 때 대기석으로 돌아감
-    public void ReturnHome()
+public void ReturnHome()
     {
         transform.position = homePosition;
         SetStackCount(1);
+        SetWorldVisible(false);
     }
 
-    public void SetSelected(bool selected)
+public void SetSelected(bool selected)
     {
         isSelected = selected;
+        transform.localScale = selected ? Vector3.one * 1.15f : Vector3.one;
         RefreshHighlight();
     }
 
@@ -66,12 +90,21 @@ public class PieceView : MonoBehaviour
         RefreshHighlight();
     }
 
-    private void RefreshHighlight()
+private void RefreshHighlight()
     {
+        spriteRenderer.enabled = worldVisible;
         spriteRenderer.color = normalColor;
+        if (availableGlow != null)
+        {
+            availableGlow.enabled = worldVisible && isTurnHighlighted && !isSelected;
+            if (selectedRing != null) selectedRing.enabled = worldVisible && isSelected;
+            if (selectedFloor != null) selectedFloor.enabled = worldVisible && isSelected;
+            if (selectedFloorShadow != null) selectedFloorShadow.enabled = worldVisible && isSelected;
+            return;
+        }
         if (highlightOutline == null) return;
         highlightOutline.color = isSelected ? selectedColor : turnHighlightColor;
-        highlightOutline.enabled = isSelected || isTurnHighlighted;
+        highlightOutline.enabled = worldVisible && (isSelected || isTurnHighlighted);
     }
 
     // 이동 애니메이션 후 같은 노드의 팀별 표시 위치를 보정할 때 사용한다.
@@ -88,16 +121,20 @@ public class PieceView : MonoBehaviour
     }
 
     // 업힌 말끼리 같은 자리에 겹치므로, 맨 위에 그려질 말을 정한다
-    public void SetSortingOrder(int order)
+public void SetSortingOrder(int order)
     {
         spriteRenderer.sortingOrder = order;
+        if (selectedFloor != null) selectedFloor.sortingOrder = order - 3;
+        if (selectedFloorShadow != null) selectedFloorShadow.sortingOrder = order - 2;
+        if (availableGlow != null) availableGlow.sortingOrder = order - 1;
+        if (selectedRing != null) selectedRing.sortingOrder = order + 1;
         if (highlightOutline != null) highlightOutline.sortingOrder = order - 1;
-        stackText.GetComponent<MeshRenderer>().sortingOrder = order + 1;
+        stackText.GetComponent<MeshRenderer>().sortingOrder = order + 2;
     }
 
-    public bool Contains(Vector3 worldPosition)
+public bool Contains(Vector3 worldPosition)
     {
-        if (!gameObject.activeInHierarchy) return false;
+        if (!gameObject.activeInHierarchy || !worldVisible) return false;
 
         Vector3 center = transform.position;
         center.z = worldPosition.z;
@@ -166,5 +203,32 @@ public class PieceView : MonoBehaviour
         outline.sortingOrder = spriteRenderer.sortingOrder - 1;
         outline.enabled = false;
         return outline;
+    }
+
+
+// P0 아트는 같은 캔버스와 Pivot을 사용하므로 로컬 좌표 0에서 정확히 겹친다.
+    private SpriteRenderer CreateEffectRenderer(string objectName, Sprite sprite, int orderOffset)
+    {
+        if (sprite == null) return null;
+        var go = new GameObject(objectName);
+        go.transform.SetParent(spriteRenderer.transform, false);
+        var renderer = go.AddComponent<SpriteRenderer>();
+        renderer.sprite = sprite;
+        renderer.sortingLayerID = spriteRenderer.sortingLayerID;
+        renderer.sortingOrder = spriteRenderer.sortingOrder + orderOffset;
+        renderer.enabled = false;
+        return renderer;
+    }
+
+
+/// <summary>
+    /// 대기석은 PlayerPanel UI가 대신 표시하므로 월드 스프라이트의 중복 노출을 제어한다.
+    /// GameObject는 활성 상태로 유지해 이동 코루틴과 모델 바인딩이 끊기지 않게 한다.
+    /// </summary>
+    public void SetWorldVisible(bool visible)
+    {
+        worldVisible = visible;
+        if (stackText != null) stackText.gameObject.SetActive(visible);
+        RefreshHighlight();
     }
 }

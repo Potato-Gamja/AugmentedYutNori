@@ -2,6 +2,14 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Serialization;
 
+public enum DestinationBadgeType
+{
+    None,
+    Capture,
+    Carry,
+    Finish
+}
+
 // 씬에서 판 모양을 만드는 칸. 연결은 인스펙터에서 직접 지정하고, 실행 시 BoardView가 BoardNode 데이터로 변환한다.
 public class NodeView : MonoBehaviour
 {
@@ -20,8 +28,18 @@ public class NodeView : MonoBehaviour
     [Header("Highlight")]
     [Tooltip("칸 스프라이트 대비 아웃라인 크기 (클수록 테두리가 두꺼움)")]
     [SerializeField] private float outlineScale = 1.35f;
+    [Tooltip("지정하면 복제 원 대신 P0 목적지 링을 사용한다.")]
+    
+    [Header("P0 Destination Badges")]
+    [SerializeField] private Sprite captureBadgeSprite;
+    [SerializeField] private Sprite carryRedBadgeSprite;
+    [SerializeField] private Sprite carryBlueBadgeSprite;
+    [SerializeField] private Sprite finishBadgeSprite;
+[SerializeField] private Sprite destinationHighlightSprite;
 
-    private SpriteRenderer outline;
+    
+    private SpriteRenderer destinationBadge;
+private SpriteRenderer outline;
 
     public int Id => id;
     public BoardNodeType Type => type;
@@ -54,25 +72,59 @@ public class NodeView : MonoBehaviour
         outline.enabled = true;
     }
 
-    public void ClearHighlight()
+public void ClearHighlight()
     {
         if (outline != null) outline.enabled = false;
+        if (destinationBadge != null) destinationBadge.enabled = false;
     }
 
     // 칸 스프라이트를 복제해 조금 크게 뒤에 깔아서 테두리처럼 보이게 한다
-    private SpriteRenderer CreateOutline()
+private SpriteRenderer CreateOutline()
     {
         SpriteRenderer source = GetComponentInChildren<SpriteRenderer>();
         if (source == null) return null;
 
         var go = new GameObject("Outline");
         go.transform.SetParent(source.transform, false);
-        go.transform.localScale = Vector3.one * outlineScale;
+        go.transform.localScale = destinationHighlightSprite != null ? Vector3.one : Vector3.one * outlineScale;
 
         var renderer = go.AddComponent<SpriteRenderer>();
-        renderer.sprite = source.sprite;
+        renderer.sprite = destinationHighlightSprite != null ? destinationHighlightSprite : source.sprite;
         renderer.sortingLayerID = source.sortingLayerID;
-        renderer.sortingOrder = source.sortingOrder - 1;
+        renderer.sortingOrder = destinationHighlightSprite != null ? source.sortingOrder + 2 : source.sortingOrder - 1;
         return renderer;
+    }
+
+
+/// <summary>
+    /// 이동 후보의 잡기/업기/완주 의미를 목적지 위에 표시한다.
+    /// 실제 판정은 GameRules와 BoardState가 담당하며 이 메서드는 표시만 변경한다.
+    /// </summary>
+    public void SetDestinationBadge(DestinationBadgeType badgeType, int movingTeam)
+    {
+        if (badgeType == DestinationBadgeType.None)
+        {
+            if (destinationBadge != null) destinationBadge.enabled = false;
+            return;
+        }
+
+        if (destinationBadge == null)
+        {
+            SpriteRenderer source = GetComponentInChildren<SpriteRenderer>();
+            if (source == null) return;
+            var go = new GameObject("DestinationBadge");
+            go.transform.SetParent(source.transform, false);
+            go.transform.localPosition = new Vector3(0f, 0.72f, 0f);
+            destinationBadge = go.AddComponent<SpriteRenderer>();
+            destinationBadge.sortingLayerID = source.sortingLayerID;
+            destinationBadge.sortingOrder = source.sortingOrder + 5;
+        }
+
+        destinationBadge.sprite = badgeType == DestinationBadgeType.Capture
+            ? captureBadgeSprite
+            : badgeType == DestinationBadgeType.Carry
+                ? (movingTeam == 0 ? carryRedBadgeSprite : carryBlueBadgeSprite)
+                : finishBadgeSprite;
+        destinationBadge.enabled = destinationBadge.sprite != null;
     }
 }
