@@ -6,16 +6,22 @@ public readonly struct MoveOption
 {
     public int ResultIndex { get; }
     public YutResult Result { get; }
+    public bool IsFinished { get; }
+    public int ModifiedMoveCount { get; }
     public int DestinationNodeId { get; }
 
     public MoveOption(
         int resultIndex,
         YutResult result,
-        int destinationNodeId)
+        int destinationNodeId,
+        int modifiedMoveCount,
+        bool isFinished)
     {
         ResultIndex = resultIndex;
         Result = result;
         DestinationNodeId = destinationNodeId;
+        ModifiedMoveCount = modifiedMoveCount;
+        IsFinished = isFinished;
     }
 }
 
@@ -116,9 +122,11 @@ public class GameRules
             {
                 options.Add(
                     new MoveOption(
-                        resultIndex,
-                        yutResult,
-                        path.Destination.Id
+                    resultIndex,
+                    yutResult,
+                    path.Destination.Id,
+                    state.Board.GetModifiedMoveCount(piece, moveCount),
+                    path.IsFinished
                     )
                 );
             }
@@ -267,24 +275,27 @@ public class GameRules
     }
 
     // 증강 선택
+    // 현재 팀의 증강 후보를 조회할 때 사용하는 기본 API.
     public List<string> GetAugmentChoices(int count)
     {
-        // 현재 아직 팀이 뽑지 않은 증강 중 랜덤 후보
-        return augmentPool.GetRandomIds(
-            turnManager.CurrentTeam,
-            count
-        );
+        return GetAugmentChoices(turnManager.CurrentTeam, count);
+    }
+
+    // 게임 시작 단계에서 플레이어별 증강 후보를 조회한다.
+    public List<string> GetAugmentChoices(int team, int count)
+    {
+        return augmentPool.GetRandomIds(team, count);
     }
 
     public IAugment SelectAugment(string id)
     {
-        // 선택한 ID로 현재 팀 소유 증강 객체 생성
-        IAugment augment = augmentPool.Pick(
-            turnManager.CurrentTeam,
-            id
-        );
+        return SelectAugment(turnManager.CurrentTeam, id);
+    }
 
-        // 보드 상태에 증강 등록, 이벤트 전달
+    // MVP에서 두 플레이어가 순서대로 증강을 선택할 때 사용한다.
+    public IAugment SelectAugment(int team, string id)
+    {
+        IAugment augment = augmentPool.Pick(team, id);
         state.Board.AddAugment(augment);
         gameEvents.RaiseAugmentSelected(augment);
         return augment;
@@ -338,6 +349,11 @@ public class GameRules
         );
 
         gameEvents.RaiseThrown(outcome);
+        gameEvents.RaiseThrown(outcome);
+
+        // 교체된 결과도 이동할 수 없고 추가 던지기가 없다면 턴을 종료한다.
+        TryEndTurnIfNoAction();
+
         return true;
     }
 
@@ -407,4 +423,21 @@ public class GameRules
 
         return pool;
     }
+    // Controller가 구체적인 RethrowAugment를 찾지 않도록
+    // 현재 팀이 가진 재던지기 증강을 내부에서 조회한다.
+    public bool TryRethrow(out YutThrowOutcome outcome)
+    {
+    RethrowAugment rethrow = null;
+
+    foreach (IAugment augment in state.Board.GetAugments(turnManager.CurrentTeam))
+    {
+        if (augment is RethrowAugment found)
+        {
+            rethrow = found;
+            break;
+        }
+    }
+
+    return TryRethrow(rethrow, out outcome);
+}
 }
