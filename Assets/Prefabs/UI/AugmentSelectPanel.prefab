@@ -206,6 +206,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3e35a3eb9c4ecfe4b9bfc0b35323ab89, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AugmentSelectPanel
-  augumentSelectPanel: {fileID: 8203028726434723283}
+  layer: 0
   augumentCardViewPrefab: {fileID: 761554336521674725, guid: 0096161ff24f0754cbb4470f38e3bffd, type: 3}
   augmentCardContainer: {fileID: 5083692544927103793}
+  augmentCatalog: {fileID: 11400000, guid: 60c199797b5416645ab76a238550d4ad, type: 2}
+  numberOfAugmentCards: 3

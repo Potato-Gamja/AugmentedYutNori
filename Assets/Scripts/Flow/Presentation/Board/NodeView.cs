@@ -13,7 +13,7 @@ public enum DestinationBadgeType
 // 씬에서 판 모양을 만드는 칸. 연결은 인스펙터에서 직접 지정하고, 실행 시 BoardView가 BoardNode 데이터로 변환한다.
 public class NodeView : MonoBehaviour
 {
-    [Tooltip("칸 고정 번호 (저장/네트워크/증강 효과용). BoardView 우클릭 메뉴 '칸 번호 다시 매기기'로 자동 지정")]
+    [Tooltip("칸 고정 번호 (저장/네트워크/증강 효과용). 같은 번호 = 판 위의 같은 자리이므로, 판끼리 같은 자리의 칸은 같은 번호를 쓴다. 새 칸은 쓰지 않는 번호를 직접 지정")]
     [SerializeField] private int id = -1;
     [SerializeField] private BoardNodeType type = BoardNodeType.Normal;
 
@@ -46,6 +46,16 @@ private SpriteRenderer outline;
     public IReadOnlyList<NodeView> NextNodes => nextNodes;
     public IReadOnlyList<NodeView> PrevNodes => prevNodes;
     public IReadOnlyList<NodeView> ShortcutNodes => shortcutNodes;
+
+    // BoardView가 레이아웃(BoardLayoutSO)에서 칸을 만들 때 번호/종류/연결을 채운다
+    internal void Configure(int nodeId, BoardNodeType nodeType, List<NodeView> next, List<NodeView> prev, List<NodeView> shortcut)
+    {
+        id = nodeId;
+        type = nodeType;
+        nextNodes = next;
+        prevNodes = prev;
+        shortcutNodes = shortcut;
+    }
 
     // 화면에 보이는 칸의 중심 (자식 스프라이트만 옮겨도 따라가도록 스프라이트 기준). 화살표/말 이동/클릭 판정에 사용
     public Vector3 Position

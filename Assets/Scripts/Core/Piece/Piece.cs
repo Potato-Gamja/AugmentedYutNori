@@ -31,6 +31,9 @@ public class Piece
         else State = PieceState.OnBoard;
     }
 
+    // 판이 바뀌어 직전 칸이 없어졌을 때 (방향 정보만 버리고 위치는 그대로)
+    internal void ForgetCameFrom() => CameFrom = null;
+
     // 잡혔을 때 판 밖(대기석)으로 되돌린다
     internal void ReturnToStart()
     {

@@ -7,9 +7,9 @@ public class AugmentSelectPanel : UIBase
     [SerializeField] private GameObject augumentCardViewPrefab;
     [SerializeField] private Transform augmentCardContainer;
 
+    [SerializeField] private AugmentCatalogSO augmentCatalog;
     // TODO: Augment 카드 수를 동적으로 설정할 수 있도록 변경 필요
     [SerializeField] private int numberOfAugmentCards = 3; // 표시할 Augment 카드 수
-
     
     private System.Collections.Generic.IReadOnlyList<string> choices;
 private AugmentPool pool;
@@ -45,7 +45,8 @@ protected override void OnOpen()
         foreach (string id in ids)
         {
             AugmentCardView card = Instantiate(augumentCardViewPrefab, augmentCardContainer).GetComponent<AugmentCardView>();
-            card.Init(id, OnCardSelected);
+            AugmentDataSO data = augmentCatalog.Find(id);
+            card.Init(id, data, OnCardSelected);
         }
     }
 
