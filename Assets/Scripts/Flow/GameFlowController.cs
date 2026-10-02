@@ -126,7 +126,7 @@ public class GameFlowController : MonoBehaviour
     {
         AugmentDefinitionFile file =  JsonUtility.FromJson<AugmentDefinitionFile>(augmentsJson.text);
         augmentCatalog = new AugmentCatalog(file, AugmentFactories.Create());
-        AugmentPool pool = new AugmentPool();
+        AugmentPool pool = new AugmentPool(new SystemRandomProvider());
         augmentCatalog.RegisterTo(pool);
         return pool;
     }
