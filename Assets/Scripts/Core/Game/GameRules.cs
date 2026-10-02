@@ -40,15 +40,15 @@ public class GameRules
         TurnManager turnManager,
         GameEvents gameEvents,
         YutThrower yutThrower,
-        IGetResult getResult)
+        IGetResult getResult,
+        AugmentPool augmentPool)
     {
         this.state = state;
         this.turnManager = turnManager;
         this.gameEvents = gameEvents;
         this.yutThrower = yutThrower;
         this.getResult = getResult;
-
-        augmentPool = CreateAugmentPool();
+        this.augmentPool = augmentPool;
     }
 
     // 윷 던지기
@@ -379,50 +379,7 @@ public class GameRules
         turnManager.NextTurn();
         gameEvents.RaiseTurnChanged(turnManager.CurrentTeam);
     }
-
-    // CreateAugment 대체
-    private static AugmentPool CreateAugmentPool()
-    {
-        var pool = new AugmentPool();
-
-        pool.Register(
-            "BackDoSwitch",
-            team =>
-                new BackDoSwitchAugment(team)
-        );
-
-        pool.Register(
-            "QuickStart",
-            team =>
-                new QuickStartAugment(team)
-        );
-
-        pool.Register(
-            "WeakBoost",
-            team =>
-                new WeakBoostAugment(team)
-        );
-
-        pool.Register(
-            "Shield",
-            team =>
-                new ShieldAugment(team)
-        );
-
-        pool.Register(
-            "SturdyCarry",
-            team =>
-                new SturdyCarryAugment(team)
-        );
-
-        pool.Register(
-            "Rethrow",
-            team =>
-                new RethrowAugment(team)
-        );
-
-        return pool;
-    }
+    
     // Controller가 구체적인 RethrowAugment를 찾지 않도록
     // 현재 팀이 가진 재던지기 증강을 내부에서 조회한다.
     public bool TryRethrow(out YutThrowOutcome outcome)

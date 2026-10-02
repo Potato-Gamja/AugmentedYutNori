@@ -16,6 +16,7 @@ public class GameFlowController : MonoBehaviour
     [SerializeField] private List<PieceView> pieceViews = new();
     [SerializeField] private PathView pathView;
     [SerializeField] private UIManager uiManager;
+    [SerializeField] private TextAsset augmentsJson;
     [SerializeField] private bool skipAugmentSelection = true;
     [SerializeField] private bool allowSkipShortcut;
 
@@ -30,6 +31,7 @@ public class GameFlowController : MonoBehaviour
     private GameFlowHudPresenter hudPresenter;
     private GameFlowSelectionController selectionController;
     private Camera mainCamera;
+    private AugmentCatalog augmentCatalog;
     private GameFlowState currentState;
     private bool isMoving;
     private int augmentSelectionTeam;
@@ -47,6 +49,12 @@ public class GameFlowController : MonoBehaviour
         if (boardView == null || boardView.Graph == null)
         {
             Debug.LogError("[GameFlow] BoardView 또는 BoardGraph가 준비되지 않았습니다.", this);
+            enabled = false;
+            return;
+        }
+        if (augmentsJson == null)
+        {
+            Debug.LogError($"[GameFlow] AugmentsJson이 준비되지 않았습니다.", this);
             enabled = false;
             return;
         }
@@ -107,7 +115,18 @@ public class GameFlowController : MonoBehaviour
             turnManager,
             gameEvents,
             new YutThrower(new SystemRandomProvider()),
-            new StandardGetResult());
+            new StandardGetResult(),
+            CreateAugmentPool());
+    }
+    
+    // json에 저장되어 있는 모든 증강 가져오기
+    private AugmentPool CreateAugmentPool()
+    {
+        AugmentDefinitionFile file =  JsonUtility.FromJson<AugmentDefinitionFile>(augmentsJson.text);
+        augmentCatalog = new AugmentCatalog(file, AugmentFactories.Create());
+        AugmentPool pool = new AugmentPool();
+        augmentCatalog.RegisterTo(pool);
+        return pool;
     }
 
     private void BindPieces()
