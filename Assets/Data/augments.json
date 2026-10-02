@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "augments": [
+    { "id": "BackDoSwitch", "name": "빽도 전환", "description": "빽도도 앞으로 갈 수 있다", "consumable": false },
+    { "id": "QuickStart", "name": "빠른 출발", "description": "출발부터 한 발 앞서", "consumable": false },
+    { "id": "Rethrow", "name": "다시 던지기", "description": "결과가 마음에 안 들면 한 번 더!", "consumable": true },
+    { "id": "Shield", "name": "방패", "description": "한 번은 봐준다, 딱 한 번만", "consumable": true },
+    { "id": "SturdyCarry", "name": "튼튼한 업기", "description": "업힌 말은 쉽게 무너지지 않는다", "consumable": false },
+    { "id": "WeakBoost", "name": "잔걸음 강화", "description": "작은 걸음도 한 칸 더", "consumable": false }
+  ]
+}
