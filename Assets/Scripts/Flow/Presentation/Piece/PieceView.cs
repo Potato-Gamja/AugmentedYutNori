@@ -7,6 +7,8 @@ using UnityEngine;
 public class PieceView : MonoBehaviour
 {
     [SerializeField] private int team;
+    [Tooltip("팀 안에서 말의 고정 순서. 서버 GameSetup의 slotIndex와 같은 값을 사용한다.")]
+    [SerializeField] private int slotIndex = -1;
     [SerializeField] private SpriteRenderer spriteRenderer;
     [SerializeField] private float stepDuration = 0.15f;
     [SerializeField] private Color selectedColor = new Color(1f, 0.85f, 0.3f);
@@ -36,8 +38,26 @@ public class PieceView : MonoBehaviour
 private bool isTurnHighlighted;
 
     public int Team => team;
+    public int SlotIndex => slotIndex;
     public Piece Piece { get; private set; }
     public bool IsMoving { get; private set; }
+
+    /// <summary>
+    /// 서버 연결 전에도 씬의 말에 안정적인 ID를 부여하기 위한 임시 공통 규칙이다.
+    /// GameSetup의 pieceId 규격이 확정되면 반드시 같은 계산식인지 확인한다.
+    /// </summary>
+    public bool TryGetConfiguredPieceId(out int pieceId)
+    {
+        if (team < 0 || slotIndex < 0)
+        {
+            pieceId = -1;
+            return false;
+        }
+
+        // 규격 확인 필요: 서버 GameSetup도 team * 100 + slotIndex 형식을 사용해야 한다.
+        pieceId = team * 100 + slotIndex;
+        return true;
+    }
 
 private void Awake()
     {
