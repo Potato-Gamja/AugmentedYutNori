@@ -48,6 +48,54 @@ public class BoardView : MonoBehaviour
 
     public NodeView GetView(BoardNode node) => node != null && views.TryGetValue(node, out NodeView view) ? view : null;
 
+    /// <summary>
+    /// 서버가 nodeId로 전달한 이동 경로를 화면 위치로 변환할 때 사용한다.
+    /// </summary>
+    public NodeView GetView(int nodeId) => Graph == null ? null : GetView(Graph.GetNode(nodeId));
+
+    /// <summary>
+    /// 서버 게임 시작 전에 씬의 노드 ID와 연결이 사용 가능한지 확인한다.
+    /// </summary>
+    public bool ValidateForGameStart(out string error)
+    {
+        if (Graph == null)
+        {
+            error = "BoardGraph가 생성되지 않았습니다.";
+            return false;
+        }
+
+        List<NodeView> nodeViews = GetNodeViews();
+        if (FindStartNode(nodeViews, false) == null)
+        {
+            error = "Start 타입 노드는 정확히 하나여야 합니다.";
+            return false;
+        }
+
+        var ids = new HashSet<int>();
+        foreach (NodeView view in nodeViews)
+        {
+            if (view.Id < 0)
+            {
+                error = $"{view.name}의 노드 ID가 지정되지 않았습니다.";
+                return false;
+            }
+            if (!ids.Add(view.Id))
+            {
+                error = $"노드 ID {view.Id}가 중복되었습니다.";
+                return false;
+            }
+            if (Graph.GetNode(view.Id) == null)
+            {
+                error = $"노드 ID {view.Id}가 BoardGraph에 없습니다.";
+                return false;
+            }
+        }
+
+        // 규격 확인 필요: GameSetup의 boardLayoutId가 정해지면 현재 Layout과 같은 판인지 여기서 함께 검사한다.
+        error = null;
+        return true;
+    }
+
     // 판의 모든 칸 오브젝트 (Node Root 아래, 비워 두면 씬 전체). 그래프를 만들기 전인 에디터에서도 사용 가능
     public List<NodeView> GetNodeViews()
     {

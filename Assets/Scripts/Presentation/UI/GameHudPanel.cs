@@ -35,6 +35,11 @@ public class GameHudPanel : UIBase
     private StoredResultView storedResultView;
     private YutResultRevealView resultRevealView;
     private int currentVisualTeam;
+    private bool throwRequested;
+    private bool rethrowRequested;
+    private bool isLocalTurn = true;
+    private bool isCommandPending;
+    private bool isConnected = true;
 
     public event Action ThrowClicked;
     public event Action RethrowClicked;
@@ -79,8 +84,15 @@ public class GameHudPanel : UIBase
         }
     }
 
-    private void RaiseThrowClicked() => ThrowClicked?.Invoke();
-    private void RaiseRethrowClicked() => RethrowClicked?.Invoke();
+    private void RaiseThrowClicked()
+    {
+        if (CanSendCommand()) ThrowClicked?.Invoke();
+    }
+
+    private void RaiseRethrowClicked()
+    {
+        if (CanSendCommand()) RethrowClicked?.Invoke();
+    }
 
     public void SetTurn(string value) => SetTurn(value, currentVisualTeam);
 
@@ -93,8 +105,36 @@ public class GameHudPanel : UIBase
 
     public void SetResults(string value) => storedResultView?.SetResults(value);
     public void SetInstruction(string value) => turnView?.SetInstruction(value);
-    public void SetThrowInteractable(bool value) => turnView?.SetThrowInteractable(value);
-    public void SetRethrowVisible(bool value) => turnView?.SetRethrowVisible(value);
+    public void SetThrowInteractable(bool value)
+    {
+        throwRequested = value;
+        RefreshActionAvailability();
+    }
+
+    public void SetRethrowVisible(bool value)
+    {
+        rethrowRequested = value;
+        RefreshActionAvailability();
+    }
+
+    /// <summary>
+    /// 로컬 플레이어의 차례와 서버 응답 대기 상태에 맞춰 액션 입력을 잠근다.
+    /// </summary>
+    public void SetInteractionState(bool localTurn, bool commandPending)
+    {
+        isLocalTurn = localTurn;
+        isCommandPending = commandPending;
+        RefreshActionAvailability();
+    }
+
+    /// <summary>
+    /// 연결이 끊긴 동안 중복 요청이 나가지 않도록 모든 액션 입력을 잠근다.
+    /// </summary>
+    public void SetConnectionAvailable(bool connected)
+    {
+        isConnected = connected;
+        RefreshActionAvailability();
+    }
     public void SetTimerRunning(bool value) => turnView?.SetTimerRunning(value);
 
     public void SetPlayerState(
@@ -133,6 +173,19 @@ public class GameHudPanel : UIBase
     }
 
     public static Color32 GetTeamColor(int team) => TurnHudView.GetTeamColor(team);
+
+    private bool CanSendCommand() => isConnected && isLocalTurn && !isCommandPending;
+
+    private void RefreshActionAvailability()
+    {
+        bool canSend = CanSendCommand();
+        turnView?.SetThrowInteractable(throwRequested && canSend);
+        turnView?.SetRethrowVisible(rethrowRequested);
+        if (rethrowButton != null) rethrowButton.interactable = rethrowRequested && canSend;
+
+        // 규격 확인 필요: IGameSession.IsCommandPending과 로컬 플레이어 판정값을
+        // GameFlowController에서 SetInteractionState에 전달한다.
+    }
 
     private T GetOrAdd<T>() where T : Component
     {
