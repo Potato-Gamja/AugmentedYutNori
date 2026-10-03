@@ -209,5 +209,3 @@ MonoBehaviour:
   layer: 0
   augumentCardViewPrefab: {fileID: 761554336521674725, guid: 50e9e29cda37a494e9bee7581b96d70f, type: 3}
   augmentCardContainer: {fileID: 5083692544927103793}
-  augmentCatalog: {fileID: 11400000, guid: 60c199797b5416645ab76a238550d4ad, type: 2}
-  numberOfAugmentCards: 3
