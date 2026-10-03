@@ -10,13 +10,12 @@ public class AugmentCardView : MonoBehaviour
 
     private Button selectButton;
 
-    public void Init(string id, AugmentDataSO data, Action<string> onCardSelected)
+    public void Init(AugmentDefinition definition, Action<string> onCardSelected)
     {
-        augumentName.text = data != null ? data.AugmentName : id;
-        augmentDescription.text = data != null ? data.AugmentDescription : "";
+        augumentName.text = definition.name;
+        augmentDescription.text = definition.description;
 
         selectButton = GetComponent<Button>();
-        selectButton.onClick.AddListener(() => onCardSelected(id));
-        
+        selectButton.onClick.AddListener(() => onCardSelected(definition.id));
     }
 }
