@@ -34,6 +34,7 @@ public class GameFlowController : MonoBehaviour
     private AugmentCatalog augmentCatalog;
     private GameFlowState currentState;
     private bool isMoving;
+    private int teamCount = 2;
     private int augmentSelectionTeam;
     private int? pendingTurnTeam;
     private int? pendingWinnerTeam;
@@ -105,10 +106,11 @@ public class GameFlowController : MonoBehaviour
 
     private void CreateCoreState()
     {
+        teamCount = GetConfiguredTeamCount();
         boardView.Graph.AllowSkipShortcut = allowSkipShortcut;
         boardState = new BoardState(boardView.Graph);
         gameState = new GameState(boardState);
-        turnManager = new TurnManager(gameState, 2);
+        turnManager = new TurnManager(gameState, teamCount);
         gameEvents = new GameEvents();
         gameRules = new GameRules(
             gameState,
@@ -124,7 +126,7 @@ public class GameFlowController : MonoBehaviour
     {
         AugmentDefinitionFile file =  JsonUtility.FromJson<AugmentDefinitionFile>(augmentsJson.text);
         augmentCatalog = new AugmentCatalog(file, AugmentFactories.Create());
-        AugmentPool pool = new AugmentPool();
+        AugmentPool pool = new AugmentPool(new SystemRandomProvider());
         augmentCatalog.RegisterTo(pool);
         return pool;
     }
@@ -132,11 +134,21 @@ public class GameFlowController : MonoBehaviour
     private void BindPieces()
     {
         pieceViews.Sort((a, b) =>
-            a.Team != b.Team ? a.Team.CompareTo(b.Team) : string.CompareOrdinal(a.name, b.name));
+        {
+            if (a.Team != b.Team) return a.Team.CompareTo(b.Team);
+            if (a.SlotIndex >= 0 && b.SlotIndex >= 0 && a.SlotIndex != b.SlotIndex)
+                return a.SlotIndex.CompareTo(b.SlotIndex);
+            return string.CompareOrdinal(a.name, b.name);
+        });
+
+        bool useConfiguredIds = TryValidateConfiguredPieceIds();
 
         for (int i = 0; i < pieceViews.Count; i++)
         {
-            Piece piece = boardState.AddPiece(i, pieceViews[i].Team);
+            int pieceId = useConfiguredIds && pieceViews[i].TryGetConfiguredPieceId(out int configuredId)
+                ? configuredId
+                : i;
+            Piece piece = boardState.AddPiece(pieceId, pieceViews[i].Team);
             views.Add(piece, pieceViews[i]);
             pieceViews[i].Bind(piece);
             pieceViews[i].SetSortingOrder(10);
@@ -192,6 +204,7 @@ public class GameFlowController : MonoBehaviour
     public void OnThrowButtonClicked()
     {
         if (currentState != GameFlowState.Throw || gameRules == null) return;
+        // 규격 확인 필요: IGameSession이 준비되면 gameRules 직접 호출 대신 RequestThrow를 호출하고 응답까지 HUD 입력을 잠근다.
         try
         {
             gameRules.ThrowYut();
@@ -205,6 +218,7 @@ public class GameFlowController : MonoBehaviour
     public void OnRethrowButtonClicked()
     {
         if (currentState != GameFlowState.Move || gameRules == null) return;
+        // 규격 확인 필요: IGameSession.RequestRethrow의 성공/실패 응답 형식에 맞춰 교체한다.
         if (!gameRules.TryRethrow(out _)) return;
         hudPresenter.RefreshStoredResults();
         hudPresenter.RefreshPlayerPanels();
@@ -213,11 +227,12 @@ public class GameFlowController : MonoBehaviour
     public void OnAugmentSelected(string augmentId)
     {
         if (currentState != GameFlowState.AugmentSelect || gameRules == null) return;
+        // 규격 확인 필요: 서버가 준 AUGMENT_CHOICES 중 하나인지 IGameSession에서 검증한 뒤 결과 이벤트로 갱신한다.
         gameRules.SelectAugment(augmentSelectionTeam, augmentId);
 
-        if (augmentSelectionTeam == 0)
+        augmentSelectionTeam++;
+        if (augmentSelectionTeam < teamCount)
         {
-            augmentSelectionTeam = 1;
             ChangeState(GameFlowState.AugmentSelect);
             return;
         }
@@ -329,7 +344,10 @@ public class GameFlowController : MonoBehaviour
             return;
         }
 
-        panel.Setup(gameRules.GetAugmentChoices(augmentSelectionTeam, 3), OnAugmentSelected);
+        List<AugmentDefinition> selection = new();
+        foreach (var id in gameRules.GetAugmentChoices(augmentSelectionTeam, 3))
+            selection.Add(augmentCatalog.Find(id));
+        panel.Setup(selection, OnAugmentSelected);
         uiManager.Open<AugmentSelectPanel>();
         hud?.SetTurn($"Team {augmentSelectionTeam + 1} Augment", augmentSelectionTeam);
         hud?.SetInstruction("Select an augment.");
@@ -354,6 +372,8 @@ public class GameFlowController : MonoBehaviour
         selectionController.Clear();
         if (entersBoard) movingView.SetWorldVisible(true);
 
+        // 규격 확인 필요: IGameSession.RequestMove(pieceId, resultIndex, destinationNodeId)로 교체하고
+        // MOVE_APPLIED를 받은 뒤에만 실제 이동 애니메이션을 재생한다.
         if (gameRules.MovePiece(movingView.Piece.Id, option.ResultIndex, option.DestinationNodeId)) return;
 
         if (entersBoard) movingView.SetWorldVisible(false);
@@ -454,5 +474,31 @@ public class GameFlowController : MonoBehaviour
                     if (piece.Team == teams[i]) views[piece].SetBoardPosition(position);
             }
         }
+    }
+
+    private int GetConfiguredTeamCount()
+    {
+        int highestTeam = -1;
+        foreach (PieceView view in pieceViews)
+            if (view != null && view.Team > highestTeam) highestTeam = view.Team;
+
+        // 규격 확인 필요: GameSetup.teamCount가 준비되면 씬의 말 목록 대신 그 값을 사용한다.
+        return Math.Max(2, highestTeam + 1);
+    }
+
+    private bool TryValidateConfiguredPieceIds()
+    {
+        var ids = new HashSet<int>();
+        foreach (PieceView view in pieceViews)
+        {
+            if (view == null || !view.TryGetConfiguredPieceId(out int id) || !ids.Add(id))
+            {
+                Debug.LogWarning(
+                    "[GameFlow] PieceView의 Team/SlotIndex가 모두 고유하게 설정되지 않아 기존 목록 순서 ID를 사용합니다. " +
+                    "멀티플레이 연결 전 각 팀의 SlotIndex를 0부터 지정해 주세요.", this);
+                return false;
+            }
+        }
+        return true;
     }
 }
