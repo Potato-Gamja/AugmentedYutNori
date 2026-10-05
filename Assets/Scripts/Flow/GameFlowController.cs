@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
@@ -62,6 +63,10 @@ public class GameFlowController : MonoBehaviour
 
         OpenHud();
         CreateCoreState();
+        /*
+        var errors = setup.CheckScenePieces(pieceViews.Select(v => (v.Team, v.SlotIndex)));
+        if (errors.Count > 0) Debug.LogError(string.Join("\n", errors), this);
+        */
         BindPieces();
 
         hudPresenter = new GameFlowHudPresenter(hud, boardState, gameState);
@@ -103,7 +108,7 @@ public class GameFlowController : MonoBehaviour
         hud.WaitingPieceClicked += OnWaitingPieceClicked;
         hud.SetRethrowVisible(false);
     }
-    private GameSetup setup = GameSetup.CreatLocalDefault(); //멀티 -> GAME_START 값으로 교체
+    //private GameSetup setup = GameSetup.CreateLocalDefault(); //멀티 -> GAME_START 값으로 교체
     private void CreateCoreState()
     {
         teamCount = GetConfiguredTeamCount();
@@ -119,15 +124,17 @@ public class GameFlowController : MonoBehaviour
             new YutThrower(new SystemRandomProvider()),
             new StandardGetResult(),
             CreateAugmentPool());
+        /*
         setup.Validate();
         teamCount = setup.teamCount;
         boardView.Graph.AllowSkipShortcut = setup.allowSkipShortcut;
+        */
     }
-    
+
     // json에 저장되어 있는 모든 증강 가져오기
     private AugmentPool CreateAugmentPool()
     {
-        AugmentDefinitionFile file =  JsonUtility.FromJson<AugmentDefinitionFile>(augmentsJson.text);
+        AugmentDefinitionFile file = JsonUtility.FromJson<AugmentDefinitionFile>(augmentsJson.text);
         augmentCatalog = new AugmentCatalog(file, AugmentFactories.Create());
         AugmentPool pool = new AugmentPool(new SystemRandomProvider());
         augmentCatalog.RegisterTo(pool);
