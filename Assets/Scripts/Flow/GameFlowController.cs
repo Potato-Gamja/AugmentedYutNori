@@ -103,7 +103,7 @@ public class GameFlowController : MonoBehaviour
         hud.WaitingPieceClicked += OnWaitingPieceClicked;
         hud.SetRethrowVisible(false);
     }
-
+    private GameSetup setup = GameSetup.CreatLocalDefault(); //멀티 -> GAME_START 값으로 교체
     private void CreateCoreState()
     {
         teamCount = GetConfiguredTeamCount();
@@ -119,6 +119,9 @@ public class GameFlowController : MonoBehaviour
             new YutThrower(new SystemRandomProvider()),
             new StandardGetResult(),
             CreateAugmentPool());
+        setup.Validate();
+        teamCount = setup.teamCount;
+        boardView.Graph.AllowSkipShortcut = setup.allowSkipShortcut;
     }
     
     // json에 저장되어 있는 모든 증강 가져오기
