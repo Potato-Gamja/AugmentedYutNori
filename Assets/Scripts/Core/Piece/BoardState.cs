@@ -15,6 +15,9 @@ public class BoardState
     // 이동이 적용될 때마다 (로컬 입력이든 네트워크로 받은 명령이든) 호출. 화면 갱신/전송은 여기에 연결
     public event Action<MoveResult> Moved;
 
+    // 서버에서 받은 이동을 적용하지 못했을 때 호출
+    public event Action<MoveCommand> DesyncDetected;
+
     // 판 모양이 바뀌어(Graph.Rebuild) 서 있던 칸이 없어진 말들. 잡힌 것처럼 대기석으로 돌아간 뒤 호출
     public event Action<IReadOnlyList<Piece>> PiecesReturnedByBoardChange;
 
@@ -152,8 +155,23 @@ public class BoardState
         return true;
     }
 
-    public bool TryApply(MoveCommand command, out MoveResult result) =>
-        TryMove(GetPiece(command.PieceId), command.MoveCount, Graph.GetNode(command.DestinationNodeId), out result);
+    public bool TryApply(MoveCommand command, out MoveResult result)
+    {
+        bool applied = TryMove(
+            GetPiece(command.PieceId),
+            command.MoveCount,
+            Graph.GetNode(command.DestinationNodeId),
+            out result
+        );
+
+        // 서버에서 받은 이동을 현재 상태에서 재현할 수 없으면 동기화 오류
+        if (!applied)
+        {
+            DesyncDetected?.Invoke(command);
+        }
+
+        return applied;
+    }
 
     private MoveResult Apply(AugmentContext context, BoardPath path)
     {

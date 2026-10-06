@@ -34,6 +34,17 @@ public class BoardView : MonoBehaviour
 
     public BoardGraph Graph { get; private set; }
     public BoardLayoutSO Layout => layout;
+    public string LayoutId
+    {
+        get
+        {
+            if (layout == null) return "scene";
+            const string prefix = "BoardLayout_";
+            return layout.name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                ? layout.name.Substring(prefix.Length).ToLowerInvariant()
+                : layout.name.ToLowerInvariant();
+        }
+    }
 
     // 판 배치가 적용된 뒤 (길 화살표 등 화면 갱신용)
     public event Action LayoutReloaded;
@@ -56,7 +67,7 @@ public class BoardView : MonoBehaviour
     /// <summary>
     /// 서버 게임 시작 전에 씬의 노드 ID와 연결이 사용 가능한지 확인한다.
     /// </summary>
-    public bool ValidateForGameStart(out string error)
+    public bool ValidateForGameStart(string expectedLayoutId, out string error)
     {
         if (Graph == null)
         {
@@ -91,7 +102,12 @@ public class BoardView : MonoBehaviour
             }
         }
 
-        // 규격 확인 필요: GameSetup의 boardLayoutId가 정해지면 현재 Layout과 같은 판인지 여기서 함께 검사한다.
+        if (!string.Equals(LayoutId, expectedLayoutId, StringComparison.OrdinalIgnoreCase))
+        {
+            error = $"보드 레이아웃이 다릅니다. Scene={LayoutId}, GameSetup={expectedLayoutId}";
+            return false;
+        }
+
         error = null;
         return true;
     }

@@ -43,8 +43,7 @@ private bool isTurnHighlighted;
     public bool IsMoving { get; private set; }
 
     /// <summary>
-    /// 서버 연결 전에도 씬의 말에 안정적인 ID를 부여하기 위한 임시 공통 규칙이다.
-    /// GameSetup의 pieceId 규격이 확정되면 반드시 같은 계산식인지 확인한다.
+    /// GameSetup과 서버가 공통으로 사용하는 고정 말 ID를 반환한다.
     /// </summary>
     public bool TryGetConfiguredPieceId(out int pieceId)
     {
@@ -54,8 +53,7 @@ private bool isTurnHighlighted;
             return false;
         }
 
-        // 규격 확인 필요: 서버 GameSetup도 team * 100 + slotIndex 형식을 사용해야 한다.
-        pieceId = team * 100 + slotIndex;
+        pieceId = GameSetup.PieceId(team, slotIndex);
         return true;
     }
 

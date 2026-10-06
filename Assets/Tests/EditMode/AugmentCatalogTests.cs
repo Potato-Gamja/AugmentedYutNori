@@ -151,7 +151,7 @@ public class AugmentCatalogTests
     {
         // 준비
         var catalog = new AugmentCatalog(MakeFile("A", "B", "C"), MakeFactories("A", "B", "C"));
-        var pool = new AugmentPool();
+        var pool = new AugmentPool(new SystemRandomProvider());
 
         // 실행
         catalog.RegisterTo(pool);

@@ -66,6 +66,33 @@ public class TurnManager
         }
     }
 
+    // 서버가 전달한 턴 상태 적용
+    public void ApplyServerTurn(int team, int remainingThrows)
+    {
+        if (team < 0 || team >= TeamCount)
+        {
+            throw new System.ArgumentOutOfRangeException(
+                nameof(team),
+                $"팀 번호가 올바르지 않습니다: {team}");
+        }
+
+        if (remainingThrows < 0)
+        {
+            throw new System.ArgumentOutOfRangeException(
+                nameof(remainingThrows),
+                "남은 던지기 횟수는 0보다 작을 수 없습니다.");
+        }
+
+        // 서버에서 확정한 값으로 현재 턴과 남은 던지기 횟수를 덮어쓴다.
+        CurrentTeam = team;
+        state.RemainingThrows = remainingThrows;
+
+        // 새로운 턴이므로 이전 턴에서 사용하던 상태 초기화
+        state.StoredResults.Clear();
+        state.HasMovedThisTurn = false;
+    }
+
+
     public void NextTurn()
     {
         CurrentTeam++;
