@@ -30,6 +30,7 @@ public class GameFlowController : MonoBehaviour
     private GameRules gameRules;
     // Flow는 규칙 구현을 직접 실행하지 않고 세션에 명령을 보낸 뒤 확정 이벤트만 화면에 반영한다.
     private IGameSession gameSession;
+    private IGameSessionFactory sessionFactory;
     private GameHudPanel hud;
     private GameFlowHudPresenter hudPresenter;
     private GameFlowSelectionController selectionController;
@@ -108,6 +109,16 @@ public class GameFlowController : MonoBehaviour
         setup = gameSetup ?? throw new ArgumentNullException(nameof(gameSetup));
     }
 
+    /// <summary>
+    /// GameInstaller가 게임 설정과 Local/Remote 세션 생성 방식을 함께 주입할 때 사용한다.
+    /// Network 담당은 GameFlowController를 직접 수정하지 않고 GameInstaller에 Remote Factory를 등록한다.
+    /// </summary>
+    public void Configure(GameSetup gameSetup, IGameSessionFactory factory)
+    {
+        Configure(gameSetup);
+        sessionFactory = factory ?? throw new ArgumentNullException(nameof(factory));
+    }
+
     private bool ValidateSetup()
     {
         setup ??= GameSetup.CreateLocalDefault();
@@ -161,8 +172,11 @@ public class GameFlowController : MonoBehaviour
             new YutThrower(new SystemRandomProvider()),
             new StandardGetResult(),
             CreateAugmentPool());
-        // MVP는 로컬 세션을 사용한다. RemoteGameSession이 준비되면 생성 책임을 Installer로 옮긴다.
-        gameSession = new LocalGameSession(gameRules, gameEvents);
+        // Installer가 없는 기존 단독 씬은 로컬 세션으로 계속 실행한다.
+        // 서버 게임은 GameInstaller가 주입한 Factory를 통해 RemoteGameSession을 생성한다.
+        gameSession = sessionFactory != null
+            ? sessionFactory.Create(gameRules, gameEvents)
+            : new LocalGameSession(gameRules, gameEvents);
     }
 
     // json에 저장되어 있는 모든 증강 가져오기
