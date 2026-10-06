@@ -25,6 +25,32 @@ public readonly struct MoveOption
     }
 }
 
+
+// 서버가 이동 이후 판단에 사용할 정보
+public readonly struct MoveReport
+{
+    public int CapturedCount { get; }
+    public bool IsFinished { get; }
+    public bool HasExtraThrow { get; }
+    public bool HasRemainingAction { get; }
+    public string StateHash { get; }
+
+    public MoveReport(
+        int capturedCount,
+        bool isFinished,
+        bool hasExtraThrow,
+        bool hasRemainingAction,
+        string stateHash)
+    {
+        CapturedCount = capturedCount;
+        IsFinished = isFinished;
+        HasExtraThrow = hasExtraThrow;
+        HasRemainingAction = hasRemainingAction;
+        StateHash = stateHash;
+    }
+}
+
+
 public class GameRules
 {
     private readonly GameState state;
@@ -51,6 +77,7 @@ public class GameRules
         this.augmentPool = augmentPool;
     }
 
+
     // 윷 던지기
     public YutThrowOutcome ThrowYut()
     {
@@ -58,7 +85,7 @@ public class GameRules
         {
             throw new InvalidOperationException("이미 게임이 종료되었습니다.");
         }
-        
+
         if (!turnManager.HasRemainingThrow())
         {
             throw new InvalidOperationException("남은 윷 던지기 횟수가 없습니다.");
@@ -70,17 +97,56 @@ public class GameRules
             getResult
         );
 
+        return ApplyThrow(outcome.Sticks, outcome.Result);
+    }
+
+
+    // 서버가 전달한 윷 결과 적용
+    public YutThrowOutcome ApplyThrow(bool[] sticks, YutResult serverResult)
+    {
+        if (state.WinnerTeam.HasValue)
+        {
+            throw new InvalidOperationException("이미 게임이 종료되었습니다.");
+        }
+
+        if (!turnManager.HasRemainingThrow())
+        {
+            throw new InvalidOperationException("남은 윷 던지기 횟수가 없습니다.");
+        }
+
+        if (sticks == null)
+        {
+            throw new ArgumentNullException(nameof(sticks));
+        }
+
+        // 서버에서 받은 윷가락 결과를 클라이언트에서도 다시 판정
+        YutResult result = getResult.GetResult(sticks);
+
+        // 서버 결과와 클라이언트 판정 결과가 다르면 예외
+        if (result != serverResult)
+        {
+            throw new InvalidOperationException(
+                $"서버 윷 결과가 Core 판정과 일치하지 않습니다. " +
+                $"Core={result}, Server={serverResult}");
+        }
+
+        YutThrowOutcome outcome = new YutThrowOutcome(sticks, serverResult);
+
         // StoredResults = [Yut, Gae] 이런식으로 나중에 이동에 사용할 수 있도록 결과 저장
         state.StoredResults.Add(outcome.Result);
+
         // 던지기 횟수 소비 + 윷/모 추가 던지기 처리
         turnManager.ConsumeThrow(outcome.Result);
+
         // 윷을 던졌다는 사실 외부에 알리기 (애니메이션이나, 결과 텍스트로 보여줄 수 있음)
         gameEvents.RaiseThrown(outcome);
-        
+
         // 더 던질 수 있는지, 움직일 수 있는 말이 있는지 확인
         TryEndTurnIfNoAction();
+
         return outcome;
     }
+
 
     // 이동 가능한 선택지 조회
     public List<MoveOption> GetMoveOptions(int pieceId)
@@ -122,17 +188,19 @@ public class GameRules
             {
                 options.Add(
                     new MoveOption(
-                    resultIndex,
-                    yutResult,
-                    path.Destination.Id,
-                    state.Board.GetModifiedMoveCount(piece, moveCount),
-                    path.IsFinished
+                        resultIndex,
+                        yutResult,
+                        path.Destination.Id,
+                        state.Board.GetModifiedMoveCount(piece, moveCount),
+                        path.IsFinished
                     )
                 );
             }
         }
+
         return options;
     }
+
 
     // 말 이동 (어떤 말, 어떤 윷 결과, 어느 목적지)
     public bool MovePiece(
@@ -190,6 +258,7 @@ public class GameRules
         // 이동에 성공한 경우에만 사용한 윷 결과를 제거
         state.StoredResults.RemoveAt(resultIndex);
         state.HasMovedThisTurn = true;
+
         // 이동 이벤트
         gameEvents.RaisePieceMoved(result);
 
@@ -226,6 +295,46 @@ public class GameRules
         return true;
     }
 
+
+    // 이동 결과를 서버 판단용 정보로 변환
+    public MoveReport BuildMoveReport(MoveResult result)
+    {
+        if (result == null)
+        {
+            throw new ArgumentNullException(nameof(result));
+        }
+
+        bool isFinished = false;
+
+        // 같이 움직인 말 중 하나라도 완주했는지 확인
+        foreach (Piece movedPiece in result.MovedPieces)
+        {
+            if (movedPiece.IsFinished)
+            {
+                isFinished = true;
+                break;
+            }
+        }
+
+        // MovePiece는 이동 전 RemainingThrows가 0인 상태에서 실행됨
+        // 이동 뒤 RemainingThrows > 0이면 잡기로 추가 던지기가 생긴 것
+        bool hasExtraThrow = turnManager.HasRemainingThrow();
+
+        // 추가 던지기 또는 사용할 수 있는 윷 결과가 남아있는지 확인
+        bool hasRemainingAction =
+            turnManager.HasRemainingThrow() ||
+            HasAnyStoredMove();
+
+        return new MoveReport(
+            result.CapturedPieces.Count,
+            isFinished,
+            hasExtraThrow,
+            hasRemainingAction,
+            StateHasher.HashHex(state, turnManager)
+        );
+    }
+
+
     // 현재 저장된 윷 결과 중 하나라도 실제로 사용 가능한지 검사
     public bool HasAnyStoredMove()
     {
@@ -251,8 +360,10 @@ public class GameRules
                     return true;
             }
         }
+
         return false;
     }
+
 
     // 팀 완주 여부
     public bool TeamFinished(int team)
@@ -271,8 +382,10 @@ public class GameRules
             if (!piece.IsFinished)
                 return false;
         }
+
         return hasPiece;
     }
+
 
     // 증강 선택
     // 현재 팀의 증강 후보를 조회할 때 사용하는 기본 API.
@@ -281,25 +394,40 @@ public class GameRules
         return GetAugmentChoices(turnManager.CurrentTeam, count);
     }
 
+
     // 게임 시작 단계에서 플레이어별 증강 후보를 조회한다.
     public List<string> GetAugmentChoices(int team, int count)
     {
         return augmentPool.GetRandomIds(team, count);
     }
 
+
+    // 서버가 전달한 증강 후보 저장
+    public void SetAugmentChoices(
+        int team,
+        IReadOnlyList<string> ids)
+    {
+        augmentPool.SetOffered(team, ids);
+    }
+
+
     public IAugment SelectAugment(string id)
     {
         return SelectAugment(turnManager.CurrentTeam, id);
     }
 
+
     // MVP에서 두 플레이어가 순서대로 증강을 선택할 때 사용한다.
     public IAugment SelectAugment(int team, string id)
     {
+        // Pick에서 서버 또는 로컬이 제시한 후보 안의 증강인지 확인
         IAugment augment = augmentPool.Pick(team, id);
+
         state.Board.AddAugment(augment);
         gameEvents.RaiseAugmentSelected(augment);
         return augment;
     }
+
 
     // 재던지기 증강
     public bool TryRethrow(
@@ -320,6 +448,97 @@ public class GameRules
         if (!latestResult.HasValue)
             return false;
 
+        // 증강 자체의 사용 조건 확인
+        // 실제 증강 소모는 ApplyRethrow에서 처리
+        if (!augment.CanUse(
+                state.Board,
+                turnManager.CurrentTeam,
+                latestResult.Value))
+        {
+            return false;
+        }
+
+        // 기존 결과 기억
+        outcome = yutThrower.Throw(
+            StandardGetResult.StickCount,
+            getResult
+        );
+
+        return ApplyRethrow(
+            augment,
+            outcome.Sticks,
+            outcome.Result,
+            out outcome
+        );
+    }
+
+
+    // 서버에서 받은 재던지기 결과 적용
+    public bool ApplyRethrow(
+        bool[] sticks,
+        YutResult result)
+    {
+        RethrowAugment rethrow = null;
+
+        // 현재 팀이 가진 재던지기 증강 찾기
+        foreach (IAugment augment in state.Board.GetAugments(turnManager.CurrentTeam))
+        {
+            if (augment is RethrowAugment found)
+            {
+                rethrow = found;
+                break;
+            }
+        }
+
+        if (rethrow == null)
+            return false;
+
+        return ApplyRethrow(
+            rethrow,
+            sticks,
+            result,
+            out _
+        );
+    }
+
+
+    // 로컬과 서버 재던지기 결과를 실제 게임 상태에 적용
+    private bool ApplyRethrow(
+        RethrowAugment augment,
+        bool[] sticks,
+        YutResult result,
+        out YutThrowOutcome outcome)
+    {
+        outcome = default;
+
+        if (augment == null)
+            return false;
+
+        // 이번 턴에 말을 한 번이라도 움직였다면 재던지기 사용 불가
+        if (state.HasMovedThisTurn)
+            return false;
+
+        YutResult? latestResult = state.LatestYutResult;
+
+        if (!latestResult.HasValue)
+            return false;
+
+        if (sticks == null)
+        {
+            throw new ArgumentNullException(nameof(sticks));
+        }
+
+        // 서버에서 받은 윷가락 결과를 클라이언트에서도 다시 판정
+        YutResult checkedResult = getResult.GetResult(sticks);
+
+        // 서버 결과와 클라이언트 판정 결과가 다르면 예외
+        if (checkedResult != result)
+        {
+            throw new InvalidOperationException(
+                $"서버 윷 결과가 Core 판정과 일치하지 않습니다. " +
+                $"Core={checkedResult}, Server={result}");
+        }
+
         // 증강 자체의 사용 조건 검사 + 1회용 증강 소모
         // TryUse() 안에서 팀, 윷/모 여부, 실제 보유 여부 확인
         if (!augment.TryUse(
@@ -332,11 +551,7 @@ public class GameRules
 
         YutResult oldResult = latestResult.Value;
 
-        // 기존 결과 기억
-        outcome = yutThrower.Throw(
-            StandardGetResult.StickCount,
-            getResult
-        );
+        outcome = new YutThrowOutcome(sticks, result);
 
         // 최근 결과를 새 결과로 교체
         int lastIndex = state.StoredResults.Count - 1;
@@ -348,7 +563,7 @@ public class GameRules
             outcome.Result
         );
 
-        gameEvents.RaiseThrown(outcome);
+        // 재던지기 결과 이벤트
         gameEvents.RaiseThrown(outcome);
 
         // 교체된 결과도 이동할 수 없고 추가 던지기가 없다면 턴을 종료한다.
@@ -356,6 +571,7 @@ public class GameRules
 
         return true;
     }
+
 
     // 턴 종료 처리
     private void TryEndTurnIfNoAction()
@@ -373,28 +589,30 @@ public class GameRules
         EndTurn();
     }
 
+
     // 턴 종료
     private void EndTurn()
     {
         turnManager.NextTurn();
         gameEvents.RaiseTurnChanged(turnManager.CurrentTeam);
     }
-    
+
+
     // Controller가 구체적인 RethrowAugment를 찾지 않도록
     // 현재 팀이 가진 재던지기 증강을 내부에서 조회한다.
     public bool TryRethrow(out YutThrowOutcome outcome)
     {
-    RethrowAugment rethrow = null;
+        RethrowAugment rethrow = null;
 
-    foreach (IAugment augment in state.Board.GetAugments(turnManager.CurrentTeam))
-    {
-        if (augment is RethrowAugment found)
+        foreach (IAugment augment in state.Board.GetAugments(turnManager.CurrentTeam))
         {
-            rethrow = found;
-            break;
+            if (augment is RethrowAugment found)
+            {
+                rethrow = found;
+                break;
+            }
         }
-    }
 
-    return TryRethrow(rethrow, out outcome);
-}
+        return TryRethrow(rethrow, out outcome);
+    }
 }
