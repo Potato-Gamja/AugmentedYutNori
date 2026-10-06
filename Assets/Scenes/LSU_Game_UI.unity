@@ -2008,7 +2008,12 @@ MonoBehaviour:
   uiManager: {fileID: 1699083470}
   augmentsJson: {fileID: 4900000, guid: 8203d30928a62d84a9fb09280497fd93, type: 3}
   skipAugmentSelection: 0
-  allowSkipShortcut: 0
+  setup:
+    teamCount: 2
+    piecesPerTeam: 4
+    localTeam: -1
+    allowSkipShortcut: 0
+    boardLayoutId: default
 --- !u!4 &498729574
 Transform:
   m_ObjectHideFlags: 0
@@ -4094,7 +4099,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PieceView
   team: 0
-  slotIndex: -1
+  slotIndex: 2
   spriteRenderer: {fileID: 1119295959}
   stepDuration: 0.15
   selectedColor: {r: 1, g: 0.85, b: 0.3, a: 1}
@@ -4807,7 +4812,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PieceView
   team: 0
-  slotIndex: -1
+  slotIndex: 1
   spriteRenderer: {fileID: 1215267279}
   stepDuration: 0.15
   selectedColor: {r: 1, g: 0.85, b: 0.3, a: 1}
@@ -4983,7 +4988,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PieceView
   team: 1
-  slotIndex: -1
+  slotIndex: 2
   spriteRenderer: {fileID: 1232629857}
   stepDuration: 0.15
   selectedColor: {r: 1, g: 0.85, b: 0.3, a: 1}
@@ -5322,7 +5327,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PieceView
   team: 0
-  slotIndex: -1
+  slotIndex: 0
   spriteRenderer: {fileID: 1266386010}
   stepDuration: 0.15
   selectedColor: {r: 1, g: 0.85, b: 0.3, a: 1}
@@ -5561,7 +5566,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PieceView
   team: 1
-  slotIndex: -1
+  slotIndex: 3
   spriteRenderer: {fileID: 1291814347}
   stepDuration: 0.15
   selectedColor: {r: 1, g: 0.85, b: 0.3, a: 1}
@@ -5679,7 +5684,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PieceView
   team: 1
-  slotIndex: -1
+  slotIndex: 0
   spriteRenderer: {fileID: 1316166382}
   stepDuration: 0.15
   selectedColor: {r: 1, g: 0.85, b: 0.3, a: 1}
@@ -6726,7 +6731,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PieceView
   team: 1
-  slotIndex: -1
+  slotIndex: 1
   spriteRenderer: {fileID: 1729127649}
   stepDuration: 0.15
   selectedColor: {r: 1, g: 0.85, b: 0.3, a: 1}
@@ -7300,7 +7305,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PieceView
   team: 0
-  slotIndex: -1
+  slotIndex: 3
   spriteRenderer: {fileID: 2051617684}
   stepDuration: 0.15
   selectedColor: {r: 1, g: 0.85, b: 0.3, a: 1}
