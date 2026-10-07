@@ -71,6 +71,7 @@ public class TurnChangedMessage
     public int team;                // 이제 행동할 팀 → TurnManager.ApplyServerTurn
     public int remainingThrows;
     public int turnTimeLimitSec;
+    public int turnNumber;          // 새 턴마다 1씩 증가하는 턴 번호 (서버 턴 타이머 구분용)
 }
 
 // S→C GAME_ENDED
