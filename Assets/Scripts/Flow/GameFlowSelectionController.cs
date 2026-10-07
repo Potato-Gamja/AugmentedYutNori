@@ -129,7 +129,7 @@ public sealed class GameFlowSelectionController
         foreach (MoveOption option in gameRules.GetMoveOptions(piece.Piece.Id))
         {
             BoardNode node = boardState.Graph.GetNode(option.DestinationNodeId);
-            NodeView destination = boardView.GetView(node);
+            NodeView destination = option.IsFinished ? FindVisibleGoalEntry() : boardView.GetView(node);
             if (destination == null) continue;
 
             if (!targets.TryGetValue(destination, out List<MoveOption> options))
@@ -150,6 +150,17 @@ public sealed class GameFlowSelectionController
             highlighted.Add(pair.Key);
             CreateLabel(pair.Key, pair.Value);
         }
+    }
+
+    // Core와 서버에는 골인 목적지를 Start 노드 ID로 그대로 전달한다.
+    // Start 노드는 판 밖에 있으므로, 화면에서는 참먹이(보이는 출발 칸)를 골인 선택 지점으로 사용한다.
+    private NodeView FindVisibleGoalEntry()
+    {
+        foreach (NodeView view in boardView.GetNodeViews())
+            if (view.Type == BoardNodeType.End)
+                return view;
+
+        return boardView.GetView(boardState.Graph.StartNode);
     }
 
     private void UseDestinationOptions(IReadOnlyList<MoveOption> options)

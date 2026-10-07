@@ -137,6 +137,11 @@ public class GameHudPanel : UIBase
     }
     public void SetTimerRunning(bool value) => turnView?.SetTimerRunning(value);
 
+    public void ConfigurePlayers(int teamCount, int piecesPerTeam)
+    {
+        playerView?.Configure(teamCount, piecesPerTeam);
+    }
+
     public void SetPlayerState(
         int team,
         int waiting,

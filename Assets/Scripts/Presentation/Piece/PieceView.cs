@@ -65,24 +65,38 @@ private void Awake()
         normalColor = spriteRenderer.color;
         if (availableGlowSprite != null)
         {
-            selectedFloor = CreateEffectRenderer("SelectedFloor", selectedFloorSprite, -3);
-            selectedFloorShadow = CreateEffectRenderer("SelectedFloorShadow", selectedFloorShadowSprite, -2);
-            availableGlow = CreateEffectRenderer("AvailableGlow", availableGlowSprite, -1);
-            selectedRing = CreateEffectRenderer("SelectedRing", selectedRingSprite, 1);
+            selectedFloor = FindOrCreateEffectRenderer("SelectedFloor", selectedFloorSprite, -3);
+            selectedFloorShadow = FindOrCreateEffectRenderer("SelectedFloorShadow", selectedFloorShadowSprite, -2);
+            availableGlow = FindOrCreateEffectRenderer("AvailableGlow", availableGlowSprite, -1);
+            selectedRing = FindOrCreateEffectRenderer("SelectedRing", selectedRingSprite, 1);
         }
-        else highlightOutline = CreateHighlightOutline();
-        stackText = CreateStackText();
+        else highlightOutline = FindOrCreateHighlightOutline();
+        stackText = transform.Find("StackCount")?.GetComponent<TextMesh>() ?? CreateStackText();
         SetStackCount(1);
         RefreshHighlight();
     }
 
-public void Bind(Piece piece)
+    public void Bind(Piece piece)
     {
         Piece = piece;
         transform.position = homePosition;
         gameObject.SetActive(true);
         // 대기 말은 PlayerPanel 슬롯으로 표시한다. 월드 말은 판에 진입할 때 켠다.
         SetWorldVisible(!piece.IsWaiting);
+    }
+
+    /// <summary>
+    /// GAME_START에서 3·4팀을 받은 경우 씬에 없는 PieceView 복제본의 고정 ID와 표시색을 지정한다.
+    /// 서버의 pieceId 규칙은 GameSetup.PieceId(team, slot)과 같아야 한다.
+    /// </summary>
+    public void ConfigureRuntimeIdentity(int configuredTeam, int configuredSlot, Color teamColor)
+    {
+        team = configuredTeam;
+        slotIndex = configuredSlot;
+        name = $"Piece_Team{configuredTeam + 1}_{configuredSlot}";
+        normalColor = teamColor;
+        if (spriteRenderer != null) spriteRenderer.color = teamColor;
+        RefreshHighlight();
     }
 
     // 잡혔을 때 대기석으로 돌아감
@@ -223,6 +237,12 @@ public bool Contains(Vector3 worldPosition)
         return outline;
     }
 
+    private SpriteRenderer FindOrCreateHighlightOutline()
+    {
+        SpriteRenderer existing = spriteRenderer.transform.Find("TurnHighlightOutline")?.GetComponent<SpriteRenderer>();
+        return existing != null ? existing : CreateHighlightOutline();
+    }
+
 
 // P0 아트는 같은 캔버스와 Pivot을 사용하므로 로컬 좌표 0에서 정확히 겹친다.
     private SpriteRenderer CreateEffectRenderer(string objectName, Sprite sprite, int orderOffset)
@@ -236,6 +256,12 @@ public bool Contains(Vector3 worldPosition)
         renderer.sortingOrder = spriteRenderer.sortingOrder + orderOffset;
         renderer.enabled = false;
         return renderer;
+    }
+
+    private SpriteRenderer FindOrCreateEffectRenderer(string objectName, Sprite sprite, int orderOffset)
+    {
+        SpriteRenderer existing = spriteRenderer.transform.Find(objectName)?.GetComponent<SpriteRenderer>();
+        return existing != null ? existing : CreateEffectRenderer(objectName, sprite, orderOffset);
     }
 
 

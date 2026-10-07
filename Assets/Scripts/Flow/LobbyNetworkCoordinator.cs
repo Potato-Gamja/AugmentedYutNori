@@ -11,7 +11,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     [SerializeField] private LobbyController lobbyController;
     [SerializeField] private WebSocketClient webSocketClient;
     [SerializeField] private string apiBaseUrl = "http://localhost:8080";
-    [SerializeField] private string webSocketUrl = "ws://localhost:8080/ws";
+    [SerializeField] private string webSocketUrl = "ws://localhost:8080/ws/rooms/{roomCode}";
     [SerializeField] private string playerPrefsKeyPrefix = "";
 
     private static LobbyNetworkCoordinator instance;
@@ -44,6 +44,10 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         apiClient = new ApiClient(apiBaseUrl);
         playerIdentity = new PlayerIdentity(playerPrefsKeyPrefix);
         webSocketClient.Url = webSocketUrl;
+
+        // 게임 씬의 GameInstaller가 같은 WebSocket 연결로 RemoteGameSession을 만들 수 있게 등록한다.
+        GameInstaller.RegisterRemoteSessionFactory((rules, events, state, turn, setup) =>
+            new RemoteGameSession(webSocketClient, rules, events, state, turn, setup));
 
         webSocketClient.Connected += OnConnected;
         webSocketClient.Disconnected += OnDisconnected;
@@ -154,13 +158,28 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         pendingNickname = nickname?.Trim();
         leaveRequested = false;
 
-        // 서버 계약 확인 필요:
-        // 현재는 공통 /ws 주소에 토큰으로 연결한 뒤 JOIN_ROOM payload로 roomCode를 보낸다.
-        // 서버가 /ws/rooms/{roomCode} 형식을 사용하면 여기서 WebSocketClient.Url을 조합한다.
+        if (string.IsNullOrEmpty(pendingRoomCode))
+        {
+            lobbyController?.ReceiveError("방 코드를 입력해 주세요.");
+            return;
+        }
+
+        // 서버 확정 주소: ws://{host}/ws/rooms/{roomCode}
+        // webSocketUrl에는 방 코드를 제외한 ws://{host}/ws까지만 설정한다.
+        webSocketClient.Url = BuildRoomWebSocketUrl(pendingRoomCode);
         if (webSocketClient.IsConnected)
             SendJoinRoom();
         else
             webSocketClient.Connect(playerIdentity.Token);
+    }
+
+    private string BuildRoomWebSocketUrl(string roomCode)
+    {
+        string escapedRoomCode = Uri.EscapeDataString(roomCode);
+        if (webSocketUrl.Contains("{roomCode}"))
+            return webSocketUrl.Replace("{roomCode}", escapedRoomCode);
+
+        return $"{webSocketUrl.TrimEnd('/')}/rooms/{escapedRoomCode}";
     }
 
     private void OnConnected()

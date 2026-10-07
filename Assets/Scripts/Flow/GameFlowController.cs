@@ -75,6 +75,7 @@ public class GameFlowController : MonoBehaviour
         }
 
         OpenHud();
+        EnsurePieceViewsForSetup();
         CreateCoreState();
         var errors = setup.CheckScenePieces(pieceViews.Select(v => (v.Team, v.SlotIndex)));
         if (errors.Count > 0)
@@ -125,6 +126,10 @@ public class GameFlowController : MonoBehaviour
         try
         {
             setup.Validate();
+            if (setup.teamCount > 4)
+                throw new ArgumentException($"클라이언트는 2~4팀만 지원합니다. (현재 {setup.teamCount})");
+            if (setup.piecesPerTeam > 4)
+                throw new ArgumentException($"현재 HUD는 팀당 1~4개의 말만 지원합니다. (현재 {setup.piecesPerTeam})");
             return true;
         }
         catch (ArgumentException exception)
@@ -154,7 +159,42 @@ public class GameFlowController : MonoBehaviour
         hud.ThrowClicked += OnThrowButtonClicked;
         hud.RethrowClicked += OnRethrowButtonClicked;
         hud.WaitingPieceClicked += OnWaitingPieceClicked;
+        hud.ConfigurePlayers(setup.teamCount, setup.piecesPerTeam);
         hud.SetRethrowVisible(false);
+    }
+
+    private void EnsurePieceViewsForSetup()
+    {
+        pieceViews.RemoveAll(view => view == null);
+
+        foreach (PieceView view in pieceViews)
+        {
+            bool used = view.Team >= 0 && view.Team < setup.teamCount &&
+                        view.SlotIndex >= 0 && view.SlotIndex < setup.piecesPerTeam;
+            view.gameObject.SetActive(used);
+        }
+
+        for (int team = 0; team < setup.teamCount; team++)
+        {
+            for (int slot = 0; slot < setup.piecesPerTeam; slot++)
+            {
+                if (pieceViews.Exists(view => view.Team == team && view.SlotIndex == slot)) continue;
+
+                PieceView source = pieceViews.Find(view => view.Team == 0 && view.SlotIndex == slot);
+                if (source == null) source = pieceViews.Find(view => view.SlotIndex == slot);
+                if (source == null)
+                {
+                    Debug.LogError($"[GameFlow] 팀 {team + 1}, 말 {slot + 1}을 만들 기준 PieceView가 없습니다.", this);
+                    continue;
+                }
+
+                PieceView created = Instantiate(source, source.transform.parent);
+                created.ConfigureRuntimeIdentity(team, slot, GameHudPanel.GetTeamColor(team));
+                pieceViews.Add(created);
+            }
+        }
+
+        pieceViews.RemoveAll(view => !view.gameObject.activeSelf);
     }
     
     private void CreateCoreState()
@@ -175,7 +215,7 @@ public class GameFlowController : MonoBehaviour
         // Installer가 없는 기존 단독 씬은 로컬 세션으로 계속 실행한다.
         // 서버 게임은 GameInstaller가 주입한 Factory를 통해 RemoteGameSession을 생성한다.
         gameSession = sessionFactory != null
-            ? sessionFactory.Create(gameRules, gameEvents)
+            ? sessionFactory.Create(gameRules, gameEvents, gameState, turnManager)
             : new LocalGameSession(gameRules, gameEvents);
     }
 
@@ -507,6 +547,10 @@ public class GameFlowController : MonoBehaviour
         var points = new List<Vector3>();
         foreach (BoardNode node in result.Path.Nodes)
         {
+            // 골인은 참먹이(보이는 출발 칸)를 통과한 뒤 판 밖 Start 노드로 처리된다.
+            // 이동 연출은 참먹이에서 끝내고, 규칙상의 Start 이동과 완주 판정은 그대로 유지한다.
+            if (result.Path.IsFinished && node.Type == BoardNodeType.Start) continue;
+
             NodeView view = boardView.GetView(node);
             if (view != null) points.Add(view.Position);
         }

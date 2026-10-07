@@ -20,10 +20,9 @@ public class GameInstaller : MonoBehaviour, IGameSessionFactory
 
     // RemoteGameSession 계약:
     // Network 담당이 RemoteGameSession 구현을 끝내면 앱 시작 시 이 Factory를 등록한다.
-    // 입력으로 현재 GameRules, GameEvents, GAME_START 설정을 받고 IGameSession을 반환해야 한다.
-    // 예: GameInstaller.RegisterRemoteSessionFactory((rules, events, setup) =>
-    //         new RemoteGameSession(webSocketClient, rules, events, setup));
-    private static Func<GameRules, GameEvents, GameSetup, IGameSession> remoteSessionFactory;
+    // 입력으로 현재 Core 상태와 GAME_START 설정을 받고 IGameSession을 반환해야 한다.
+    // GameState/TurnManager는 서버가 확정한 MOVE_APPLIED/TURN_CHANGED를 같은 Core에 적용할 때 필요하다.
+    private static Func<GameRules, GameEvents, GameState, TurnManager, GameSetup, IGameSession> remoteSessionFactory;
 
     private GameSessionMode activeMode;
     private GameSetup activeSetup;
@@ -34,7 +33,7 @@ public class GameInstaller : MonoBehaviour, IGameSessionFactory
     }
 
     public static void RegisterRemoteSessionFactory(
-        Func<GameRules, GameEvents, GameSetup, IGameSession> factory)
+        Func<GameRules, GameEvents, GameState, TurnManager, GameSetup, IGameSession> factory)
     {
         remoteSessionFactory = factory ?? throw new ArgumentNullException(nameof(factory));
     }
@@ -74,11 +73,15 @@ public class GameInstaller : MonoBehaviour, IGameSessionFactory
         gameFlowController.Configure(activeSetup, this);
     }
 
-    public IGameSession Create(GameRules rules, GameEvents gameEvents)
+    public IGameSession Create(
+        GameRules rules,
+        GameEvents gameEvents,
+        GameState gameState,
+        TurnManager turnManager)
     {
         if (activeMode == GameSessionMode.Local)
             return new LocalGameSession(rules, gameEvents);
 
-        return remoteSessionFactory(rules, gameEvents, activeSetup);
+        return remoteSessionFactory(rules, gameEvents, gameState, turnManager, activeSetup);
     }
 }
