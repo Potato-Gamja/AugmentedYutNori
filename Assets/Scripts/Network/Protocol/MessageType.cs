@@ -31,4 +31,6 @@ public enum MessageType
     PING,               // C→S 연결 확인
     PONG,               // S→C 연결 확인 응답
     ERROR,              // S→C 요청 거부·오류
+    PLAYER_DISCONNECTED,// S→C 다른 플레이어 연결 끊김 (재접속 대기)
+    PLAYER_RECONNECTED    // S→C 끊겼던 플레이어 재접속
 }
