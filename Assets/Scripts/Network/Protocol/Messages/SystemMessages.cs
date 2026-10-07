@@ -20,3 +20,16 @@ public class ErrorMessage
     public string code;         // 예: "NOT_YOUR_TURN", "ROOM_NOT_FOUND", "INVALID_AUGMENT"
     public string message;      // 사람이 읽는 설명 (로그·토스트용)
 }
+
+// S→C PLAYER_DISCONNECTED
+public class PlayerDisconnectedMessage
+{
+    public string playerId;
+    public int graceSec;        // 재접속 대기 시간(s)
+}
+
+// S→C PLAYER_RECONNECTED
+public class PlayerReconnectedMessage
+{
+    public string playerId;
+}
