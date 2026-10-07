@@ -4,5 +4,9 @@
 /// </summary>
 public interface IGameSessionFactory
 {
-    IGameSession Create(GameRules rules, GameEvents gameEvents);
+    IGameSession Create(
+        GameRules rules,
+        GameEvents gameEvents,
+        GameState gameState,
+        TurnManager turnManager);
 }

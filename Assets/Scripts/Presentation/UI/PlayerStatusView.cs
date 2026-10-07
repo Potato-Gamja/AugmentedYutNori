@@ -10,17 +10,34 @@ using UnityEngine.UI;
 /// </summary>
 public sealed class PlayerStatusView : MonoBehaviour
 {
-    private const int PieceSlotCount = 4;
+    private const int MaxTeamCount = 4;
+    private const int MaxPieceSlotCount = 4;
     private const int AugmentSlotCount = 3;
+    private int activeTeamCount = 2;
+    private int pieceSlotCount = MaxPieceSlotCount;
+    private Action<int, int> waitingPieceClicked;
+
+    public void Configure(int teamCount, int piecesPerTeam)
+    {
+        activeTeamCount = Mathf.Clamp(teamCount, 2, MaxTeamCount);
+        pieceSlotCount = Mathf.Clamp(piecesPerTeam, 1, MaxPieceSlotCount);
+        EnsureFourPlayerPanels();
+
+        for (int team = 0; team < MaxTeamCount; team++)
+            ConfigureSeat(team, team < activeTeamCount);
+
+        if (waitingPieceClicked != null) BindWaitingPieceClicks(waitingPieceClicked);
+    }
 
     public void BindWaitingPieceClicks(Action<int, int> onClicked)
     {
-        for (int team = 0; team < 4; team++)
+        waitingPieceClicked = onClicked;
+        for (int team = 0; team < MaxTeamCount; team++)
         {
             Transform panel = FindPanel(team);
             if (panel == null) continue;
 
-            for (int slotIndex = 0; slotIndex < PieceSlotCount; slotIndex++)
+            for (int slotIndex = 0; slotIndex < MaxPieceSlotCount; slotIndex++)
             {
                 Transform slot = panel.Find($"PieceSlot_{slotIndex}");
                 if (slot == null) continue;
@@ -36,7 +53,8 @@ public sealed class PlayerStatusView : MonoBehaviour
                 int capturedTeam = team;
                 int capturedSlot = slotIndex;
                 button.onClick.RemoveAllListeners();
-                button.onClick.AddListener(() => onClicked?.Invoke(capturedTeam, capturedSlot));
+                button.interactable = capturedTeam < activeTeamCount && capturedSlot < pieceSlotCount;
+                button.onClick.AddListener(() => waitingPieceClicked?.Invoke(capturedTeam, capturedSlot));
             }
         }
     }
@@ -50,19 +68,22 @@ public sealed class PlayerStatusView : MonoBehaviour
         if (waitingLabel != null) waitingLabel.text = $"WAITING {waiting}  /  BOARD {onBoard}";
 
         TMP_Text finishLabel = panel.Find("FinishLabel")?.GetComponent<TMP_Text>();
-        if (finishLabel != null) finishLabel.text = $"FINISHED {finished}/{PieceSlotCount}";
+        if (finishLabel != null) finishLabel.text = $"FINISHED {finished}/{pieceSlotCount}";
 
-        for (int i = 0; i < PieceSlotCount; i++)
+        for (int i = 0; i < MaxPieceSlotCount; i++)
         {
             Transform waitingSlot = panel.Find($"PieceSlot_{i}");
             Transform piece = waitingSlot != null ? waitingSlot.Find("Piece") : null;
-            if (piece != null) piece.gameObject.SetActive(i < waiting);
+            if (piece != null) piece.gameObject.SetActive(i < pieceSlotCount && i < waiting);
 
             Image finishImage = panel.Find($"FinishSlot_{i}")?.GetComponent<Image>();
             if (finishImage != null)
+            {
+                finishImage.gameObject.SetActive(i < pieceSlotCount);
                 finishImage.color = i < finished
                     ? TurnHudView.GetTeamColor(team)
                     : new Color32(241, 226, 196, 255);
+            }
         }
 
         for (int i = 0; i < AugmentSlotCount; i++)
@@ -76,12 +97,12 @@ public sealed class PlayerStatusView : MonoBehaviour
 
     public void SetSelectedWaitingPiece(int team, int slotIndex)
     {
-        for (int panelTeam = 0; panelTeam < 4; panelTeam++)
+        for (int panelTeam = 0; panelTeam < MaxTeamCount; panelTeam++)
         {
             Transform panel = FindPanel(panelTeam);
             if (panel == null) continue;
 
-            for (int i = 0; i < PieceSlotCount; i++)
+            for (int i = 0; i < MaxPieceSlotCount; i++)
             {
                 Image slotImage = panel.Find($"PieceSlot_{i}")?.GetComponent<Image>();
                 if (slotImage == null) continue;
@@ -94,7 +115,7 @@ public sealed class PlayerStatusView : MonoBehaviour
 
     public void SetActiveTeam(int activeTeam)
     {
-        for (int team = 0; team < 4; team++)
+        for (int team = 0; team < MaxTeamCount; team++)
         {
             Transform panel = FindPanel(team);
             if (panel == null) continue;
@@ -116,6 +137,59 @@ public sealed class PlayerStatusView : MonoBehaviour
             1 => transform.Find("PlayerPanel_Right"),
             _ => transform.Find($"PlayerPanel_{team + 1}")
         };
+    }
+
+    private void EnsureFourPlayerPanels()
+    {
+        Transform left = FindPanel(0);
+        Transform right = FindPanel(1);
+        if (left == null || right == null) return;
+
+        if (FindPanel(2) == null)
+        {
+            Transform panel = Instantiate(left.gameObject, transform).transform;
+            panel.name = "PlayerPanel_3";
+        }
+        if (FindPanel(3) == null)
+        {
+            Transform panel = Instantiate(right.gameObject, transform).transform;
+            panel.name = "PlayerPanel_4";
+        }
+
+        PlacePanel(FindPanel(0), false, true);
+        PlacePanel(FindPanel(1), true, true);
+        PlacePanel(FindPanel(2), false, false);
+        PlacePanel(FindPanel(3), true, false);
+    }
+
+    private void ConfigureSeat(int team, bool occupied)
+    {
+        Transform panel = FindPanel(team);
+        if (panel == null) return;
+        panel.gameObject.SetActive(true); // 2·3인에서도 남은 자리를 빈 좌석으로 표시한다.
+
+        TMP_Text headerLabel = panel.Find("Header")?.GetComponentInChildren<TMP_Text>(true);
+        if (headerLabel != null)
+        {
+            headerLabel.text = occupied ? $"PLAYER {team + 1}" : "EMPTY";
+            headerLabel.color = occupied ? TurnHudView.GetTeamColor(team) : new Color32(150, 140, 125, 255);
+        }
+
+        for (int slot = 0; slot < MaxPieceSlotCount; slot++)
+        {
+            Transform waitingSlot = panel.Find($"PieceSlot_{slot}");
+            if (waitingSlot != null) waitingSlot.gameObject.SetActive(occupied && slot < pieceSlotCount);
+            Transform finishSlot = panel.Find($"FinishSlot_{slot}");
+            if (finishSlot != null) finishSlot.gameObject.SetActive(occupied && slot < pieceSlotCount);
+        }
+    }
+
+    private static void PlacePanel(Transform panel, bool right, bool top)
+    {
+        if (panel is not RectTransform rect) return;
+        rect.anchorMin = rect.anchorMax = new Vector2(right ? 1f : 0f, top ? 1f : 0f);
+        rect.pivot = new Vector2(right ? 1f : 0f, top ? 1f : 0f);
+        rect.anchoredPosition = new Vector2(right ? -24f : 24f, top ? -24f : 24f);
     }
 
     private static TMP_Text GetOrCreateAugmentLabel(Transform slot)

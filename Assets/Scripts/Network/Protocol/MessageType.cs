@@ -20,6 +20,7 @@ public enum MessageType
     MOVE_APPLIED,       // S→C 확정된 이동 (상대 기기는 이걸로 재계산)
     TURN_CHANGED,       // S→C 턴 변경
     GAME_ENDED,         // S→C 게임 종료
+    STATE_HASH,         // C→S MOVE_APPLIED 적용 후 내 상태 해시 (서버에서 양쪽 비교)
 
     // ── 증강 ──
     AUGMENT_CHOICES,    // S→C 증강 후보
