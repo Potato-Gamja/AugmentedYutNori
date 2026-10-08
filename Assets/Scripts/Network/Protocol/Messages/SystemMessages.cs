@@ -2,6 +2,8 @@
 // Ping/Pong은 UnityEngine.Ping과 이름이 겹치지 않도록 Message를 붙인다
 
 // C→S PING
+using System.Collections.Generic;
+
 public class PingMessage
 {
     public long clientTime;     // 보낸 시각(ms). PONG에 그대로 돌아오면 왕복 지연 계산
@@ -32,4 +34,21 @@ public class PlayerDisconnectedMessage
 public class PlayerReconnectedMessage
 {
     public string playerId;
+}
+
+// S→C GAME_SNAPSHOT  재접속·DESYNC 때 현재 게임 상태
+public class GameSnapshotMessage
+{
+    public long lastSeq;        // 이 다음 seq부터 순서 검사
+    public string phase;        // "AUGMENT_SELECT", "PLAYING", "ENDED"
+    public int myTeam;
+    public int currentTeam;
+    public int remainingThrows;
+    public int turnNumber;
+    public List<YutResult> storedResults = new List<YutResult>();
+    public Dictionary<int, List<string>> ownedAugments = new Dictionary<int, List<string>>();
+    public List<string> offeredAugments = new List<string>();   // 증강 선택 중일 때 내 후보
+    public int? winnerTeam;
+    public string timerType;        // "TURN", "AUGMENT_SELECT", 없으면 null
+    public int timerRemainingSec;
 }
