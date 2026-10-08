@@ -10,6 +10,7 @@ using UnityEngine.UI;
 /// </summary>
 public sealed class PlayerStatusView : MonoBehaviour
 {
+    public enum ConnectionState { Connected, Reconnecting, Removed }
     private const int MaxTeamCount = 4;
     private const int MaxPieceSlotCount = 4;
     private const int AugmentSlotCount = 3;
@@ -19,6 +20,20 @@ public sealed class PlayerStatusView : MonoBehaviour
     private Action<int, int> waitingPieceClicked;
     private IReadOnlyList<Sprite> teamPieceSprites;
     private IReadOnlyList<Sprite> teamPieceGlowSprites;
+    private readonly Dictionary<int, float> reconnectDeadlines = new();
+
+    private void Update()
+    {
+        if (reconnectDeadlines.Count == 0) return;
+        foreach (KeyValuePair<int, float> pair in reconnectDeadlines)
+        {
+            TMP_Text label = GetConnectionLabel(pair.Key);
+            if (label == null) continue;
+            int seconds = Mathf.Max(0, Mathf.CeilToInt(pair.Value - Time.unscaledTime));
+            if (seconds > 0) label.SetText("재접속 대기 {0}초", seconds);
+            else label.text = "재접속 처리 중";
+        }
+    }
 
     public void Configure(
         int teamCount,
@@ -177,6 +192,67 @@ public sealed class PlayerStatusView : MonoBehaviour
         image.color = Color.white;
         image.preserveAspect = true;
         glow.gameObject.SetActive(available && image.sprite != null);
+    }
+
+    public void SetConnectionState(int team, ConnectionState state, int graceSec = 0)
+    {
+        TMP_Text label = GetConnectionLabel(team);
+        if (label == null) return;
+
+        reconnectDeadlines.Remove(team);
+        switch (state)
+        {
+            case ConnectionState.Connected:
+                label.gameObject.SetActive(false);
+                break;
+            case ConnectionState.Reconnecting:
+                reconnectDeadlines[team] = Time.unscaledTime + Mathf.Max(0, graceSec);
+                label.text = $"재접속 대기 {Mathf.Max(0, graceSec)}초";
+                label.color = new Color32(181, 94, 18, 255);
+                label.gameObject.SetActive(true);
+                break;
+            case ConnectionState.Removed:
+                label.text = "탈주";
+                label.color = new Color32(150, 140, 125, 255);
+                label.gameObject.SetActive(true);
+                SetTeamPiecesVisible(team, false);
+                break;
+        }
+    }
+
+    private TMP_Text GetConnectionLabel(int team)
+    {
+        Transform panel = FindPanel(team);
+        if (panel == null) return null;
+        TMP_Text existing = panel.Find("ConnectionStatus")?.GetComponent<TMP_Text>();
+        if (existing != null) return existing;
+
+        GameObject labelObject = new("ConnectionStatus", typeof(RectTransform), typeof(TextMeshProUGUI));
+        labelObject.transform.SetParent(panel, false);
+        RectTransform rect = labelObject.GetComponent<RectTransform>();
+        rect.anchorMin = rect.anchorMax = new Vector2(1f, 1f);
+        rect.pivot = new Vector2(1f, 1f);
+        rect.anchoredPosition = new Vector2(-18f, -58f);
+        rect.sizeDelta = new Vector2(170f, 30f);
+        TMP_Text label = labelObject.GetComponent<TMP_Text>();
+        label.alignment = TextAlignmentOptions.Right;
+        label.fontSize = 18f;
+        label.fontStyle = FontStyles.Bold;
+        label.raycastTarget = false;
+        return label;
+    }
+
+    private void SetTeamPiecesVisible(int team, bool visible)
+    {
+        Transform panel = FindPanel(team);
+        if (panel == null) return;
+        for (int slot = 0; slot < MaxPieceSlotCount; slot++)
+        {
+            Transform waiting = panel.Find($"PieceSlot_{slot}");
+            Transform finished = panel.Find($"FinishSlot_{slot}");
+            if (waiting != null) waiting.gameObject.SetActive(visible && slot < pieceSlotCount);
+            if (finished != null) finished.gameObject.SetActive(visible && slot < pieceSlotCount);
+        }
     }
 
     private Transform FindPanel(int team)

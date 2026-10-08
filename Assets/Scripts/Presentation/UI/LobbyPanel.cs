@@ -15,24 +15,30 @@ public class LobbyPanel : UIBase
     [Header("버튼")]
     [SerializeField] private Button createRoomButton;
     [SerializeField] private Button joinRoomButton;
+    [SerializeField] private Button settingsButton;
 
     [Header("상태")]
     [SerializeField] private TMP_Text statusText;
 
     public event Action<string> CreateRoomRequested;
     public event Action<string, string> JoinRoomRequested;
+    public event Action SettingsRequested;
 
     public override void Init()
     {
         createRoomButton?.onClick.AddListener(OnCreateRoomClicked);
         joinRoomButton?.onClick.AddListener(OnJoinRoomClicked);
+        settingsButton?.onClick.AddListener(OnSettingsClicked);
     }
 
     private void OnDestroy()
     {
         createRoomButton?.onClick.RemoveListener(OnCreateRoomClicked);
         joinRoomButton?.onClick.RemoveListener(OnJoinRoomClicked);
+        settingsButton?.onClick.RemoveListener(OnSettingsClicked);
     }
+
+    private void OnSettingsClicked() => SettingsRequested?.Invoke();
 
     public void SetBusy(bool busy)
     {

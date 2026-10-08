@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -21,6 +22,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     private string pendingRoomCode;
     private string pendingNickname;
     private bool leaveRequested;
+    private readonly Dictionary<string, int> playerTeams = new();
 
     private void Awake()
     {
@@ -80,6 +82,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
         BindLobbyController();
+        RegisterGamePlayerTeams();
     }
 
     private void BindLobbyController()
@@ -223,8 +226,9 @@ public class LobbyNetworkCoordinator : MonoBehaviour
             switch (envelope.type)
             {
                 case MessageType.ROOM_STATE:
-                    lobbyController?.ReceiveRoomState(
-                        MessageSerializer.ReadPayload<RoomStateMessage>(envelope));
+                    RoomStateMessage room = MessageSerializer.ReadPayload<RoomStateMessage>(envelope);
+                    CachePlayerTeams(room);
+                    lobbyController?.ReceiveRoomState(room);
                     break;
 
                 case MessageType.GAME_START:
@@ -262,6 +266,32 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         }
 
         lobbyController?.ReceiveError("서버 연결이 끊어졌습니다.");
+    }
+
+    private void CachePlayerTeams(RoomStateMessage room)
+    {
+        playerTeams.Clear();
+        if (room?.players == null) return;
+
+        foreach (RoomPlayer player in room.players)
+        {
+            if (player == null || string.IsNullOrEmpty(player.playerId) || player.team < 0) continue;
+            playerTeams[player.playerId] = player.team;
+        }
+    }
+
+    private void RegisterGamePlayerTeams()
+    {
+        GameFlowController flow = FindFirstObjectByType<GameFlowController>();
+        if (flow == null) return;
+
+        foreach (KeyValuePair<string, int> playerTeam in playerTeams)
+            flow.RegisterPlayerTeam(playerTeam.Key, playerTeam.Value);
+
+        // 서버 담당 확인 사항:
+        // 재접속으로 바로 게임 씬에 진입하는 경우 ROOM_STATE를 다시 받지 못할 수 있다.
+        // 향후 GAME_START 또는 재접속 snapshot에도 playerId/team 목록을 포함하면
+        // 같은 RegisterPlayerTeam 경로로 등록해야 한다.
     }
 
     private static string ToUserMessage(Exception exception)

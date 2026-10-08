@@ -47,6 +47,7 @@ public class LobbyController : MonoBehaviour
 
         lobbyPanel.CreateRoomRequested += OnCreateRoomRequested;
         lobbyPanel.JoinRoomRequested += OnJoinRoomRequested;
+        lobbyPanel.SettingsRequested += OnSettingsRequested;
         roomPanel.ReadyRequested += OnReadyRequested;
         roomPanel.LeaveRequested += OnLeaveRequested;
     }
@@ -57,12 +58,19 @@ public class LobbyController : MonoBehaviour
         {
             lobbyPanel.CreateRoomRequested -= OnCreateRoomRequested;
             lobbyPanel.JoinRoomRequested -= OnJoinRoomRequested;
+            lobbyPanel.SettingsRequested -= OnSettingsRequested;
         }
         if (roomPanel != null)
         {
             roomPanel.ReadyRequested -= OnReadyRequested;
             roomPanel.LeaveRequested -= OnLeaveRequested;
         }
+    }
+
+    private void OnSettingsRequested()
+    {
+        // UI 조립 담당 확인: SettingsPanel 프리팹을 로비 UIManager에 등록하고 settingsButton을 연결한다.
+        uiManager?.Open<SettingsPanel>();
     }
 
     private void OnCreateRoomRequested(string nickname)
