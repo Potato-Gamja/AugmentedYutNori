@@ -14,9 +14,16 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     [SerializeField] private string webSocketUrl = "ws://localhost:8080/ws/rooms/{roomCode}";
     [SerializeField] private string playerPrefsKeyPrefix = "";
 
+    [Header("로그인")]
+    [SerializeField] private string loginSceneName = "PJWScene_Login";
+    // 로그인하지 않은 상태에서 방을 만들거나 참가하면 게스트로 자동 가입한다 (서버 /auth/firebase 준비 전·에디터 테스트용).
+    // 끄면 로그인 화면으로 돌려보낸다
+    [SerializeField] private bool allowGuestLogin = true;
+
     private static LobbyNetworkCoordinator instance;
 
     private ApiClient apiClient;
+    private AuthApi authApi;
     private PlayerIdentity playerIdentity;
     private string pendingRoomCode;
     private string pendingNickname;
@@ -42,7 +49,10 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         }
 
         apiClient = new ApiClient(apiBaseUrl);
+        authApi = new AuthApi(apiClient);
         playerIdentity = new PlayerIdentity(playerPrefsKeyPrefix);
+        apiClient.Token = playerIdentity.Token;
+        apiClient.Unauthorized += OnUnauthorized;
         webSocketClient.Url = webSocketUrl;
 
         // 게임 씬의 GameInstaller가 같은 WebSocket 연결로 RemoteGameSession을 만들 수 있게 등록한다.
@@ -66,6 +76,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         if (instance != this) return;
 
         UnbindLobbyController();
+        if (apiClient != null) apiClient.Unauthorized -= OnUnauthorized;
         if (webSocketClient != null)
         {
             webSocketClient.Connected -= OnConnected;
@@ -79,6 +90,9 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
+        // 로그인 씬에서 새로 저장한 토큰을 반영한다
+        playerIdentity.Reload();
+        apiClient.Token = playerIdentity.Token;
         BindLobbyController();
     }
 
@@ -96,8 +110,10 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         lobbyController.ReadyRequested += OnReadyRequested;
         lobbyController.LeaveRoomRequested += OnLeaveRoomRequested;
 
-        if (playerIdentity != null && playerIdentity.HasToken)
+        if (playerIdentity.HasToken)
             lobbyController.SetLocalPlayer(playerIdentity.PlayerId);
+        else if (!allowGuestLogin)
+            GoToLogin();
     }
 
     private void UnbindLobbyController()
@@ -146,10 +162,38 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         }
     }
 
+    // 로그인(또는 게스트 가입)된 플레이어가 있는지 확인한다
     private async System.Threading.Tasks.Task EnsurePlayer(string nickname)
     {
-        await playerIdentity.EnsureGuestAsync(apiClient, nickname);
+        if (!playerIdentity.HasToken)
+        {
+            if (!allowGuestLogin)
+            {
+                GoToLogin();
+                throw new InvalidOperationException("로그인이 필요합니다.");
+            }
+
+            await playerIdentity.EnsureGuestAsync(authApi, nickname);
+        }
+
+        apiClient.Token = playerIdentity.Token;
         lobbyController?.SetLocalPlayer(playerIdentity.PlayerId);
+    }
+
+    // 서버가 토큰을 거절(401)하면 저장된 토큰을 지우고 로그인 화면으로 보낸다
+    private void OnUnauthorized()
+    {
+        playerIdentity.Clear();
+        apiClient.Token = null;
+        GoToLogin();
+    }
+
+    private void GoToLogin()
+    {
+        UnbindLobbyController();
+        pendingRoomCode = null;
+        if (webSocketClient.IsConnected) webSocketClient.Close();
+        SceneManager.LoadScene(loginSceneName);
     }
 
     private void ConnectAndJoin(string roomCode, string nickname)

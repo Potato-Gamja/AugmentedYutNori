@@ -6,6 +6,7 @@ using UnityEngine.Networking;
 
 // REST 호출 공통 처리. 서버 주소, JSON 변환(WebSocket과 같은 MessageSerializer 규칙), 인증 헤더를 한 곳에서 맡는다.
 // 예) var res = await api.Post<GuestLoginRequest, GuestLoginResponse>("/players", new GuestLoginRequest { nickname = "윷돌이" });
+// 가입·로그인 호출은 AuthApi를 쓴다.
 public class ApiClient
 {
     public string BaseUrl { get; set; }
@@ -14,6 +15,10 @@ public class ApiClient
     public string Token { get; set; }
 
     public int TimeoutSec { get; set; } = 10;
+
+    // 서버가 401(토큰 만료·무효)을 돌려줬을 때. 로비 쪽에서 구독해 로그인 화면으로 돌려보낸다.
+    // 예외(ApiException)는 그대로 던지므로 호출한 쪽의 오류 처리도 함께 실행된다
+    public event Action Unauthorized;
 
     public ApiClient(string baseUrl)
     {
@@ -49,7 +54,10 @@ public class ApiClient
 
         string text = request.downloadHandler.text;
         if (request.result != UnityWebRequest.Result.Success)
+        {
+            if (request.responseCode == 401) Unauthorized?.Invoke();
             throw new ApiException(method, path, request.responseCode, request.error, text);
+        }
 
         return string.IsNullOrEmpty(text) ? default : JsonConvert.DeserializeObject<TResponse>(text, MessageSerializer.Settings);
     }
