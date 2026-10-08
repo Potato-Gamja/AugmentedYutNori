@@ -17,16 +17,33 @@ public sealed class YutResultRevealView : MonoBehaviour
     private TMP_Text detail;
     private CanvasGroup canvasGroup;
     private Coroutine routine;
+    private Sprite stickFlat;
+    private Sprite stickRound;
+    private Sprite stickBackdo;
+    private RectTransform resultPanel;
+    private TMP_Text panelResult;
+    private TMP_Text panelSteps;
+    private readonly Image[] panelSticks = new Image[4];
 
-    public void Configure(TMP_Text source, Sprite background, Sprite glow)
+    public void Configure(TMP_Text source, Sprite background, Sprite glow, Sprite flat, Sprite round, Sprite backdo)
     {
         fontSource = source;
         backgroundSprite = background;
         glowSprite = glow;
+        stickFlat = flat;
+        stickRound = round;
+        stickBackdo = backdo;
+        TryBindResultPanel();
     }
 
     public void Show(YutResult result, int remainingThrows, int team)
     {
+        if (TryBindResultPanel())
+        {
+            ShowInResultPanel(result, remainingThrows, team);
+            return;
+        }
+
         EnsureCreated();
         int steps = result.Steps();
         title.text = result.DisplayName();
@@ -40,6 +57,76 @@ public sealed class YutResultRevealView : MonoBehaviour
         if (routine != null) StopCoroutine(routine);
         revealRoot.SetActive(true);
         routine = StartCoroutine(Play());
+    }
+
+    private bool TryBindResultPanel()
+    {
+        if (resultPanel != null) return panelResult != null && panelSteps != null;
+
+        resultPanel = transform.Find("RightColumn/ResultPanel") as RectTransform;
+        if (resultPanel == null) return false;
+
+        panelResult = resultPanel.Find("Well/ResultValue")?.GetComponent<TMP_Text>();
+        panelSteps = resultPanel.Find("Well/ResultSteps")?.GetComponent<TMP_Text>();
+        for (int i = 0; i < panelSticks.Length; i++)
+            panelSticks[i] = resultPanel.Find($"Well/Stick_{i}")?.GetComponent<Image>();
+        return panelResult != null && panelSteps != null;
+    }
+
+    private void ShowInResultPanel(YutResult result, int remainingThrows, int team)
+    {
+        int steps = result.Steps();
+        panelResult.text = result.DisplayName();
+        panelResult.color = TurnHudView.GetTeamColor(team);
+        panelSteps.text = steps < 0 ? "1칸 뒤로" : $"{steps}칸 이동";
+        if (result.GrantsExtraThrow() && remainingThrows > 0)
+            panelSteps.text += " · 한 번 더";
+
+        Sprite[] faces = GetStickFaces(result);
+        for (int i = 0; i < panelSticks.Length; i++)
+        {
+            if (panelSticks[i] == null) continue;
+            if (faces[i] != null) panelSticks[i].sprite = faces[i];
+            panelSticks[i].color = Color.white;
+            panelSticks[i].preserveAspect = true;
+        }
+
+        if (routine != null) StopCoroutine(routine);
+        routine = StartCoroutine(PulsePanelResult());
+    }
+
+    private Sprite[] GetStickFaces(YutResult result)
+    {
+        var faces = new[] { stickRound, stickRound, stickRound, stickRound };
+        int flatCount = result switch
+        {
+            YutResult.Do => 1,
+            YutResult.Gae => 2,
+            YutResult.Geol => 3,
+            YutResult.Yut => 4,
+            _ => 0
+        };
+        for (int i = 0; i < flatCount; i++) faces[i] = stickFlat;
+        if (result == YutResult.BackDo) faces[0] = stickBackdo != null ? stickBackdo : stickFlat;
+        if (result == YutResult.Yut && stickBackdo != null) faces[0] = stickBackdo;
+        return faces;
+    }
+
+    private IEnumerator PulsePanelResult()
+    {
+        RectTransform resultRect = panelResult.rectTransform;
+        const float duration = 0.22f;
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            float scale = Mathf.Lerp(1.28f, 1f, 1f - (1f - t) * (1f - t));
+            resultRect.localScale = Vector3.one * scale;
+            yield return null;
+        }
+        resultRect.localScale = Vector3.one;
+        routine = null;
     }
 
     private void EnsureCreated()

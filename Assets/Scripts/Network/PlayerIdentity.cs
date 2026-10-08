@@ -31,10 +31,10 @@ public class PlayerIdentity
             GuestLoginResponse response = await api.Post<GuestLoginRequest, GuestLoginResponse>(
                 "/players", new GuestLoginRequest { nickname = nickname });
 
-            if (response == null || string.IsNullOrEmpty(response.token))
-                throw new ApiException("POST", "/players", 200, "응답에 token이 없습니다.", null);
+            if (response == null || string.IsNullOrEmpty(response.guestToken))
+                throw new ApiException("POST", "/players", 200, "응답에 guestToken이 없습니다.", null);
 
-            Save(response.playerId, response.token, string.IsNullOrEmpty(response.nickname) ? nickname : response.nickname);
+            Save(response.playerId, response.guestToken, string.IsNullOrEmpty(response.nickname) ? nickname : response.nickname);
         }
 
         api.Token = Token;
@@ -73,6 +73,6 @@ public class GuestLoginRequest
 public class GuestLoginResponse
 {
     public string playerId;
-    public string token;
     public string nickname;
+    public string guestToken;
 }

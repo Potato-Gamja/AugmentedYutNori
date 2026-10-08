@@ -30,8 +30,9 @@ public class WebSocketClient : MonoBehaviour
 
     public string Url { get => url; set => url = value; }
 
-    // token이 있으면 ?token=... 으로 붙인다 (WebGL은 헤더를 못 붙이므로 주소로 전달)
-    public async void Connect(string token = null)
+    // guestToken이 있으면 쿼리로 붙인다 (WebGL은 헤더를 못 붙이므로 주소로 전달).
+    // 서버 GuestTokenHandshakeInterceptor도 같은 guestToken 이름으로 읽는다.
+    public async void Connect(string guestToken = null)
     {
         if (socket != null)
         {
@@ -39,9 +40,9 @@ public class WebSocketClient : MonoBehaviour
             await CloseSocket();
         }
 
-        string target = string.IsNullOrEmpty(token)
+        string target = string.IsNullOrEmpty(guestToken)
             ? url
-            : $"{url}{(url.Contains("?") ? "&" : "?")}token={Uri.EscapeDataString(token)}";
+            : $"{url}{(url.Contains("?") ? "&" : "?")}guestToken={Uri.EscapeDataString(guestToken)}";
 
         closingByUser = false;
         LatencyMs = -1;

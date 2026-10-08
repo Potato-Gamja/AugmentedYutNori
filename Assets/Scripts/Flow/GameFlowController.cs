@@ -83,7 +83,7 @@ public class GameFlowController : MonoBehaviour
         BindPieces();
         lastStateHash = StateHasher.HashHex(gameState, turnManager);
 
-        hudPresenter = new GameFlowHudPresenter(hud, boardState, gameState);
+        hudPresenter = new GameFlowHudPresenter(hud, boardState, gameState, pieceViews);
         selectionController = new GameFlowSelectionController(
             boardView,
             boardState,
@@ -340,7 +340,7 @@ public class GameFlowController : MonoBehaviour
         if (gameState.RemainingThrows > 0)
         {
             ChangeState(GameFlowState.Throw);
-            hud?.SetInstruction($"{GameFlowHudPresenter.ResultLabel(outcome.Result)}! Throw again.");
+            hud?.SetInstruction($"{GameFlowHudPresenter.ResultLabel(outcome.Result)}! 한 번 더 던지세요.");
         }
         else if (gameRules.HasAnyStoredMove())
         {
@@ -360,7 +360,7 @@ public class GameFlowController : MonoBehaviour
         }
         else
         {
-            hud?.SetInstruction("Waiting for augment choices.");
+            hud?.SetInstruction("증강 선택지를 기다리는 중입니다.");
         }
     }
 
@@ -421,20 +421,20 @@ public class GameFlowController : MonoBehaviour
                 break;
 
             case GameFlowState.Throw:
-                PrepareInteractiveState();
+                PrepareInteractiveState(false);
                 hud?.SetInteractionState(setup.CanControl(CurrentTeam), false);
-                hud?.SetTurn($"Team {CurrentTeam + 1} Turn", CurrentTeam);
-                hud?.SetInstruction(gameState.StoredResults.Count > 0 ? "Bonus throw." : "Throw Yut.");
+                hud?.SetTurn($"플레이어 {CurrentTeam + 1} 차례", CurrentTeam);
+                hud?.SetInstruction(gameState.StoredResults.Count > 0 ? "추가 윷을 던지세요." : "윷을 던지세요.");
                 hud?.SetThrowInteractable(gameState.RemainingThrows > 0);
                 hud?.SetRethrowVisible(false);
                 hud?.SetTimerRunning(true);
                 break;
 
             case GameFlowState.Move:
-                PrepareInteractiveState();
+                PrepareInteractiveState(true);
                 hud?.SetInteractionState(setup.CanControl(CurrentTeam), false);
-                hud?.SetTurn($"Team {CurrentTeam + 1} Turn", CurrentTeam);
-                hud?.SetInstruction("Select a piece.");
+                hud?.SetTurn($"플레이어 {CurrentTeam + 1} 차례", CurrentTeam);
+                hud?.SetInstruction("이동할 말을 선택하세요.");
                 hud?.SetThrowInteractable(false);
                 hud?.SetRethrowVisible(hudPresenter.CanUseRethrow(CurrentTeam));
                 hud?.SetTimerRunning(true);
@@ -446,12 +446,12 @@ public class GameFlowController : MonoBehaviour
                 hudPresenter.RefreshPlayerPanels();
                 hud?.SetInteractionState(false, false);
                 int winner = pendingWinnerTeam ?? gameState.WinnerTeam ?? CurrentTeam;
-                hud?.SetInstruction($"Team {winner + 1} wins!");
+                hud?.SetInstruction($"플레이어 {winner + 1} 승리!");
                 hud?.SetThrowInteractable(false);
                 hud?.SetRethrowVisible(false);
                 hud?.SetTimerRunning(false);
                 uiManager?.Open<ResultPopup>()?.SetWinner(
-                    $"Team {winner + 1}",
+                    $"플레이어 {winner + 1}",
                     GameHudPanel.GetTeamColor(winner));
                 break;
 
@@ -461,10 +461,10 @@ public class GameFlowController : MonoBehaviour
         }
     }
 
-    private void PrepareInteractiveState()
+    private void PrepareInteractiveState(bool allowPieceSelection)
     {
         selectionController.Clear();
-        selectionController.RefreshTurnHighlights();
+        selectionController.RefreshTurnHighlights(allowPieceSelection);
         hudPresenter.RefreshPlayerPanels();
     }
 
@@ -487,12 +487,12 @@ public class GameFlowController : MonoBehaviour
     private void PrepareAugmentSelection()
     {
         selectionController.Clear();
-        hud?.SetTurn($"Team {augmentSelectionTeam + 1} Augment", augmentSelectionTeam);
+        hud?.SetTurn($"플레이어 {augmentSelectionTeam + 1} 증강 선택", augmentSelectionTeam);
         hud?.SetThrowInteractable(false);
         hud?.SetRethrowVisible(false);
         hud?.SetTimerRunning(false);
         hud?.SetInteractionState(setup.CanControl(augmentSelectionTeam), gameSession?.IsCommandPending ?? false);
-        hud?.SetInstruction("Waiting for augment choices.");
+        hud?.SetInstruction("증강 선택지를 기다리는 중입니다.");
     }
 
     private void OpenAugmentSelection(IReadOnlyList<string> ids)
@@ -508,7 +508,7 @@ public class GameFlowController : MonoBehaviour
         if (!setup.CanControl(augmentSelectionTeam))
         {
             uiManager?.Close<AugmentSelectPanel>();
-            hud?.SetInstruction("Waiting for augment selection.");
+            hud?.SetInstruction("다른 플레이어의 증강 선택을 기다리는 중입니다.");
             return;
         }
 
@@ -517,7 +517,7 @@ public class GameFlowController : MonoBehaviour
             selection.Add(augmentCatalog.Find(id));
         panel.Setup(selection, OnAugmentSelected);
         uiManager.Open<AugmentSelectPanel>();
-        hud?.SetInstruction("Select an augment.");
+        hud?.SetInstruction("증강을 선택하세요.");
     }
 
     private void OnWaitingPieceClicked(int team, int slotIndex)
@@ -610,7 +610,7 @@ public class GameFlowController : MonoBehaviour
         Debug.LogError("[GameFlow] 서버 이동을 현재 상태에서 재현할 수 없습니다. 전체 상태 동기화가 필요합니다.", this);
         selectionController?.Clear();
         hud?.SetInteractionState(false, false);
-        hud?.SetInstruction("State sync required.");
+        hud?.SetInstruction("게임 상태를 다시 동기화해야 합니다.");
     }
 
     private void OnBoardLayoutReloaded()
@@ -618,8 +618,8 @@ public class GameFlowController : MonoBehaviour
         selectionController.Clear();
         RefreshPieceLayout();
         hudPresenter.RefreshPlayerPanels();
-        selectionController.RefreshTurnHighlights(currentState != GameFlowState.Finish);
-        if (currentState == GameFlowState.Move) hud?.SetInstruction("Select a piece.");
+        selectionController.RefreshTurnHighlights(currentState == GameFlowState.Move);
+        if (currentState == GameFlowState.Move) hud?.SetInstruction("이동할 말을 선택하세요.");
     }
 
     private void RefreshPieceLayout()

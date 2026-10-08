@@ -167,7 +167,7 @@ MonoBehaviour:
       shortcut: 
   layouts:
   - nodeId: 0
-    localPosition: {x: 4.4500003, y: -3.28, z: 0}
+    localPosition: {x: 2.98, y: -3.28, z: 0}
   - nodeId: 1
     localPosition: {x: 2.9699998, y: -1.74, z: 0}
   - nodeId: 2
@@ -179,37 +179,37 @@ MonoBehaviour:
   - nodeId: 5
     localPosition: {x: 2.9699998, y: 3.65, z: 0}
   - nodeId: 6
-    localPosition: {x: 1.65, y: 3.74, z: 0}
+    localPosition: {x: 1.6499999, y: 3.65, z: 0}
   - nodeId: 7
-    localPosition: {x: 0.28999996, y: 3.74, z: 0}
+    localPosition: {x: 0.28999996, y: 3.65, z: 0}
   - nodeId: 8
-    localPosition: {x: -1.49, y: 3.74, z: 0}
+    localPosition: {x: -1.49, y: 3.65, z: 0}
   - nodeId: 9
-    localPosition: {x: -3.06, y: 3.74, z: 0}
+    localPosition: {x: -3.06, y: 3.65, z: 0}
   - nodeId: 10
     localPosition: {x: -4.46, y: 3.65, z: 0}
   - nodeId: 11
-    localPosition: {x: -4.59, y: 2.26, z: 0}
+    localPosition: {x: -4.46, y: 2.26, z: 0}
   - nodeId: 12
-    localPosition: {x: -4.55, y: 0.85, z: 0}
+    localPosition: {x: -4.46, y: 0.85, z: 0}
   - nodeId: 13
-    localPosition: {x: -4.5, y: -0.51, z: 0}
+    localPosition: {x: -4.46, y: -0.51, z: 0}
   - nodeId: 14
-    localPosition: {x: -4.42, y: -1.95, z: 0}
+    localPosition: {x: -4.46, y: -1.9499999, z: 0}
   - nodeId: 15
-    localPosition: {x: -4.46, y: -3.31, z: 0}
+    localPosition: {x: -4.46, y: -3.276, z: 0}
   - nodeId: 16
-    localPosition: {x: -2.98, y: -3.44, z: 0}
+    localPosition: {x: -2.98, y: -3.276, z: 0}
   - nodeId: 17
-    localPosition: {x: -1.57, y: -3.48, z: 0}
+    localPosition: {x: -1.57, y: -3.276, z: 0}
   - nodeId: 18
-    localPosition: {x: 0.16999996, y: -3.39, z: 0}
+    localPosition: {x: 0.16999996, y: -3.276, z: 0}
   - nodeId: 19
-    localPosition: {x: 1.4400002, y: -3.35, z: 0}
+    localPosition: {x: 1.4400003, y: -3.282, z: 0}
   - nodeId: 20
     localPosition: {x: 2.9699998, y: -3.27, z: 0}
   - nodeId: 21
-    localPosition: {x: 1.82, y: 2.59, z: 0}
+    localPosition: {x: 1.8199999, y: 2.59, z: 0}
   - nodeId: 22
     localPosition: {x: 0.63, y: 1.37, z: 0}
   - nodeId: 23
@@ -225,4 +225,4 @@ MonoBehaviour:
   - nodeId: 28
     localPosition: {x: 0.43999994, y: -1.02, z: 0}
   - nodeId: 29
-    localPosition: {x: 1.62, y: -2.02, z: 0}
+    localPosition: {x: 1.6200001, y: -2.02, z: 0}
