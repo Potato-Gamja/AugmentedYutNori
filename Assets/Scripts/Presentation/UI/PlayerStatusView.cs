@@ -15,12 +15,21 @@ public sealed class PlayerStatusView : MonoBehaviour
     private const int AugmentSlotCount = 3;
     private int activeTeamCount = 2;
     private int pieceSlotCount = MaxPieceSlotCount;
+    private int currentActiveTeam;
     private Action<int, int> waitingPieceClicked;
+    private IReadOnlyList<Sprite> teamPieceSprites;
+    private IReadOnlyList<Sprite> teamPieceGlowSprites;
 
-    public void Configure(int teamCount, int piecesPerTeam)
+    public void Configure(
+        int teamCount,
+        int piecesPerTeam,
+        IReadOnlyList<Sprite> pieceSprites,
+        IReadOnlyList<Sprite> pieceGlowSprites)
     {
         activeTeamCount = Mathf.Clamp(teamCount, 2, MaxTeamCount);
         pieceSlotCount = Mathf.Clamp(piecesPerTeam, 1, MaxPieceSlotCount);
+        teamPieceSprites = pieceSprites;
+        teamPieceGlowSprites = pieceGlowSprites;
         EnsureFourPlayerPanels();
 
         for (int team = 0; team < MaxTeamCount; team++)
@@ -59,22 +68,29 @@ public sealed class PlayerStatusView : MonoBehaviour
         }
     }
 
-    public void SetState(int team, int waiting, int onBoard, int finished, IReadOnlyList<string> augmentIds)
+    public void SetState(
+        int team,
+        int waiting,
+        int onBoard,
+        int finished,
+        IReadOnlyList<string> augmentIds,
+        IReadOnlyCollection<int> waitingSlots = null)
     {
         Transform panel = FindPanel(team);
         if (panel == null) return;
 
         TMP_Text waitingLabel = panel.Find("WaitingLabel")?.GetComponent<TMP_Text>();
-        if (waitingLabel != null) waitingLabel.text = $"WAITING {waiting}  /  BOARD {onBoard}";
+        if (waitingLabel != null) waitingLabel.gameObject.SetActive(false);
 
         TMP_Text finishLabel = panel.Find("FinishLabel")?.GetComponent<TMP_Text>();
-        if (finishLabel != null) finishLabel.text = $"FINISHED {finished}/{pieceSlotCount}";
+        if (finishLabel != null) finishLabel.text = $"완주 {finished}/{pieceSlotCount}";
 
         for (int i = 0; i < MaxPieceSlotCount; i++)
         {
             Transform waitingSlot = panel.Find($"PieceSlot_{i}");
             Transform piece = waitingSlot != null ? waitingSlot.Find("Piece") : null;
-            if (piece != null) piece.gameObject.SetActive(i < pieceSlotCount && i < waiting);
+            bool isWaiting = waitingSlots != null ? ContainsSlot(waitingSlots, i) : i < waiting;
+            if (piece != null) piece.gameObject.SetActive(i < pieceSlotCount && isWaiting);
 
             Image finishImage = panel.Find($"FinishSlot_{i}")?.GetComponent<Image>();
             if (finishImage != null)
@@ -115,6 +131,7 @@ public sealed class PlayerStatusView : MonoBehaviour
 
     public void SetActiveTeam(int activeTeam)
     {
+        currentActiveTeam = activeTeam;
         for (int team = 0; team < MaxTeamCount; team++)
         {
             Transform panel = FindPanel(team);
@@ -126,7 +143,40 @@ public sealed class PlayerStatusView : MonoBehaviour
             Image header = panel.Find("Header")?.GetComponent<Image>();
             if (header != null)
                 header.color = team == activeTeam ? TurnHudView.GetTeamColor(team) : InactiveHeaderColor(team);
+
+            TMP_Text headerLabel = panel.Find("Header")?.GetComponentInChildren<TMP_Text>(true);
+            if (headerLabel != null)
+                headerLabel.color = team == activeTeam ? Color.white : TurnHudView.GetTeamColor(team);
         }
+    }
+
+    public void SetWaitingPieceAvailable(int team, int slotIndex, bool available)
+    {
+        Transform slot = FindPanel(team)?.Find($"PieceSlot_{slotIndex}");
+        if (slot == null) return;
+
+        Transform glow = slot.Find("AvailableGlow");
+        if (glow == null)
+        {
+            var glowObject = new GameObject("AvailableGlow", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            glowObject.transform.SetParent(slot, false);
+            glowObject.transform.SetAsFirstSibling();
+            RectTransform rect = glowObject.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = Vector2.zero;
+            rect.sizeDelta = new Vector2(104f, 104f);
+            glow = glowObject.transform;
+        }
+
+        Image image = glow.GetComponent<Image>();
+        image.raycastTarget = false;
+        if (teamPieceGlowSprites != null && team >= 0 && team < teamPieceGlowSprites.Count)
+            image.sprite = teamPieceGlowSprites[team];
+        image.color = Color.white;
+        image.preserveAspect = true;
+        glow.gameObject.SetActive(available && image.sprite != null);
     }
 
     private Transform FindPanel(int team)
@@ -158,8 +208,9 @@ public sealed class PlayerStatusView : MonoBehaviour
 
         PlacePanel(FindPanel(0), false, true);
         PlacePanel(FindPanel(1), true, true);
-        PlacePanel(FindPanel(2), false, false);
-        PlacePanel(FindPanel(3), true, false);
+        // 4인 시안 기준: 4번은 좌하단, 현재 차례가 강조되는 3번은 우하단에 둔다.
+        PlacePanel(FindPanel(2), true, false);
+        PlacePanel(FindPanel(3), false, false);
     }
 
     private void ConfigureSeat(int team, bool occupied)
@@ -168,17 +219,32 @@ public sealed class PlayerStatusView : MonoBehaviour
         if (panel == null) return;
         panel.gameObject.SetActive(true); // 2·3인에서도 남은 자리를 빈 좌석으로 표시한다.
 
+        TMP_Text waitingLabel = panel.Find("WaitingLabel")?.GetComponent<TMP_Text>();
+        if (waitingLabel != null) waitingLabel.gameObject.SetActive(false);
+
         TMP_Text headerLabel = panel.Find("Header")?.GetComponentInChildren<TMP_Text>(true);
         if (headerLabel != null)
         {
-            headerLabel.text = occupied ? $"PLAYER {team + 1}" : "EMPTY";
-            headerLabel.color = occupied ? TurnHudView.GetTeamColor(team) : new Color32(150, 140, 125, 255);
+            headerLabel.text = occupied ? $"플레이어 {team + 1}  /  {TeamName(team)} 팀" : "빈 자리";
+            headerLabel.color = !occupied
+                ? new Color32(150, 140, 125, 255)
+                : team == currentActiveTeam ? Color.white : TurnHudView.GetTeamColor(team);
         }
 
         for (int slot = 0; slot < MaxPieceSlotCount; slot++)
         {
             Transform waitingSlot = panel.Find($"PieceSlot_{slot}");
-            if (waitingSlot != null) waitingSlot.gameObject.SetActive(occupied && slot < pieceSlotCount);
+            if (waitingSlot != null)
+            {
+                waitingSlot.gameObject.SetActive(occupied && slot < pieceSlotCount);
+                Image pieceImage = waitingSlot.Find("Piece")?.GetComponent<Image>();
+                if (pieceImage != null && teamPieceSprites != null && team < teamPieceSprites.Count && teamPieceSprites[team] != null)
+                {
+                    pieceImage.sprite = teamPieceSprites[team];
+                    pieceImage.color = Color.white;
+                }
+                SetWaitingPieceAvailable(team, slot, false);
+            }
             Transform finishSlot = panel.Find($"FinishSlot_{slot}");
             if (finishSlot != null) finishSlot.gameObject.SetActive(occupied && slot < pieceSlotCount);
         }
@@ -225,17 +291,35 @@ public sealed class PlayerStatusView : MonoBehaviour
         };
     }
 
+    private static bool ContainsSlot(IReadOnlyCollection<int> slots, int target)
+    {
+        foreach (int slot in slots)
+            if (slot == target) return true;
+        return false;
+    }
+
+    private static string TeamName(int team)
+    {
+        return team switch
+        {
+            0 => "빨강",
+            1 => "파랑",
+            2 => "초록",
+            _ => "노랑"
+        };
+    }
+
     private static string ShortAugmentName(string id)
     {
         if (string.IsNullOrEmpty(id)) return "";
         return id switch
         {
-            "BackDoSwitch" => "BACK DO",
-            "QuickStart" => "QUICK",
-            "WeakBoost" => "BOOST",
-            "Shield" => "SHIELD",
-            "SturdyCarry" => "CARRY",
-            "Rethrow" => "RETHROW",
+            "BackDoSwitch" => "빽도 전환",
+            "QuickStart" => "빠른 출발",
+            "WeakBoost" => "잔걸음 강화",
+            "Shield" => "방패",
+            "SturdyCarry" => "튼튼한 업기",
+            "Rethrow" => "다시 굴리기",
             _ => id
         };
     }
