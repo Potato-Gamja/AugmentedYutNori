@@ -165,6 +165,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         }
     }
 
+    // 로그인(또는 게스트 가입)된 플레이어가 있는지 확인한다
     private async System.Threading.Tasks.Task EnsurePlayer(string nickname)
     {
         if (!playerIdentity.HasToken)
