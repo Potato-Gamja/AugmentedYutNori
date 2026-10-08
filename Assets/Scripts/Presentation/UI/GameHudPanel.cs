@@ -15,6 +15,7 @@ public class GameHudPanel : UIBase
     [SerializeField] private TMP_Text instructionText;
     [SerializeField] private Button throwButton;
     [SerializeField] private Button rethrowButton;
+    [SerializeField] private Button settingsButton;
 
     [Header("P0 HUD")]
     [SerializeField] private RectTransform storedResultRoot;
@@ -50,6 +51,7 @@ public class GameHudPanel : UIBase
     public event Action ThrowClicked;
     public event Action RethrowClicked;
     public event Action<int, int> WaitingPieceClicked;
+    public event Action SettingsClicked;
 
     public override void Init()
     {
@@ -94,7 +96,11 @@ public class GameHudPanel : UIBase
             rethrowButton.onClick.RemoveListener(RaiseRethrowClicked);
             rethrowButton.onClick.AddListener(RaiseRethrowClicked);
         }
+        settingsButton?.onClick.AddListener(RaiseSettingsClicked);
     }
+
+    private void OnDestroy() => settingsButton?.onClick.RemoveListener(RaiseSettingsClicked);
+    private void RaiseSettingsClicked() => SettingsClicked?.Invoke();
 
     private void RaiseThrowClicked()
     {
@@ -173,6 +179,14 @@ public class GameHudPanel : UIBase
     public void SetWaitingPieceAvailable(int team, int slotIndex, bool available)
     {
         playerView?.SetWaitingPieceAvailable(team, slotIndex, available);
+    }
+
+    public void SetPlayerConnectionState(
+        int team,
+        PlayerStatusView.ConnectionState state,
+        int graceSec = 0)
+    {
+        playerView?.SetConnectionState(team, state, graceSec);
     }
 
     public void MarkResultPending(int resultIndex, int team)

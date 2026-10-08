@@ -39,6 +39,11 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
     public event Action<int, IAugment> AugmentSelected;
     public event Action<int> GameEnded;
     public event Action<string> RequestRejected;
+    public event Action<string, int> PlayerDisconnected;
+    public event Action<string> PlayerReconnected;
+    public event Action<string, int> PlayerRemoved;
+    public event Action<int> AutomatedMoveApplied;
+    public event Action<bool> ConnectionAvailabilityChanged;
 
     public RemoteGameSession(
         WebSocketClient socket,
@@ -56,6 +61,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
         this.setup = setup ?? throw new ArgumentNullException(nameof(setup));
 
         socket.MessageReceived += OnMessageReceived;
+        socket.Connected += OnConnected;
         socket.Error += OnSocketError;
         socket.Disconnected += OnDisconnected;
     }
@@ -63,6 +69,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
     public void Dispose()
     {
         socket.MessageReceived -= OnMessageReceived;
+        socket.Connected -= OnConnected;
         socket.Error -= OnSocketError;
         socket.Disconnected -= OnDisconnected;
     }
@@ -168,6 +175,15 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
                 case MessageType.GAME_ENDED:
                     ApplyGameEnded(MessageSerializer.ReadPayload<GameEndedMessage>(envelope));
                     break;
+                case MessageType.PLAYER_DISCONNECTED:
+                    ApplyPlayerDisconnected(MessageSerializer.ReadPayload<PlayerDisconnectedMessage>(envelope));
+                    break;
+                case MessageType.PLAYER_RECONNECTED:
+                    ApplyPlayerReconnected(MessageSerializer.ReadPayload<PlayerReconnectedMessage>(envelope));
+                    break;
+                // 서버/프로토콜 담당 연결 지점:
+                // MessageType.PLAYER_REMOVED와 PlayerRemovedMessage(playerId, team, reason)가 추가되면
+                // 여기서 PlayerRemoved?.Invoke(message.playerId, message.team)를 호출한다.
                 case MessageType.ERROR:
                     ErrorMessage error = MessageSerializer.ReadPayload<ErrorMessage>(envelope);
                     commandPending = false;
@@ -240,6 +256,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
             }
         }
 
+        if (message.team != setup.localTeam) AutomatedMoveApplied?.Invoke(message.team);
         Moved?.Invoke(result);
         ReportStateHash(sequence, message.stateHash);
     }
@@ -274,6 +291,20 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
         gameState.WinnerTeam = message.winnerTeam;
         commandPending = false;
         GameEnded?.Invoke(message.winnerTeam);
+    }
+
+    private void ApplyPlayerDisconnected(PlayerDisconnectedMessage message)
+    {
+        if (message == null || string.IsNullOrEmpty(message.playerId))
+            throw new InvalidOperationException("PLAYER_DISCONNECTED 내용이 없습니다.");
+        PlayerDisconnected?.Invoke(message.playerId, Math.Max(0, message.graceSec));
+    }
+
+    private void ApplyPlayerReconnected(PlayerReconnectedMessage message)
+    {
+        if (message == null || string.IsNullOrEmpty(message.playerId))
+            throw new InvalidOperationException("PLAYER_RECONNECTED 내용이 없습니다.");
+        PlayerReconnected?.Invoke(message.playerId);
     }
 
     private void ReportStateHash(long sequence, string serverHash)
@@ -381,10 +412,16 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
         Reject($"서버 연결 오류: {message}");
     }
 
+    private void OnConnected()
+    {
+        ConnectionAvailabilityChanged?.Invoke(true);
+    }
+
     private void OnDisconnected(bool byUser)
     {
         commandPending = false;
         ClearPendingMove();
+        ConnectionAvailabilityChanged?.Invoke(false);
         if (!byUser) Reject("서버 연결이 끊어졌습니다.");
     }
 

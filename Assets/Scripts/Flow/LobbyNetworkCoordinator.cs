@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -16,8 +17,8 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     [Header("로그인")]
     [SerializeField] private string loginSceneName = "PJWScene_Login";
-    // 로그인하지 않은 상태에서 방을 만들거나 참가하면 게스트로 자동 가입한다 (서버 /auth/firebase 준비 전·에디터 테스트용).
-    // 끄면 로그인 화면으로 돌려보낸다
+    // 서버 로그인 연동 전·에디터 테스트에서는 게스트 생성을 유지한다.
+    // 끄면 토큰이 없는 사용자를 로그인 씬으로 보낸다.
     [SerializeField] private bool allowGuestLogin = true;
 
     private static LobbyNetworkCoordinator instance;
@@ -28,6 +29,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     private string pendingRoomCode;
     private string pendingNickname;
     private bool leaveRequested;
+    private readonly Dictionary<string, int> playerTeams = new();
 
     private void Awake()
     {
@@ -90,10 +92,11 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        // 로그인 씬에서 새로 저장한 토큰을 반영한다
+        // 로그인 씬에서 저장한 토큰을 영속 코디네이터에도 반영한다.
         playerIdentity.Reload();
         apiClient.Token = playerIdentity.Token;
         BindLobbyController();
+        RegisterGamePlayerTeams();
     }
 
     private void BindLobbyController()
@@ -180,7 +183,6 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         lobbyController?.SetLocalPlayer(playerIdentity.PlayerId);
     }
 
-    // 서버가 토큰을 거절(401)하면 저장된 토큰을 지우고 로그인 화면으로 보낸다
     private void OnUnauthorized()
     {
         playerIdentity.Clear();
@@ -192,8 +194,11 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     {
         UnbindLobbyController();
         pendingRoomCode = null;
+        pendingNickname = null;
         if (webSocketClient.IsConnected) webSocketClient.Close();
-        SceneManager.LoadScene(loginSceneName);
+
+        if (SceneManager.GetActiveScene().name != loginSceneName)
+            SceneManager.LoadScene(loginSceneName);
     }
 
     private void ConnectAndJoin(string roomCode, string nickname)
@@ -267,8 +272,9 @@ public class LobbyNetworkCoordinator : MonoBehaviour
             switch (envelope.type)
             {
                 case MessageType.ROOM_STATE:
-                    lobbyController?.ReceiveRoomState(
-                        MessageSerializer.ReadPayload<RoomStateMessage>(envelope));
+                    RoomStateMessage room = MessageSerializer.ReadPayload<RoomStateMessage>(envelope);
+                    CachePlayerTeams(room);
+                    lobbyController?.ReceiveRoomState(room);
                     break;
 
                 case MessageType.GAME_START:
@@ -306,6 +312,32 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         }
 
         lobbyController?.ReceiveError("서버 연결이 끊어졌습니다.");
+    }
+
+    private void CachePlayerTeams(RoomStateMessage room)
+    {
+        playerTeams.Clear();
+        if (room?.players == null) return;
+
+        foreach (RoomPlayer player in room.players)
+        {
+            if (player == null || string.IsNullOrEmpty(player.playerId) || player.team < 0) continue;
+            playerTeams[player.playerId] = player.team;
+        }
+    }
+
+    private void RegisterGamePlayerTeams()
+    {
+        GameFlowController flow = FindFirstObjectByType<GameFlowController>();
+        if (flow == null) return;
+
+        foreach (KeyValuePair<string, int> playerTeam in playerTeams)
+            flow.RegisterPlayerTeam(playerTeam.Key, playerTeam.Value);
+
+        // 서버 담당 확인 사항:
+        // 재접속으로 바로 게임 씬에 진입하는 경우 ROOM_STATE를 다시 받지 못할 수 있다.
+        // 향후 GAME_START 또는 재접속 snapshot에도 playerId/team 목록을 포함하면
+        // 같은 RegisterPlayerTeam 경로로 등록해야 한다.
     }
 
     private static string ToUserMessage(Exception exception)

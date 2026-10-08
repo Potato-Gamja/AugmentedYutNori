@@ -7957,7 +7957,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 828511336472889071, guid: e44c14272cc20f148b45da5696d1af57, type: 3}
       propertyPath: prefabs.Array.size
-      value: 3
+      value: 4
       objectReference: {fileID: 0}
     - target: {fileID: 828511336472889071, guid: e44c14272cc20f148b45da5696d1af57, type: 3}
       propertyPath: 'prefabs.Array.data[1]'
@@ -7967,6 +7967,10 @@ PrefabInstance:
       propertyPath: 'prefabs.Array.data[2]'
       value: 
       objectReference: {fileID: 3902274386178256672, guid: 3115031a856300942b4bbcff85970213, type: 3}
+    - target: {fileID: 828511336472889071, guid: e44c14272cc20f148b45da5696d1af57, type: 3}
+      propertyPath: 'prefabs.Array.data[3]'
+      value: 
+      objectReference: {fileID: 6794683207476624011, guid: ccaad1b749088ac42b2cce681fae9d11, type: 3}
     - target: {fileID: 907884088127722632, guid: e44c14272cc20f148b45da5696d1af57, type: 3}
       propertyPath: m_AnchorMax.x
       value: 1

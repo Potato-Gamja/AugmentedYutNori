@@ -43,6 +43,7 @@ public class GameFlowController : MonoBehaviour
     private int? pendingTurnTeam;
     private int? pendingWinnerTeam;
     private string lastStateHash;
+    private readonly Dictionary<string, int> playerTeams = new();
 
     public GameFlowState CurrentState => currentState;
     public int CurrentTeam => turnManager != null ? turnManager.CurrentTeam : 0;
@@ -159,6 +160,7 @@ public class GameFlowController : MonoBehaviour
         hud.ThrowClicked += OnThrowButtonClicked;
         hud.RethrowClicked += OnRethrowButtonClicked;
         hud.WaitingPieceClicked += OnWaitingPieceClicked;
+        hud.SettingsClicked += OnSettingsClicked;
         hud.ConfigurePlayers(setup.teamCount, setup.piecesPerTeam);
         hud.SetRethrowVisible(false);
     }
@@ -265,6 +267,14 @@ public class GameFlowController : MonoBehaviour
         boardState.PiecesReturnedByBoardChange += OnPiecesReturnedByBoardChange;
         boardState.DesyncDetected += OnDesyncDetected;
         boardView.LayoutReloaded += OnBoardLayoutReloaded;
+        if (gameSession is RemoteGameSession remote)
+        {
+            remote.PlayerDisconnected += OnRemotePlayerDisconnected;
+            remote.PlayerReconnected += OnRemotePlayerReconnected;
+            remote.PlayerRemoved += OnRemotePlayerRemoved;
+            remote.AutomatedMoveApplied += OnAutomatedMoveApplied;
+            remote.ConnectionAvailabilityChanged += OnConnectionAvailabilityChanged;
+        }
     }
 
     private void OnDestroy()
@@ -274,10 +284,19 @@ public class GameFlowController : MonoBehaviour
             hud.ThrowClicked -= OnThrowButtonClicked;
             hud.RethrowClicked -= OnRethrowButtonClicked;
             hud.WaitingPieceClicked -= OnWaitingPieceClicked;
+            hud.SettingsClicked -= OnSettingsClicked;
         }
 
         if (gameSession != null)
         {
+            if (gameSession is RemoteGameSession remote)
+            {
+                remote.PlayerDisconnected -= OnRemotePlayerDisconnected;
+                remote.PlayerReconnected -= OnRemotePlayerReconnected;
+            remote.PlayerRemoved -= OnRemotePlayerRemoved;
+            remote.AutomatedMoveApplied -= OnAutomatedMoveApplied;
+            remote.ConnectionAvailabilityChanged -= OnConnectionAvailabilityChanged;
+            }
             gameSession.Thrown -= OnThrown;
             gameSession.Moved -= OnMoved;
             gameSession.TurnChanged -= OnTurnChanged;
@@ -362,6 +381,68 @@ public class GameFlowController : MonoBehaviour
         {
             hud?.SetInstruction("증강 선택지를 기다리는 중입니다.");
         }
+    }
+
+    private void OnSettingsClicked()
+    {
+        // UI 조립 담당 확인: SettingsPanel 프리팹을 각 씬 UIManager의 prefabs 목록에 등록해야 한다.
+        uiManager?.Open<SettingsPanel>();
+    }
+
+    // 로비/GAME_START 담당 연결 지점:
+    // 서버가 playerId와 team 목록을 GAME_START에 포함하면 게임 시작 전에 이 메서드로 등록한다.
+    public void RegisterPlayerTeam(string playerId, int team)
+    {
+        if (string.IsNullOrEmpty(playerId) || team < 0 || team >= teamCount) return;
+        playerTeams[playerId] = team;
+    }
+
+    private void OnRemotePlayerDisconnected(string playerId, int graceSec)
+    {
+        if (playerTeams.TryGetValue(playerId, out int team))
+            hud?.SetPlayerConnectionState(team, PlayerStatusView.ConnectionState.Reconnecting, graceSec);
+        hud?.SetInstruction("연결이 끊긴 플레이어를 기다리는 중입니다.");
+    }
+
+    private void OnRemotePlayerReconnected(string playerId)
+    {
+        if (playerTeams.TryGetValue(playerId, out int team))
+            hud?.SetPlayerConnectionState(team, PlayerStatusView.ConnectionState.Connected);
+        hud?.SetInstruction("플레이어가 재접속했습니다.");
+    }
+
+    private void OnRemotePlayerRemoved(string playerId, int team)
+    {
+        hud?.SetPlayerConnectionState(team, PlayerStatusView.ConnectionState.Removed);
+        selectionController?.Clear();
+        foreach (PieceView view in pieceViews)
+            if (view != null && view.Team == team) view.SetWorldVisible(false);
+
+        // Core/Turn 담당 연결 지점:
+        // BoardState.RemoveTeam(team)과 TurnManager의 제거 팀 건너뛰기가 적용된 뒤
+        // 서버 TURN_CHANGED를 받아 다음 차례를 확정한다. 클라이언트가 임의로 턴을 계산하지 않는다.
+        hud?.SetInstruction($"플레이어 {team + 1}이 게임에서 나갔습니다.");
+    }
+
+    private void OnAutomatedMoveApplied(int team)
+    {
+        hud?.SetInstruction($"플레이어 {team + 1} 자동 진행 중");
+    }
+
+    private void OnConnectionAvailabilityChanged(bool connected)
+    {
+        hud?.SetConnectionAvailable(connected);
+        if (!connected)
+        {
+            selectionController?.Clear();
+            hud?.SetTimerRunning(false);
+            hud?.SetInstruction("서버 재접속을 기다리는 중입니다.");
+            return;
+        }
+
+        hud?.SetTimerRunning(currentState == GameFlowState.Throw || currentState == GameFlowState.Move);
+        hud?.SetInstruction("서버에 다시 연결되었습니다.");
+        RefreshSessionInteraction();
     }
 
     private void OnAugmentChoices(int team, IReadOnlyList<string> ids)
