@@ -17,6 +17,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     [Header("로그인")]
     [SerializeField] private string loginSceneName = "PJWScene_Login";
+    [SerializeField] private string lobbySceneName = "Lobby";
     // 서버 로그인 연동 전·에디터 테스트에서는 게스트 생성을 유지한다.
     // 끄면 토큰이 없는 사용자를 로그인 씬으로 보낸다.
     [SerializeField] private bool allowGuestLogin = true;
@@ -30,6 +31,9 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     private string pendingNickname;
     private bool leaveRequested;
     private readonly Dictionary<string, int> playerTeams = new();
+
+    public string LocalPlayerId => playerIdentity?.PlayerId ?? string.Empty;
+    public string LocalNickname => playerIdentity?.Nickname ?? string.Empty;
 
     private void Awake()
     {
@@ -263,6 +267,22 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         leaveRequested = true;
         if (webSocketClient.IsConnected) webSocketClient.Send(MessageType.LEAVE_ROOM);
         webSocketClient.Close();
+    }
+
+    public async void LeaveGameToMainMenu()
+    {
+        if (leaveRequested) return;
+
+        leaveRequested = true;
+        // 명시적인 LEAVE_ROOM을 보내지 않는다. 서버는 일반 연결 끊김으로 받아
+        // 재접속 유예시간을 시작하고, 만료된 뒤 기존 탈주 처리를 수행한다.
+        await webSocketClient.CloseAndWait();
+
+        playerTeams.Clear();
+        pendingRoomCode = null;
+        pendingNickname = null;
+        leaveRequested = false;
+        SceneManager.LoadScene(lobbySceneName);
     }
 
     private void OnMessageReceived(WsEnvelope envelope)

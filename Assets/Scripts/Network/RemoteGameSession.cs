@@ -181,9 +181,6 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
                 case MessageType.PLAYER_RECONNECTED:
                     ApplyPlayerReconnected(MessageSerializer.ReadPayload<PlayerReconnectedMessage>(envelope));
                     break;
-                // 서버/프로토콜 담당 연결 지점:
-                // MessageType.PLAYER_REMOVED와 PlayerRemovedMessage(playerId, team, reason)가 추가되면
-                // 여기서 PlayerRemoved?.Invoke(message.playerId, message.team)를 호출한다.
                 case MessageType.ERROR:
                     ErrorMessage error = MessageSerializer.ReadPayload<ErrorMessage>(envelope);
                     commandPending = false;
