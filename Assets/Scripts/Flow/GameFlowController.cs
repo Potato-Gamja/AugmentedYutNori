@@ -84,7 +84,7 @@ public class GameFlowController : MonoBehaviour
         BindPieces();
         lastStateHash = StateHasher.HashHex(gameState, turnManager);
 
-        hudPresenter = new GameFlowHudPresenter(hud, boardState, gameState, pieceViews);
+        hudPresenter = new GameFlowHudPresenter(hud, boardState, gameState, augmentCatalog, pieceViews);
         selectionController = new GameFlowSelectionController(
             boardView,
             boardState,
