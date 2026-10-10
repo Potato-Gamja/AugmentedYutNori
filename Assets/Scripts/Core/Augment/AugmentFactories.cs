@@ -13,6 +13,7 @@ public static class AugmentFactories
         augments.Add("Monk", team => new MonkAugment(team));
         augments.Add("FriendShield", team => new FriendShieldAugment(team));
         augments.Add("Rethrow", team => new RethrowAugment(team));
+        augments.Add("Pacifist", team => new PacifistAugment(team));
         return augments;
     }
 }
