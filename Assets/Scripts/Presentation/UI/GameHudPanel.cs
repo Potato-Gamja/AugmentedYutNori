@@ -165,10 +165,10 @@ public class GameHudPanel : UIBase
         int waiting,
         int onBoard,
         int finished,
-        IReadOnlyList<string> augmentIds,
+        IReadOnlyList<string> augmentNames,
         IReadOnlyCollection<int> waitingSlots = null)
     {
-        playerView?.SetState(team, waiting, onBoard, finished, augmentIds, waitingSlots);
+        playerView?.SetState(team, waiting, onBoard, finished, augmentNames, waitingSlots);
     }
 
     public void SetSelectedWaitingPiece(int team, int slotIndex)

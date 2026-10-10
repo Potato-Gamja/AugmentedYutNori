@@ -15,6 +15,8 @@ public class LobbyPanel : UIBase
     [Header("버튼")]
     [SerializeField] private Button createRoomButton;
     [SerializeField] private Button joinRoomButton;
+    [SerializeField] private Button quickJoinButton;
+    [SerializeField] private Button mainMenuButton;
     [SerializeField] private Button settingsButton;
     [SerializeField] private Button collectionButton;
 
@@ -23,6 +25,8 @@ public class LobbyPanel : UIBase
 
     public event Action<string> CreateRoomRequested;
     public event Action<string, string> JoinRoomRequested;
+    public event Action<string> QuickJoinRequested;
+    public event Action MainMenuRequested;
     public event Action SettingsRequested;
     public event Action CollectionRequested;
 
@@ -30,6 +34,8 @@ public class LobbyPanel : UIBase
     {
         createRoomButton?.onClick.AddListener(OnCreateRoomClicked);
         joinRoomButton?.onClick.AddListener(OnJoinRoomClicked);
+        quickJoinButton?.onClick.AddListener(OnQuickJoinClicked);
+        mainMenuButton?.onClick.AddListener(OnMainMenuClicked);
         settingsButton?.onClick.AddListener(OnSettingsClicked);
         collectionButton?.onClick.AddListener(OnCollectionClicked);
     }
@@ -38,17 +44,21 @@ public class LobbyPanel : UIBase
     {
         createRoomButton?.onClick.RemoveListener(OnCreateRoomClicked);
         joinRoomButton?.onClick.RemoveListener(OnJoinRoomClicked);
+        quickJoinButton?.onClick.RemoveListener(OnQuickJoinClicked);
+        mainMenuButton?.onClick.RemoveListener(OnMainMenuClicked);
         settingsButton?.onClick.RemoveListener(OnSettingsClicked);
         collectionButton?.onClick.RemoveListener(OnCollectionClicked);
     }
 
     private void OnSettingsClicked() => SettingsRequested?.Invoke();
     private void OnCollectionClicked() => CollectionRequested?.Invoke();
+    private void OnMainMenuClicked() => MainMenuRequested?.Invoke();
 
     public void SetBusy(bool busy)
     {
         if (createRoomButton != null) createRoomButton.interactable = !busy;
         if (joinRoomButton != null) joinRoomButton.interactable = !busy;
+        if (quickJoinButton != null) quickJoinButton.interactable = !busy;
         if (nicknameInput != null) nicknameInput.interactable = !busy;
         if (roomCodeInput != null) roomCodeInput.interactable = !busy;
     }
@@ -82,4 +92,17 @@ public class LobbyPanel : UIBase
 
         JoinRoomRequested?.Invoke(nickname, roomCode);
     }
+
+    private void OnQuickJoinClicked()
+    {
+        string nickname = nicknameInput != null ? nicknameInput.text.Trim() : string.Empty;
+        if (string.IsNullOrEmpty(nickname))
+        {
+            ShowStatus("닉네임을 입력해 주세요.");
+            return;
+        }
+
+        QuickJoinRequested?.Invoke(nickname);
+    }
+
 }

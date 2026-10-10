@@ -115,7 +115,7 @@ public class SturdyCarryAugmentTests
         // 실행
         board.State.TryMove(otherPiece, YutResult.Gae.Steps(), board.Node(3), out _);
 
-        // 검증: 방패와 달리 1회용이 아니다
+        // 검증: 여러 번 막아도 사라지지 않는다
         Assert.IsTrue(board.State.Augments.Contains(sturdy));
     }
 }

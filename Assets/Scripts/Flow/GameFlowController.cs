@@ -4,6 +4,7 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 
 public enum GameFlowState { GameStart, AugmentSelect, Throw, Move, EndTurn, Finish }
 
@@ -20,6 +21,7 @@ public class GameFlowController : MonoBehaviour
     [SerializeField] private TextAsset augmentsJson;
     [SerializeField] private bool skipAugmentSelection = true;
     [SerializeField] private GameSetup setup = new GameSetup();
+    [SerializeField] private string mainMenuSceneName = "Lobby";
 
     private readonly Dictionary<Piece, PieceView> views = new();
 
@@ -34,6 +36,7 @@ public class GameFlowController : MonoBehaviour
     private GameHudPanel hud;
     private GameFlowHudPresenter hudPresenter;
     private GameFlowSelectionController selectionController;
+    private SettingsPanel settingsPanel;
     private Camera mainCamera;
     private AugmentCatalog augmentCatalog;
     private GameFlowState currentState;
@@ -84,7 +87,7 @@ public class GameFlowController : MonoBehaviour
         BindPieces();
         lastStateHash = StateHasher.HashHex(gameState, turnManager);
 
-        hudPresenter = new GameFlowHudPresenter(hud, boardState, gameState, pieceViews);
+        hudPresenter = new GameFlowHudPresenter(hud, boardState, gameState, augmentCatalog, pieceViews);
         selectionController = new GameFlowSelectionController(
             boardView,
             boardState,
@@ -97,6 +100,7 @@ public class GameFlowController : MonoBehaviour
             hudPresenter);
 
         SubscribeEvents();
+        BindSettingsPanel();
         RefreshPieceLayout();
         hudPresenter.RefreshPlayerPanels();
         ChangeState(GameFlowState.GameStart);
@@ -286,6 +290,7 @@ public class GameFlowController : MonoBehaviour
             hud.WaitingPieceClicked -= OnWaitingPieceClicked;
             hud.SettingsClicked -= OnSettingsClicked;
         }
+        if (settingsPanel != null) settingsPanel.ExitGameRequested -= OnExitGameRequested;
 
         if (gameSession != null)
         {
@@ -385,8 +390,29 @@ public class GameFlowController : MonoBehaviour
 
     private void OnSettingsClicked()
     {
-        // UI 조립 담당 확인: SettingsPanel 프리팹을 각 씬 UIManager의 prefabs 목록에 등록해야 한다.
-        uiManager?.Open<SettingsPanel>();
+        settingsPanel = uiManager?.Open<SettingsPanel>();
+        settingsPanel?.SetExitGameVisible(true);
+    }
+
+    private void BindSettingsPanel()
+    {
+        settingsPanel = uiManager?.Get<SettingsPanel>();
+        if (settingsPanel == null) return;
+        settingsPanel.SetExitGameVisible(true);
+        settingsPanel.ExitGameRequested += OnExitGameRequested;
+    }
+
+    private void OnExitGameRequested()
+    {
+        settingsPanel?.Close();
+        LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
+        if (coordinator != null)
+        {
+            coordinator.LeaveGameToMainMenu();
+            return;
+        }
+
+        SceneManager.LoadScene(mainMenuSceneName);
     }
 
     // 로비/GAME_START 담당 연결 지점:
@@ -418,9 +444,6 @@ public class GameFlowController : MonoBehaviour
         foreach (PieceView view in pieceViews)
             if (view != null && view.Team == team) view.SetWorldVisible(false);
 
-        // Core/Turn 담당 연결 지점:
-        // BoardState.RemoveTeam(team)과 TurnManager의 제거 팀 건너뛰기가 적용된 뒤
-        // 서버 TURN_CHANGED를 받아 다음 차례를 확정한다. 클라이언트가 임의로 턴을 계산하지 않는다.
         hud?.SetInstruction($"플레이어 {team + 1}이 게임에서 나갔습니다.");
     }
 

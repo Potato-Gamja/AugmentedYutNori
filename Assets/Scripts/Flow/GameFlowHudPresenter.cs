@@ -10,17 +10,20 @@ public sealed class GameFlowHudPresenter
     private readonly GameHudPanel hud;
     private readonly BoardState boardState;
     private readonly GameState gameState;
+    private readonly AugmentCatalog augmentCatalog;
     private readonly IReadOnlyList<PieceView> pieceViews;
 
     public GameFlowHudPresenter(
         GameHudPanel hud,
         BoardState boardState,
         GameState gameState,
+        AugmentCatalog augmentCatalog,
         IReadOnlyList<PieceView> pieceViews)
     {
         this.hud = hud;
         this.boardState = boardState;
         this.gameState = gameState;
+        this.augmentCatalog = augmentCatalog;
         this.pieceViews = pieceViews;
     }
 
@@ -53,11 +56,11 @@ public sealed class GameFlowHudPresenter
                 else if (piece.IsFinished) finished++;
             }
 
-            var augmentIds = new List<string>();
+            var augmentNames = new List<string>();
             foreach (IAugment augment in boardState.GetAugments(team))
-                augmentIds.Add(augment.Id);
+                augmentNames.Add(augmentCatalog.Find(augment.Id).name);
 
-            hud.SetPlayerState(team, waiting, onBoard, finished, augmentIds, waitingSlots);
+            hud.SetPlayerState(team, waiting, onBoard, finished, augmentNames, waitingSlots);
         }
     }
 

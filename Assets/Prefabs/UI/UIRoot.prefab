@@ -342,5 +342,7 @@ MonoBehaviour:
   - {fileID: 7607770108746903167, guid: 54c9a5e9a68902c41b85efb1b9defc94, type: 3}
   - {fileID: 6794683207476624011, guid: ccaad1b749088ac42b2cce681fae9d11, type: 3}
   - {fileID: 8164077760168307430, guid: 235c91b5bfd8e8942853909173151c68, type: 3}
+  - {fileID: 8244533363831997415, guid: 627aca849d82a7a4e9d816b1248b8f74, type: 3}
+  - {fileID: 8212787305544569168, guid: f860bb00b383bdf479a9eea8fca3f906, type: 3}
   panelRoot: {fileID: 4442013605130105907}
   popupRoot: {fileID: 907884088127722632}

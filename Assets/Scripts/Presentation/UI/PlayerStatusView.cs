@@ -88,7 +88,7 @@ public sealed class PlayerStatusView : MonoBehaviour
         int waiting,
         int onBoard,
         int finished,
-        IReadOnlyList<string> augmentIds,
+        IReadOnlyList<string> augmentNames,
         IReadOnlyCollection<int> waitingSlots = null)
     {
         Transform panel = FindPanel(team);
@@ -122,7 +122,7 @@ public sealed class PlayerStatusView : MonoBehaviour
             Transform slot = panel.Find($"AugmentSlot_{i}");
             if (slot == null) continue;
             TMP_Text label = GetOrCreateAugmentLabel(slot);
-            label.text = augmentIds != null && i < augmentIds.Count ? ShortAugmentName(augmentIds[i]) : "";
+            label.text = augmentNames != null && i < augmentNames.Count ? augmentNames[i] : string.Empty;
         }
     }
 
@@ -237,7 +237,7 @@ public sealed class PlayerStatusView : MonoBehaviour
         TMP_Text label = labelObject.GetComponent<TMP_Text>();
         label.alignment = TextAlignmentOptions.Right;
         label.fontSize = 18f;
-        label.fontStyle = FontStyles.Bold;
+        label.fontStyle = FontStyles.Normal;
         label.raycastTarget = false;
         return label;
     }
@@ -382,21 +382,6 @@ public sealed class PlayerStatusView : MonoBehaviour
             1 => "파랑",
             2 => "초록",
             _ => "노랑"
-        };
-    }
-
-    private static string ShortAugmentName(string id)
-    {
-        if (string.IsNullOrEmpty(id)) return "";
-        return id switch
-        {
-            "BackDoSwitch" => "빽도 전환",
-            "QuickStart" => "빠른 출발",
-            "WeakBoost" => "잔걸음 강화",
-            "Shield" => "방패",
-            "SturdyCarry" => "튼튼한 업기",
-            "Rethrow" => "다시 굴리기",
-            _ => id
         };
     }
 }
