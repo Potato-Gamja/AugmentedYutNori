@@ -5,6 +5,9 @@ public class FriendShieldAugment : Augment
 {
     public override string Id => "FriendShield";
 
+    // 암살자(10)가 잡을 말을 넣은 뒤에도 업힌 말 중 한 마리만 잡히도록 마지막에 실행한다
+    public override int Priority => 20;
+
     public FriendShieldAugment(int ownerTeam) : base(ownerTeam) { }
 
     public override void ModifyCaptures(AugmentContext context, List<Piece> captured)
