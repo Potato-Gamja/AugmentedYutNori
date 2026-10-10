@@ -11,7 +11,6 @@ public static class AugmentFactories
         augments.Add("BackDoSwitch", team => new BackDoSwitchAugment(team));
         augments.Add("QuickStart", team => new QuickStartAugment(team));
         augments.Add("WeakBoost", team => new WeakBoostAugment(team));
-        augments.Add("Shield", team => new ShieldAugment(team));
         augments.Add("SturdyCarry", team => new SturdyCarryAugment(team));
         augments.Add("Rethrow", team => new RethrowAugment(team));
         return augments;

@@ -5,7 +5,7 @@ using System.Collections.Generic;
 // 말 하나가 움직일 때 호출 순서
 //   1. ModifyMoveCount : 굴린 칸 수 보정           (예: 빽도 전환, 잔걸음 강화, 빠른 출발)
 //   2. ModifyPaths     : 계산된 경로 추가/제거      (예: 통행 금지 칸, 추가 지름길)
-//   3. ModifyCaptures  : 잡힐 말 목록 보정          (예: 방패, 튼튼한 업기)
+//   3. ModifyCaptures  : 잡힐 말 목록 보정          (예: 튼튼한 업기)
 //   4. OnMoved         : 이동이 끝난 뒤 효과        (예: 도착 칸 효과)
 //
 // 증강은 모든 팀의 이동에 호출된다. 내 말에만 적용하려면 context.IsMine(this)로 확인할 것.
@@ -15,7 +15,7 @@ using System.Collections.Generic;
 // 새 증강은 아래 Augment 클래스를 상속해 필요한 단계만 override 한다.
 public interface IAugment
 {
-    string Id { get; }      // 증강 종류 식별자. 네트워크/저장에서 어떤 증강인지 주고받을 때 사용 (예: "Shield")
+    string Id { get; }      // 증강 종류 식별자. 네트워크/저장에서 어떤 증강인지 주고받을 때 사용 (예: "Rethrow")
     int OwnerTeam { get; }  // 이 증강을 가진 팀
     int Priority { get; }   // 호출 순서. 낮을수록 먼저, 같으면 등록 순서
 
