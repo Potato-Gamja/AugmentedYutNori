@@ -6,11 +6,11 @@ using System.Collections.Generic;
 //   1. ModifyMoveCount : 굴린 칸 수 보정           (예: 빽도 전환, 잔걸음 강화, 빠른 출발)
 //   2. ModifyPaths     : 계산된 경로 추가/제거      (예: 통행 금지 칸, 추가 지름길)
 //   3. ModifyCaptures  : 잡힐 말 목록 보정          (예: 방패, 튼튼한 업기)
-//   4. OnMoved         : 이동이 끝난 뒤 효과        (예: 1회용 증강 소모, 도착 칸 효과)
+//   4. OnMoved         : 이동이 끝난 뒤 효과        (예: 도착 칸 효과)
 //
 // 증강은 모든 팀의 이동에 호출된다. 내 말에만 적용하려면 context.IsMine(this)로 확인할 것.
 // 멀티플레이: 모든 기기에서 같은 결과가 나오도록 결정적으로 구현한다 (UnityEngine.Random, Time 등 사용 금지).
-// 호출 도중 context.State.RemoveAugment(this)로 자기 자신을 제거해도 안전하다 (1회용 증강).
+// 호출 도중 context.State.RemoveAugment(this)로 자기 자신을 제거해도 안전하다.
 //
 // 새 증강은 아래 Augment 클래스를 상속해 필요한 단계만 override 한다.
 public interface IAugment
