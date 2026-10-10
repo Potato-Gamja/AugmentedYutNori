@@ -14,6 +14,8 @@ public class GameState
     public int? WinnerTeam { get; set; }
     // 이번 턴에 말을 한 번이라도 움직였는지
     public bool HasMovedThisTurn { get; set; }
+    // 이번 턴에 야바위꾼(다시 던지기)을 썼는지 (턴당 1번)
+    public bool HasRethrownThisTurn { get; set; }
 
     public GameState(BoardState board)  
     {

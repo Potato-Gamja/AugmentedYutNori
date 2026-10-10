@@ -3,7 +3,7 @@
   "augments": [
     { "id": "Contrarian", "name": "청개구리", "description": "빽도가 나오면 뒤로 가는 대신 앞으로 한 칸 갈 수 있다" },
     { "id": "Sprinter", "name": "스프린터", "description": "새 말을 판에 올릴 때 한 칸 더 간다" },
-    { "id": "Rethrow", "name": "다시 던지기", "description": "결과가 마음에 안 들면 한 번 더!" },
+    { "id": "Rethrow", "name": "야바위꾼", "description": "턴의 첫 결과가 마음에 안 들면 한 번 더!" },
     { "id": "FriendShield", "name": "프렌드쉴드", "description": "업힌 말이 잡혀도 맨 위 한 마리만 출발점으로 돌아간다" },
     { "id": "Monk", "name": "수행자", "description": "도·개가 나오면 한 칸 더 간다" }
   ]

@@ -98,14 +98,9 @@ public sealed class GameFlowHudPresenter
 
     public bool CanUseRethrow(int team)
     {
-        if (gameState == null || gameState.StoredResults.Count == 0) return false;
+        if (gameState == null) return false;
         RethrowAugment rethrow = GetRethrowAugment(team);
-        return rethrow != null &&
-               !gameState.HasMovedThisTurn &&
-               rethrow.CanUse(
-                   boardState,
-                   team,
-                   gameState.StoredResults[gameState.StoredResults.Count - 1]);
+        return rethrow != null && rethrow.CanUse(gameState, team);
     }
 
     public static string MoveOptionLabel(MoveOption option)

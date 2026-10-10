@@ -22,6 +22,7 @@ public class TurnManager
         state.RemainingThrows = 1;
         state.StoredResults.Clear();
         state.HasMovedThisTurn = false;
+        state.HasRethrownThisTurn = false;
     }
 
     // 윷을 한 번 던졌을 때 호출
@@ -90,6 +91,7 @@ public class TurnManager
         // 새로운 턴이므로 이전 턴에서 사용하던 상태 초기화
         state.StoredResults.Clear();
         state.HasMovedThisTurn = false;
+        state.HasRethrownThisTurn = false;
     }
 
 
