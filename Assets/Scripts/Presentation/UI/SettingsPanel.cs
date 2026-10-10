@@ -1,3 +1,4 @@
+using System;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -9,9 +10,12 @@ public sealed class SettingsPanel : UIBase
     [SerializeField] private Slider bgmSlider;
     [SerializeField] private Slider sfxSlider;
     [SerializeField] private Button closeButton;
+    [SerializeField] private Button exitGameButton;
     [SerializeField] private TMP_Text masterValueText;
     [SerializeField] private TMP_Text bgmValueText;
     [SerializeField] private TMP_Text sfxValueText;
+
+    public event Action ExitGameRequested;
 
     public override void Init()
     {
@@ -22,6 +26,7 @@ public sealed class SettingsPanel : UIBase
         bgmSlider?.onValueChanged.AddListener(OnVolumeChanged);
         sfxSlider?.onValueChanged.AddListener(OnVolumeChanged);
         closeButton?.onClick.AddListener(Close);
+        exitGameButton?.onClick.AddListener(OnExitGameClicked);
         RefreshValues();
     }
 
@@ -33,6 +38,7 @@ public sealed class SettingsPanel : UIBase
         bgmSlider?.onValueChanged.RemoveListener(OnVolumeChanged);
         sfxSlider?.onValueChanged.RemoveListener(OnVolumeChanged);
         closeButton?.onClick.RemoveListener(Close);
+        exitGameButton?.onClick.RemoveListener(OnExitGameClicked);
     }
 
     private void OnVolumeChanged(float _)
@@ -58,4 +64,11 @@ public sealed class SettingsPanel : UIBase
         if (bgmValueText != null) bgmValueText.text = $"{Mathf.RoundToInt(AudioSettings.Bgm * 100f)}%";
         if (sfxValueText != null) sfxValueText.text = $"{Mathf.RoundToInt(AudioSettings.Sfx * 100f)}%";
     }
+
+    public void SetExitGameVisible(bool visible)
+    {
+        if (exitGameButton != null) exitGameButton.gameObject.SetActive(visible);
+    }
+
+    private void OnExitGameClicked() => ExitGameRequested?.Invoke();
 }

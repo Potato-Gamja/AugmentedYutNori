@@ -41,7 +41,7 @@ public static class SettingsUiAssembler
         Image cardImage = card.AddComponent<Image>();
         cardImage.color = Paper;
 
-        CreateText("Title", card.transform, "설정", 38f, FontStyles.Bold,
+        CreateText("Title", card.transform, "설정", 38f, FontStyles.Normal,
             new Vector2(0f, 170f), new Vector2(520f, 60f));
         CreateText("Description", card.transform, "소리 크기를 조절할 수 있습니다.", 20f, FontStyles.Normal,
             new Vector2(0f, 125f), new Vector2(520f, 40f));
@@ -155,8 +155,8 @@ public static class SettingsUiAssembler
 
     private static Slider CreateSlider(Transform parent, string name, string title, float y, out TMP_Text valueText)
     {
-        CreateText(name + "Label", parent, title, 24f, FontStyles.Bold, new Vector2(-190f, y + 28f), new Vector2(220f, 40f));
-        valueText = CreateText(name + "Value", parent, "100%", 22f, FontStyles.Bold, new Vector2(225f, y + 28f), new Vector2(90f, 40f));
+        CreateText(name + "Label", parent, title, 24f, FontStyles.Normal, new Vector2(-190f, y + 28f), new Vector2(220f, 40f));
+        valueText = CreateText(name + "Value", parent, "100%", 22f, FontStyles.Normal, new Vector2(225f, y + 28f), new Vector2(90f, 40f));
 
         GameObject sliderObject = UiObject(name, parent);
         RectTransform rect = sliderObject.GetComponent<RectTransform>();
@@ -205,7 +205,7 @@ public static class SettingsUiAssembler
         colors.highlightedColor = new Color(0.18f, 0.68f, 0.44f, 1f);
         colors.pressedColor = new Color(0.08f, 0.42f, 0.25f, 1f);
         button.colors = colors;
-        TMP_Text label = CreateText("Label", buttonObject.transform, text, 23f, FontStyles.Bold, Vector2.zero, size);
+        TMP_Text label = CreateText("Label", buttonObject.transform, text, 23f, FontStyles.Normal, Vector2.zero, size);
         label.color = Color.white;
         return button;
     }

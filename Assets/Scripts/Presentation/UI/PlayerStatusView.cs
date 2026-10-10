@@ -237,7 +237,7 @@ public sealed class PlayerStatusView : MonoBehaviour
         TMP_Text label = labelObject.GetComponent<TMP_Text>();
         label.alignment = TextAlignmentOptions.Right;
         label.fontSize = 18f;
-        label.fontStyle = FontStyles.Bold;
+        label.fontStyle = FontStyles.Normal;
         label.raycastTarget = false;
         return label;
     }

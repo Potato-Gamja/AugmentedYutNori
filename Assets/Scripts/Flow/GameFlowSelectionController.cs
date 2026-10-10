@@ -254,7 +254,7 @@ public sealed class GameFlowSelectionController
         text.characterSize = 0.065f;
         text.anchor = TextAnchor.MiddleCenter;
         text.alignment = TextAlignment.Center;
-        text.fontStyle = FontStyle.Bold;
+        text.fontStyle = FontStyle.Normal;
 
         text.text = options.Count > 1
             ? "선택"
