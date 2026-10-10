@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 
 // 빽도가 나오면 뒤로 1칸 대신 앞으로 1칸(도)으로 가는 경로도 고를 수 있게 하는 증강
-public class BackDoSwitchAugment : Augment
+public class ContrarianAugment : Augment
 {
-    public override string Id => "BackDoSwitch";
+    public override string Id => "Contrarian";
 
-    public BackDoSwitchAugment(int ownerTeam) : base(ownerTeam) { }
+    public ContrarianAugment(int ownerTeam) : base(ownerTeam) { }
 
     public override void ModifyPaths(AugmentContext context, List<BoardPath> paths)
     {

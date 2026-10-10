@@ -1,9 +1,9 @@
 // 도·개가 나오면 1칸 더 이동하는 증강
-public class WeakBoostAugment : Augment
+public class MonkAugment : Augment
 {
-    public override string Id => "WeakBoost";
+    public override string Id => "Monk";
 
-    public WeakBoostAugment(int ownerTeam) : base(ownerTeam) { }
+    public MonkAugment(int ownerTeam) : base(ownerTeam) { }
 
     public override int ModifyMoveCount(AugmentContext context, int moveCount)
     {

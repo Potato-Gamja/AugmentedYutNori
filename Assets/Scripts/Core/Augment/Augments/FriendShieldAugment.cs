@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 
 // 업힌 내 말이 잡혀도 한 마리만 대기석으로 돌아가게 하는 증강
-public class SturdyCarryAugment : Augment
+public class FriendShieldAugment : Augment
 {
-    public override string Id => "SturdyCarry";
+    public override string Id => "FriendShield";
 
-    public SturdyCarryAugment(int ownerTeam) : base(ownerTeam) { }
+    public FriendShieldAugment(int ownerTeam) : base(ownerTeam) { }
 
     public override void ModifyCaptures(AugmentContext context, List<Piece> captured)
     {

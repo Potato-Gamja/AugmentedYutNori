@@ -8,10 +8,10 @@ public static class AugmentFactories
     {
         var augments = new Dictionary<string, Func<int, IAugment>>();
 
-        augments.Add("BackDoSwitch", team => new BackDoSwitchAugment(team));
-        augments.Add("QuickStart", team => new QuickStartAugment(team));
-        augments.Add("WeakBoost", team => new WeakBoostAugment(team));
-        augments.Add("SturdyCarry", team => new SturdyCarryAugment(team));
+        augments.Add("Contrarian", team => new ContrarianAugment(team));
+        augments.Add("Sprinter", team => new SprinterAugment(team));
+        augments.Add("Monk", team => new MonkAugment(team));
+        augments.Add("FriendShield", team => new FriendShieldAugment(team));
         augments.Add("Rethrow", team => new RethrowAugment(team));
         return augments;
     }

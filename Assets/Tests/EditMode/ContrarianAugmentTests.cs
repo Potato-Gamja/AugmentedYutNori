@@ -1,8 +1,8 @@
-// 빽도 전환(BackDoSwitch): 내 말이 빽도를 내면 앞으로 1칸 경로도 고를 수 있는지 검증하는 테스트
+// 청개구리(Contrarian): 내 말이 빽도를 내면 앞으로 1칸 경로도 고를 수 있는지 검증하는 테스트
 using System.Collections.Generic;
 using NUnit.Framework;
 
-public class BackDoSwitchAugmentTests
+public class ContrarianAugmentTests
 {
     private const int MyTeam = 0;
     private const int OtherTeam = 1;
@@ -14,7 +14,7 @@ public class BackDoSwitchAugmentTests
         var board = new TestBoard();
         Piece piece = board.State.AddPiece(0, MyTeam);
         board.State.TryMove(piece, 3, board.Node(3), out _);
-        board.State.AddAugment(new BackDoSwitchAugment(MyTeam));
+        board.State.AddAugment(new ContrarianAugment(MyTeam));
 
         // 실행
         List<BoardPath> paths = board.State.GetMovePaths(piece, YutResult.BackDo.Steps());
@@ -32,7 +32,7 @@ public class BackDoSwitchAugmentTests
         var board = new TestBoard();
         Piece piece = board.State.AddPiece(0, MyTeam);
         board.State.TryMove(piece, 3, board.Node(3), out _);
-        board.State.AddAugment(new BackDoSwitchAugment(MyTeam));
+        board.State.AddAugment(new ContrarianAugment(MyTeam));
 
         // 실행: 빽도를 앞으로 1칸으로 사용
         bool moved = board.State.TryMove(piece, YutResult.BackDo.Steps(), board.Node(4), out MoveResult result);
@@ -50,7 +50,7 @@ public class BackDoSwitchAugmentTests
         var board = new TestBoard();
         Piece piece = board.State.AddPiece(1, OtherTeam);
         board.State.TryMove(piece, 3, board.Node(3), out _);
-        board.State.AddAugment(new BackDoSwitchAugment(MyTeam));
+        board.State.AddAugment(new ContrarianAugment(MyTeam));
 
         // 실행
         List<BoardPath> paths = board.State.GetMovePaths(piece, YutResult.BackDo.Steps());
@@ -67,7 +67,7 @@ public class BackDoSwitchAugmentTests
         var board = new TestBoard();
         Piece piece = board.State.AddPiece(0, MyTeam);
         board.State.TryMove(piece, 3, board.Node(3), out _);
-        board.State.AddAugment(new BackDoSwitchAugment(MyTeam));
+        board.State.AddAugment(new ContrarianAugment(MyTeam));
 
         // 실행
         List<BoardPath> paths = board.State.GetMovePaths(piece, YutResult.Do.Steps());
@@ -77,14 +77,14 @@ public class BackDoSwitchAugmentTests
         Assert.AreEqual(board.Node(4), paths[0].Destination);
     }
 
-    // 기획: 빽도 전환 증강이 있으면 대기 말도 빽도로 앞 1칸 출발할 수 있다
+    // 기획: 청개구리 증강이 있으면 대기 말도 빽도로 앞 1칸 출발할 수 있다
     [Test]
     public void WaitingPiece_BackDo_CanStartForward()
     {
         // 준비
         var board = new TestBoard();
         Piece piece = board.State.AddPiece(0, MyTeam);
-        board.State.AddAugment(new BackDoSwitchAugment(MyTeam));
+        board.State.AddAugment(new ContrarianAugment(MyTeam));
 
         // 실행
         List<BoardPath> paths = board.State.GetMovePaths(piece, YutResult.BackDo.Steps());

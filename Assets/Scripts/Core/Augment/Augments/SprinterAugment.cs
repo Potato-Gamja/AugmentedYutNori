@@ -1,9 +1,9 @@
 // 새 말을 판에 올릴 때 이동 칸 수 +1
-public class QuickStartAugment : Augment
+public class SprinterAugment : Augment
 {
-    public override string Id => "QuickStart";
+    public override string Id => "Sprinter";
 
-    public QuickStartAugment(int ownerTeam) : base(ownerTeam) { }
+    public SprinterAugment(int ownerTeam) : base(ownerTeam) { }
 
     public override int ModifyMoveCount(AugmentContext context, int moveCount)
     {

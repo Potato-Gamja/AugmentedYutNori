@@ -1,7 +1,7 @@
-// 빠른 출발(QuickStart): 대기 중인 내 말이 판에 나올 때 1칸 더 가는지 검증하는 테스트
+// 스프린터(Sprinter): 대기 중인 내 말이 판에 나올 때 1칸 더 가는지 검증하는 테스트
 using NUnit.Framework;
 
-public class QuickStartAugmentTests
+public class SprinterAugmentTests
 {
     private const int MyTeam = 0;
     private const int OtherTeam = 1;
@@ -12,7 +12,7 @@ public class QuickStartAugmentTests
         // 준비
         var board = new TestBoard();
         Piece piece = board.State.AddPiece(0, MyTeam);
-        board.State.AddAugment(new QuickStartAugment(MyTeam));
+        board.State.AddAugment(new SprinterAugment(MyTeam));
 
         // 실행
         bool moved = board.State.TryMove(piece, YutResult.Do.Steps(), board.Node(2), out MoveResult result);
@@ -29,7 +29,7 @@ public class QuickStartAugmentTests
         // 준비
         var board = new TestBoard();
         Piece piece = board.State.AddPiece(0, MyTeam);
-        board.State.AddAugment(new QuickStartAugment(MyTeam));
+        board.State.AddAugment(new SprinterAugment(MyTeam));
 
         // 실행
         int count = board.State.GetModifiedMoveCount(piece, YutResult.Mo.Steps());
@@ -45,7 +45,7 @@ public class QuickStartAugmentTests
         var board = new TestBoard();
         Piece piece = board.State.AddPiece(0, MyTeam);
         board.State.TryMove(piece, 3, board.Node(3), out _);
-        board.State.AddAugment(new QuickStartAugment(MyTeam));
+        board.State.AddAugment(new SprinterAugment(MyTeam));
 
         // 실행
         int count = board.State.GetModifiedMoveCount(piece, YutResult.Do.Steps());
@@ -60,7 +60,7 @@ public class QuickStartAugmentTests
         // 준비: 증강은 내 팀, 대기 중인 말은 상대 팀
         var board = new TestBoard();
         Piece piece = board.State.AddPiece(1, OtherTeam);
-        board.State.AddAugment(new QuickStartAugment(MyTeam));
+        board.State.AddAugment(new SprinterAugment(MyTeam));
 
         // 실행
         int count = board.State.GetModifiedMoveCount(piece, YutResult.Do.Steps());
@@ -75,7 +75,7 @@ public class QuickStartAugmentTests
         // 준비
         var board = new TestBoard();
         Piece piece = board.State.AddPiece(0, MyTeam);
-        board.State.AddAugment(new QuickStartAugment(MyTeam));
+        board.State.AddAugment(new SprinterAugment(MyTeam));
 
         // 실행
         int count = board.State.GetModifiedMoveCount(piece, YutResult.BackDo.Steps());

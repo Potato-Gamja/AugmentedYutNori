@@ -1,7 +1,7 @@
 using NUnit.Framework;
 
-// 잔걸음 강화(WeakBoost): 내 말이 도·개를 내면 1칸 더 가는지 검증하는 테스트
-public class WeakBoostAugmentTests
+// 수행자(Monk): 내 말이 도·개를 내면 1칸 더 가는지 검증하는 테스트
+public class MonkAugmentTests
 {
     private const int MyTeam = 0;
     private const int OtherTeam = 1;
@@ -12,7 +12,7 @@ public class WeakBoostAugmentTests
         // 준비
         var board = new TestBoard();
         Piece piece = board.State.AddPiece(0, MyTeam);
-        board.State.AddAugment(new WeakBoostAugment(MyTeam));
+        board.State.AddAugment(new MonkAugment(MyTeam));
 
         // 실행
         bool moved = board.State.TryMove(piece, YutResult.Do.Steps(), board.Node(2), out MoveResult result);
@@ -29,7 +29,7 @@ public class WeakBoostAugmentTests
         // 준비
         var board = new TestBoard();
         Piece piece = board.State.AddPiece(0, MyTeam);
-        board.State.AddAugment(new WeakBoostAugment(MyTeam));
+        board.State.AddAugment(new MonkAugment(MyTeam));
 
         // 실행
         int count = board.State.GetModifiedMoveCount(piece, YutResult.Gae.Steps());
@@ -44,7 +44,7 @@ public class WeakBoostAugmentTests
         // 준비
         var board = new TestBoard();
         Piece piece = board.State.AddPiece(0, MyTeam);
-        board.State.AddAugment(new WeakBoostAugment(MyTeam));
+        board.State.AddAugment(new MonkAugment(MyTeam));
 
         // 실행
         int count = board.State.GetModifiedMoveCount(piece, YutResult.Geol.Steps());
@@ -60,7 +60,7 @@ public class WeakBoostAugmentTests
         var board = new TestBoard();
         Piece piece = board.State.AddPiece(0, MyTeam);
         board.State.TryMove(piece, 3, board.Node(3), out _);
-        board.State.AddAugment(new WeakBoostAugment(MyTeam));
+        board.State.AddAugment(new MonkAugment(MyTeam));
 
         // 실행
         int count = board.State.GetModifiedMoveCount(piece, YutResult.BackDo.Steps());
@@ -75,7 +75,7 @@ public class WeakBoostAugmentTests
         // 준비: 증강은 내 팀, 움직이는 말은 상대 팀
         var board = new TestBoard();
         Piece piece = board.State.AddPiece(1, OtherTeam);
-        board.State.AddAugment(new WeakBoostAugment(MyTeam));
+        board.State.AddAugment(new MonkAugment(MyTeam));
 
         // 실행
         int count = board.State.GetModifiedMoveCount(piece, YutResult.Do.Steps());

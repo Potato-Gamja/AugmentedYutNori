@@ -6,7 +6,7 @@ public class AugmentPoolTests
 {
     // 등록 순서. 랜덤 값 0.0이면 이 순서 그대로 후보가 나온다
     private static readonly string[] AllIds =
-        { "WeakBoost", "SturdyCarry", "QuickStart", "Rethrow", "BackDoSwitch" };
+        { "Monk", "FriendShield", "Sprinter", "Rethrow", "Contrarian" };
 
     private AugmentPool pool;
 
@@ -20,11 +20,11 @@ public class AugmentPoolTests
     private static AugmentPool MakePool(IRandomProvider random)
     {
         var augmentPool = new AugmentPool(random);
-        augmentPool.Register("WeakBoost", team => new WeakBoostAugment(team));
-        augmentPool.Register("SturdyCarry", team => new SturdyCarryAugment(team));
-        augmentPool.Register("QuickStart", team => new QuickStartAugment(team));
+        augmentPool.Register("Monk", team => new MonkAugment(team));
+        augmentPool.Register("FriendShield", team => new FriendShieldAugment(team));
+        augmentPool.Register("Sprinter", team => new SprinterAugment(team));
         augmentPool.Register("Rethrow", team => new RethrowAugment(team));
-        augmentPool.Register("BackDoSwitch", team => new BackDoSwitchAugment(team));
+        augmentPool.Register("Contrarian", team => new ContrarianAugment(team));
         return augmentPool;
     }
 
@@ -63,29 +63,29 @@ public class AugmentPoolTests
     {
         // 준비
         pool.SetOffered(0, AllIds);
-        pool.Pick(0, "SturdyCarry");
+        pool.Pick(0, "FriendShield");
 
         // 실행: 남은 것 전부 요청 (무작위여도 결과가 항상 같다)
         var ids = pool.GetRandomIds(0, 5);
 
         // 검증
         Assert.AreEqual(4, ids.Count);
-        CollectionAssert.DoesNotContain(ids, "SturdyCarry");
+        CollectionAssert.DoesNotContain(ids, "FriendShield");
     }
 
     [Test]
     public void Pick_DoesNotAffectOtherTeam()
     {
-        // 준비: 팀 0이 튼튼한 업기를 뽑음
+        // 준비: 팀 0이 프렌드쉴드를 뽑음
         pool.SetOffered(0, AllIds);
-        pool.Pick(0, "SturdyCarry");
+        pool.Pick(0, "FriendShield");
 
         // 실행: 팀 1이 요청
         var ids = pool.GetRandomIds(1, 5);
 
-        // 검증: 뽑은 기록은 팀별로 따로라 팀 1은 튼튼한 업기를 받을 수 있다
+        // 검증: 뽑은 기록은 팀별로 따로라 팀 1은 프렌드쉴드를 받을 수 있다
         Assert.AreEqual(5, ids.Count);
-        CollectionAssert.Contains(ids, "SturdyCarry");
+        CollectionAssert.Contains(ids, "FriendShield");
     }
 
     [Test]
@@ -93,11 +93,11 @@ public class AugmentPoolTests
     {
         // 실행
         pool.SetOffered(1, AllIds);
-        IAugment augment = pool.Pick(1, "SturdyCarry");
+        IAugment augment = pool.Pick(1, "FriendShield");
 
         // 검증
-        Assert.IsInstanceOf<SturdyCarryAugment>(augment);
-        Assert.AreEqual("SturdyCarry", augment.Id);
+        Assert.IsInstanceOf<FriendShieldAugment>(augment);
+        Assert.AreEqual("FriendShield", augment.Id);
         Assert.AreEqual(1, augment.OwnerTeam);
     }
 
@@ -137,7 +137,7 @@ public class AugmentPoolTests
         var ids = zeroPool.GetRandomIds(0, 3);
 
         // 검증: 등록 순서 앞에서 3개, 순서까지 같다
-        CollectionAssert.AreEqual(new[] { "WeakBoost", "SturdyCarry", "QuickStart" }, ids);
+        CollectionAssert.AreEqual(new[] { "Monk", "FriendShield", "Sprinter" }, ids);
     }
 
     [Test]
@@ -150,7 +150,7 @@ public class AugmentPoolTests
         var ids = highPool.GetRandomIds(0, 1);
 
         // 검증: 범위를 벗어나지 않고 마지막 증강이 나온다
-        CollectionAssert.AreEqual(new[] { "BackDoSwitch" }, ids);
+        CollectionAssert.AreEqual(new[] { "Contrarian" }, ids);
     }
 
     [Test]
@@ -187,25 +187,25 @@ public class AugmentPoolTests
     public void Pick_WithoutChoices_Throws()
     {
         // 실행 + 검증: 후보를 제시하지 않고 고르면 실패
-        Assert.Throws<InvalidOperationException>(() => pool.Pick(0, "SturdyCarry"));
+        Assert.Throws<InvalidOperationException>(() => pool.Pick(0, "FriendShield"));
     }
 
     [Test]
     public void Pick_NotInChoices_Throws()
     {
         // 준비
-        pool.SetOffered(0, new[] { "SturdyCarry", "Rethrow" });
+        pool.SetOffered(0, new[] { "FriendShield", "Rethrow" });
 
         // 실행 + 검증: 등록은 돼 있지만 제시되지 않은 증강
-        Assert.Throws<ArgumentException>(() => pool.Pick(0, "WeakBoost"));
+        Assert.Throws<ArgumentException>(() => pool.Pick(0, "Monk"));
     }
 
     [Test]
     public void Pick_Twice_Throws()
     {
         // 준비: 한 번 고르면 후보가 비워진다
-        pool.SetOffered(0, new[] { "SturdyCarry", "Rethrow" });
-        pool.Pick(0, "SturdyCarry");
+        pool.SetOffered(0, new[] { "FriendShield", "Rethrow" });
+        pool.Pick(0, "FriendShield");
 
         // 실행 + 검증: 같은 후보로 한 번 더 고를 수 없다
         Assert.Throws<InvalidOperationException>(() => pool.Pick(0, "Rethrow"));
@@ -215,10 +215,10 @@ public class AugmentPoolTests
     public void Pick_OtherTeamChoices_Throws()
     {
         // 준비: 팀 0에게만 후보 제시
-        pool.SetOffered(0, new[] { "SturdyCarry" });
+        pool.SetOffered(0, new[] { "FriendShield" });
 
         // 실행 + 검증: 팀 1은 후보가 없다
-        Assert.Throws<InvalidOperationException>(() => pool.Pick(1, "SturdyCarry"));
+        Assert.Throws<InvalidOperationException>(() => pool.Pick(1, "FriendShield"));
     }
 
     [Test]
@@ -239,7 +239,7 @@ public class AugmentPoolTests
     public void SetOffered_ThenPick_Succeeds()
     {
         // 준비
-        pool.SetOffered(0, new[] { "SturdyCarry", "Rethrow", "QuickStart" });
+        pool.SetOffered(0, new[] { "FriendShield", "Rethrow", "Sprinter" });
 
         // 실행
         IAugment augment = pool.Pick(0, "Rethrow");
@@ -266,32 +266,32 @@ public class AugmentPoolTests
     [Test]
     public void SetOffered_AlreadyPickedId_Throws()
     {
-        // 준비: 팀 0이 튼튼한 업기를 이미 고름
-        pool.SetOffered(0, new[] { "SturdyCarry" });
-        pool.Pick(0, "SturdyCarry");
+        // 준비: 팀 0이 프렌드쉴드를 이미 고름
+        pool.SetOffered(0, new[] { "FriendShield" });
+        pool.Pick(0, "FriendShield");
 
         // 실행 + 검증
-        Assert.Throws<ArgumentException>(() => pool.SetOffered(0, new[] { "SturdyCarry" }));
+        Assert.Throws<ArgumentException>(() => pool.SetOffered(0, new[] { "FriendShield" }));
     }
 
     [Test]
     public void SetOffered_DuplicateId_Throws()
     {
         // 실행 + 검증
-        Assert.Throws<ArgumentException>(() => pool.SetOffered(0, new[] { "SturdyCarry", "SturdyCarry" }));
+        Assert.Throws<ArgumentException>(() => pool.SetOffered(0, new[] { "FriendShield", "FriendShield" }));
     }
 
     [Test]
     public void SetOffered_Invalid_KeepsPreviousChoices()
     {
         // 준비: 정상 후보를 먼저 저장
-        pool.SetOffered(0, new[] { "SturdyCarry" });
+        pool.SetOffered(0, new[] { "FriendShield" });
 
         // 실행: 잘못된 후보는 예외로 거부된다
         Assert.Throws<ArgumentException>(() => pool.SetOffered(0, new[] { "Teleport" }));
 
         // 검증: 이전 후보가 그대로 남아 있다
-        Assert.DoesNotThrow(() => pool.Pick(0, "SturdyCarry"));
+        Assert.DoesNotThrow(() => pool.Pick(0, "FriendShield"));
     }
 
     [Test]
@@ -303,8 +303,8 @@ public class AugmentPoolTests
         // 실행 + 검증: 서버 후보 저장과 선택은 랜덤 없이 끝난다
         Assert.DoesNotThrow(() =>
         {
-            noRandomPool.SetOffered(0, new[] { "SturdyCarry" });
-            noRandomPool.Pick(0, "SturdyCarry");
+            noRandomPool.SetOffered(0, new[] { "FriendShield" });
+            noRandomPool.Pick(0, "FriendShield");
         });
     }
 }

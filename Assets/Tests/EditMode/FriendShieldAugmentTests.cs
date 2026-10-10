@@ -1,8 +1,8 @@
-// 튼튼한 업기(SturdyCarry): 업힌 내 말이 잡혀도 한 마리만 대기석으로 가는지 검증하는 테스트
+// 프렌드쉴드(FriendShield): 업힌 내 말이 잡혀도 한 마리만 대기석으로 가는지 검증하는 테스트
 using System.Linq;
 using NUnit.Framework;
 
-public class SturdyCarryAugmentTests
+public class FriendShieldAugmentTests
 {
     private const int MyTeam = 0;
     private const int OtherTeam = 1;
@@ -19,7 +19,7 @@ public class SturdyCarryAugmentTests
         board.State.TryMove(myA, 3, board.Node(3), out _);
         board.State.TryMove(myB, 3, board.Node(3), out _);
         board.State.TryMove(otherPiece, 1, board.Node(1), out _);
-        board.State.AddAugment(new SturdyCarryAugment(MyTeam));
+        board.State.AddAugment(new FriendShieldAugment(MyTeam));
 
         // 실행
         bool moved = board.State.TryMove(otherPiece, YutResult.Gae.Steps(), board.Node(3), out MoveResult result);
@@ -47,7 +47,7 @@ public class SturdyCarryAugmentTests
         board.State.TryMove(myB, 3, board.Node(3), out _);
         board.State.TryMove(myC, 3, board.Node(3), out _);
         board.State.TryMove(otherPiece, 1, board.Node(1), out _);
-        board.State.AddAugment(new SturdyCarryAugment(MyTeam));
+        board.State.AddAugment(new FriendShieldAugment(MyTeam));
 
         // 실행
         board.State.TryMove(otherPiece, YutResult.Gae.Steps(), board.Node(3), out MoveResult result);
@@ -67,7 +67,7 @@ public class SturdyCarryAugmentTests
         Piece otherPiece = board.State.AddPiece(1, OtherTeam);
         board.State.TryMove(myPiece, 3, board.Node(3), out _);
         board.State.TryMove(otherPiece, 1, board.Node(1), out _);
-        board.State.AddAugment(new SturdyCarryAugment(MyTeam));
+        board.State.AddAugment(new FriendShieldAugment(MyTeam));
 
         // 실행
         board.State.TryMove(otherPiece, YutResult.Gae.Steps(), board.Node(3), out _);
@@ -87,7 +87,7 @@ public class SturdyCarryAugmentTests
         board.State.TryMove(otherA, 3, board.Node(3), out _);
         board.State.TryMove(otherB, 3, board.Node(3), out _);
         board.State.TryMove(myPiece, 1, board.Node(1), out _);
-        board.State.AddAugment(new SturdyCarryAugment(MyTeam));
+        board.State.AddAugment(new FriendShieldAugment(MyTeam));
 
         // 실행: 내 말이 상대의 업힌 말을 잡는다
         board.State.TryMove(myPiece, YutResult.Gae.Steps(), board.Node(3), out MoveResult result);
@@ -109,7 +109,7 @@ public class SturdyCarryAugmentTests
         board.State.TryMove(myA, 3, board.Node(3), out _);
         board.State.TryMove(myB, 3, board.Node(3), out _);
         board.State.TryMove(otherPiece, 1, board.Node(1), out _);
-        var sturdy = new SturdyCarryAugment(MyTeam);
+        var sturdy = new FriendShieldAugment(MyTeam);
         board.State.AddAugment(sturdy);
 
         // 실행
