@@ -20,6 +20,10 @@ public class PlayerIdentity
     // 구글 로그인 때 받은 Firebase 갱신 토큰. "이전 로그인으로 계속하기"에서 새 게임 토큰을 받을 때 쓴다
     public string FirebaseRefreshToken { get; private set; }
 
+    // 보유 골드 캐시. 서버가 기준이고, 화면 표시용으로 이 기기에 들고 있는다
+    //   로그인 응답에 gold가 오면 그 값으로 맞추고, 게임이 끝나면 GAME_ENDED의 내 rewardGold를 더한다
+    public int Gold { get; private set; }
+
     public bool HasToken => !string.IsNullOrEmpty(Token);
 
     public PlayerIdentity(string keyPrefix = "")
@@ -54,15 +58,44 @@ public class PlayerIdentity
         Nickname = PlayerPrefs.GetString(Key("nickname"), "");
         IsGoogleLogin = PlayerPrefs.GetString(Key("authType"), "") == AuthTypeGoogle;
         FirebaseRefreshToken = PlayerPrefs.GetString(Key("refreshToken"), "");
+        Gold = PlayerPrefs.GetInt(Key("gold"), 0);
     }
 
     // 구글 로그인 결과 저장. 게스트 토큰과 같은 자리에 저장하므로 이후 흐름(WebSocket 접속 등)은 그대로다
     public void ApplyLogin(FirebaseLoginResponse response, string firebaseRefreshToken)
     {
+        string previousPlayerId = PlayerId;
         Save(response.playerId, response.token, response.nickname, AuthTypeGoogle);
         FirebaseRefreshToken = firebaseRefreshToken ?? "";
         PlayerPrefs.SetString(Key("refreshToken"), FirebaseRefreshToken);
+
+        // 서버가 보유 골드를 알려 주면 그 값으로, 아니면 같은 계정일 때만 캐시를 유지한다
+        if (response.gold.HasValue) SetGoldInternal(response.gold.Value);
+        else if (previousPlayerId != PlayerId) SetGoldInternal(0);
         PlayerPrefs.Save();
+    }
+
+    // 게임 결과(GAME_ENDED rankings)에서 내 보상을 보유 골드에 더한다. 더한 금액을 돌려준다
+    public int ApplyGameReward(RankingEntry[] rankings)
+    {
+        if (rankings == null || string.IsNullOrEmpty(PlayerId)) return 0;
+
+        foreach (RankingEntry entry in rankings)
+        {
+            if (entry == null || entry.playerId != PlayerId) continue;
+            if (entry.rewardGold <= 0) return 0;
+
+            SetGoldInternal(Gold + entry.rewardGold);
+            PlayerPrefs.Save();
+            return entry.rewardGold;
+        }
+        return 0;
+    }
+
+    private void SetGoldInternal(int gold)
+    {
+        Gold = Mathf.Max(0, gold);
+        PlayerPrefs.SetInt(Key("gold"), Gold);
     }
 
     // 닉네임만 바꿔 저장 (닉네임 설정 화면에서 서버 저장이 끝난 뒤)
@@ -88,8 +121,10 @@ public class PlayerIdentity
         PlayerPrefs.DeleteKey(Key("nickname"));
         PlayerPrefs.DeleteKey(Key("authType"));
         PlayerPrefs.DeleteKey(Key("refreshToken"));
+        PlayerPrefs.DeleteKey(Key("gold"));
         PlayerPrefs.Save();
         PlayerId = Token = Nickname = FirebaseRefreshToken = "";
+        Gold = 0;
         IsGoogleLogin = false;
     }
 

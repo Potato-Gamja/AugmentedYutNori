@@ -73,6 +73,7 @@ public class FirebaseLoginResponse
     public string playerId;
     public string nickname;
     public string token;
+    public int? gold;   // 보유 골드. 서버 LoginResponse에 아직 없음 (없으면 null → 기기 캐시 유지)
 }
 
 // PATCH /players/me/nickname 요청/응답 (제안 형식)
