@@ -18,8 +18,26 @@ public class PlayerIdentity
 
     public PlayerIdentity(string keyPrefix = "")
     {
-        this.keyPrefix = keyPrefix ?? "";
+        this.keyPrefix = (keyPrefix ?? "") + EditorInstancePrefix();
         Reload();
+    }
+
+    // Multiplayer Play Mode의 가상 플레이어는 Library/VP/mppmXXXX 폴더에서 실행되지만 PlayerPrefs는 메인 에디터와 같이 쓴다.
+    // 그대로 두면 모든 창이 같은 토큰(같은 플레이어)이 되므로, 가상 플레이어는 폴더 이름을 접두어로 붙여 따로 저장한다.
+    // 메인 에디터와 빌드는 접두어가 붙지 않는다
+    private static string EditorInstancePrefix()
+    {
+#if UNITY_EDITOR
+        string dataPath = Application.dataPath.Replace('\\', '/');
+        int index = dataPath.IndexOf("/Library/VP/", System.StringComparison.OrdinalIgnoreCase);
+        if (index >= 0)
+        {
+            string rest = dataPath.Substring(index + "/Library/VP/".Length);
+            int slash = rest.IndexOf('/');
+            return (slash >= 0 ? rest.Substring(0, slash) : rest) + ".";
+        }
+#endif
+        return "";
     }
 
     // 다른 PlayerIdentity(예: 로그인 씬)가 저장한 값을 다시 읽는다
