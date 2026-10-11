@@ -54,6 +54,12 @@ public class PlayerIdentity
         Save(response.playerId, response.token, response.nickname);
     }
 
+    // 닉네임만 바꿔 저장 (닉네임 설정 화면에서 서버 저장이 끝난 뒤)
+    public void ApplyNickname(string nickname)
+    {
+        Save(PlayerId, Token, nickname);
+    }
+
     // 저장된 토큰이 있으면 그대로, 없으면 서버에서 게스트 토큰을 받는다. 에디터 테스트용
     public async Task EnsureGuestAsync(AuthApi auth, string nickname)
     {

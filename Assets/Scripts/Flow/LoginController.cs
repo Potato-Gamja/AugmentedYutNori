@@ -4,7 +4,8 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 
 /// <summary>
-/// 로그인 화면 흐름. 구글(Firebase) 로그인 → 서버 POST /auth/firebase → 플레이어 토큰 저장 → 로비 씬으로 이동.
+/// 로그인 화면 흐름. 구글(Firebase) 로그인 → 서버 POST /auth/firebase → 플레이어 토큰 저장
+/// → (계정 닉네임이 없으면) 닉네임 설정 → 로비 씬으로 이동.
 /// 토큰은 PlayerIdentity가 PlayerPrefs에 저장하므로 로비의 LobbyNetworkCoordinator가 같은 키 접두어로 그대로 이어 쓴다.
 /// </summary>
 public class LoginController : MonoBehaviour
@@ -17,6 +18,8 @@ public class LoginController : MonoBehaviour
     [SerializeField] private string nextSceneName = "Lobby";
 
     private LoginPanel loginPanel;
+    private NicknamePanel nicknamePanel;
+    private ApiClient apiClient;
     private IGoogleSignIn googleSignIn;
     private AuthApi authApi;
     private PlayerIdentity playerIdentity;
@@ -38,7 +41,8 @@ public class LoginController : MonoBehaviour
         loginPanel.GoogleLoginRequested += OnGoogleLoginRequested;
         loginPanel.CancelRequested += OnCancelRequested;
 
-        authApi = new AuthApi(new ApiClient(apiBaseUrl));
+        apiClient = new ApiClient(apiBaseUrl);
+        authApi = new AuthApi(apiClient);
         playerIdentity = new PlayerIdentity(playerPrefsKeyPrefix);
 
         loginPanel.SetBusy(true);
@@ -62,6 +66,7 @@ public class LoginController : MonoBehaviour
     private void OnDestroy()
     {
         signInCancel?.Cancel();
+        if (nicknamePanel != null) nicknamePanel.Submitted -= OnNicknameSubmitted;
         if (loginPanel == null) return;
         loginPanel.GoogleLoginPressed -= OnGoogleLoginPressed;
         loginPanel.GoogleLoginRequested -= OnGoogleLoginRequested;
@@ -103,10 +108,15 @@ public class LoginController : MonoBehaviour
             loginPanel.SetCancelable(false);
             loginPanel.ShowStatus("서버에 로그인하는 중입니다.");
             FirebaseLoginResponse login = await authApi.LoginWithFirebaseAsync(firebaseUser.IdToken);
+            KeepLocalNicknameIfServerHasNone(login);
             playerIdentity.ApplyLogin(login);
-            Debug.Log($"[Login] 서버 로그인 성공: playerId={playerIdentity.PlayerId}");
+            apiClient.Token = playerIdentity.Token;
+            Debug.Log($"[Login] 서버 로그인 성공: playerId={playerIdentity.PlayerId}, nickname={playerIdentity.Nickname}");
 
-            SceneManager.LoadScene(nextSceneName);
+            if (string.IsNullOrWhiteSpace(playerIdentity.Nickname))
+                OpenNicknamePanel();
+            else
+                SceneManager.LoadScene(nextSceneName);
         }
         catch (Exception exception)
         {
@@ -122,6 +132,79 @@ public class LoginController : MonoBehaviour
             signInCancel = null;
             signingIn = false;
         }
+    }
+
+    // 서버 닉네임 API가 생기기 전에는 닉네임을 이 기기에만 저장하므로, 서버가 빈 닉네임을 주면 같은 계정의 저장값을 유지한다
+    private void KeepLocalNicknameIfServerHasNone(FirebaseLoginResponse login)
+    {
+        if (string.IsNullOrWhiteSpace(login.nickname) &&
+            login.playerId == playerIdentity.PlayerId &&
+            !string.IsNullOrWhiteSpace(playerIdentity.Nickname))
+        {
+            login.nickname = playerIdentity.Nickname;
+        }
+    }
+
+    // 처음 로그인했거나 닉네임이 없는 계정이면 닉네임을 정한 뒤 로비로 간다
+    private void OpenNicknamePanel()
+    {
+        nicknamePanel = uiManager.Get<NicknamePanel>();
+        if (nicknamePanel == null)
+        {
+            Debug.LogError("[Login] UIManager에 NicknamePanel 프리팹을 등록해 주세요. 닉네임 없이 로비로 이동합니다.", this);
+            SceneManager.LoadScene(nextSceneName);
+            return;
+        }
+
+        nicknamePanel.Submitted -= OnNicknameSubmitted;
+        nicknamePanel.Submitted += OnNicknameSubmitted;
+        uiManager.Close<LoginPanel>();
+        uiManager.Open<NicknamePanel>();
+    }
+
+    private async void OnNicknameSubmitted(string nickname)
+    {
+        nicknamePanel.SetBusy(true);
+        nicknamePanel.ShowStatus("닉네임을 저장하는 중입니다.");
+
+        try
+        {
+            ChangeNicknameResponse response = await authApi.ChangeNicknameAsync(nickname);
+            playerIdentity.ApplyNickname(string.IsNullOrWhiteSpace(response.nickname) ? nickname : response.nickname);
+        }
+        catch (ApiException exception) when (exception.StatusCode == 404 || exception.StatusCode == 405)
+        {
+            // 서버에 닉네임 API가 아직 없음 → 이 기기에만 저장하고 진행 (서버 구현 후 이 분기는 지울 것)
+            Debug.LogWarning($"[Login] 서버 닉네임 API가 없어 이 기기에만 저장합니다. ({exception.Message})", this);
+            playerIdentity.ApplyNickname(nickname);
+        }
+        catch (Exception exception)
+        {
+            if (this == null) return;
+            nicknamePanel.ShowStatus(ToNicknameMessage(exception));
+            nicknamePanel.SetBusy(false);
+            return;
+        }
+
+        if (this == null) return;
+        Debug.Log($"[Login] 닉네임 설정: {playerIdentity.Nickname}");
+        SceneManager.LoadScene(nextSceneName);
+    }
+
+    private static string ToNicknameMessage(Exception exception)
+    {
+        if (exception is ApiException apiException)
+        {
+            switch (apiException.StatusCode)
+            {
+                case 0: return "서버에 연결할 수 없습니다. 서버가 켜져 있는지 확인해 주세요.";
+                case 400: return "사용할 수 없는 닉네임입니다.";
+                case 409: return "이미 사용 중인 닉네임입니다.";
+                case 401: return "로그인이 만료되었습니다. 다시 로그인해 주세요.";
+            }
+            return $"닉네임 저장에 실패했습니다. ({apiException.StatusCode})";
+        }
+        return exception.Message;
     }
 
     private static string ToUserMessage(Exception exception)

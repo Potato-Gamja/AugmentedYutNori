@@ -36,6 +36,17 @@ public class AuthApi
 
         return response;
     }
+
+    // 계정 닉네임 설정·변경 (로그인 토큰 필요). 서버 오류: 400 형식 오류, 409 중복 닉네임, 401 토큰 무효
+    // ⚠ 서버 API 미구현 상태의 제안 형식. 서버 담당과 주소·필드를 맞출 것
+    public async Task<ChangeNicknameResponse> ChangeNicknameAsync(string nickname)
+    {
+        ChangeNicknameResponse response = await api.Patch<ChangeNicknameRequest, ChangeNicknameResponse>(
+            "/players/me/nickname", new ChangeNicknameRequest { nickname = nickname });
+
+        // 응답 본문이 비어 있어도 성공이면 보낸 닉네임으로 저장한다
+        return response ?? new ChangeNicknameResponse { nickname = nickname };
+    }
 }
 
 // POST /players 요청/응답. 서버 REST 명세가 정해지면 필드 이름을 맞출 것
@@ -62,4 +73,16 @@ public class FirebaseLoginResponse
     public string playerId;
     public string nickname;
     public string token;
+}
+
+// PATCH /players/me/nickname 요청/응답 (제안 형식)
+public class ChangeNicknameRequest
+{
+    public string nickname;
+}
+
+public class ChangeNicknameResponse
+{
+    public string playerId;
+    public string nickname;
 }
