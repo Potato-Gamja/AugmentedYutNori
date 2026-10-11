@@ -130,13 +130,17 @@ public class GameRules
                 $"Core={result}, Server={serverResult}");
         }
 
-        YutThrowOutcome outcome = new YutThrowOutcome(sticks, serverResult);
+        // 도박사면 도↔모를 바꾼다 (윷가락 모양은 원래 결과 그대로)
+        YutResult stored = HasGambler(turnManager.CurrentTeam) ? GamblerAugment.Swap(serverResult) : serverResult;
+        bool swapped = stored != serverResult;
+
+        YutThrowOutcome outcome = new YutThrowOutcome(sticks, stored, serverResult);
 
         // StoredResults = [Yut, Gae] 이런식으로 나중에 이동에 사용할 수 있도록 결과 저장
         state.StoredResults.Add(outcome.Result);
 
         // 던지기 횟수 소비 + 윷/모 추가 던지기 처리
-        turnManager.ConsumeThrow(outcome.Result);
+        turnManager.ConsumeThrow(!swapped && GrantsExtraThrow(outcome.Result));
 
         // 윷을 던졌다는 사실 외부에 알리기 (애니메이션이나, 결과 텍스트로 보여줄 수 있음)
         gameEvents.RaiseThrown(outcome);
@@ -268,10 +272,11 @@ public class GameRules
             gameEvents.RaisePieceCaptured(capturedPiece);
         }
 
-        // 상대 말을 잡으면 추가 던지기 1회
+        // 상대 말을 잡으면 추가 던지기 (사냥꾼은 2번)
         if (result.CapturedPieces.Count > 0)
         {
-            turnManager.AddExtraThrow();
+            int bonus = HasHunter(turnManager.CurrentTeam) ? HunterAugment.CaptureBonusThrows : 1;
+            turnManager.AddExtraThrow(bonus);
         }
 
         // 같이 이동한 말 확인 (업힌 말이 있으면 여러개일 수 있어서)
@@ -439,21 +444,11 @@ public class GameRules
         if (augment == null)
             return false;
 
-        // 이번 턴에 말을 한 번이라도 움직였다면 재던지기 사용 불가
-        if (state.HasMovedThisTurn)
-            return false;
-
-        YutResult? latestResult = state.LatestYutResult;
-
-        if (!latestResult.HasValue)
-            return false;
-
         // 증강 자체의 사용 조건 확인
-        // 실제 증강 소모는 ApplyRethrow에서 처리
+        // CanUse 안에서 야바위꾼 사용 조건 5개 확인
         if (!augment.CanUse(
-                state.Board,
-                turnManager.CurrentTeam,
-                latestResult.Value))
+                state,
+                turnManager.CurrentTeam))
         {
             return false;
         }
@@ -472,6 +467,17 @@ public class GameRules
         );
     }
 
+    // 이 팀이 사냥꾼을 가졌는지
+    private bool HasHunter(int team) =>
+        state.Board.GetAugments(team).Exists(augment => augment is HunterAugment);
+
+    // 이번 결과로 한 번 더 던지는지 (사냥꾼을 가졌다면 윷·모여도 추가 던지기 없음)
+    private bool GrantsExtraThrow(YutResult result) =>
+        result.GrantsExtraThrow() && !HasHunter(turnManager.CurrentTeam);
+
+    // 이 팀이 도박사를 가졌는지
+    private bool HasGambler(int team) =>
+        state.Board.GetAugments(team).Exists(augment => augment is GamblerAugment);
 
     // 서버에서 받은 재던지기 결과 적용
     public bool ApplyRethrow(
@@ -514,10 +520,6 @@ public class GameRules
         if (augment == null)
             return false;
 
-        // 이번 턴에 말을 한 번이라도 움직였다면 재던지기 사용 불가
-        if (state.HasMovedThisTurn)
-            return false;
-
         YutResult? latestResult = state.LatestYutResult;
 
         if (!latestResult.HasValue)
@@ -539,12 +541,11 @@ public class GameRules
                 $"Core={checkedResult}, Server={result}");
         }
 
-        // 증강 자체의 사용 조건 검사 + 1회용 증강 소모
-        // TryUse() 안에서 팀, 윷/모 여부, 실제 보유 여부 확인
-        if (!augment.TryUse(
-                state.Board,
-                turnManager.CurrentTeam,
-                latestResult.Value))
+        // 증강 자체의 사용 조건 검사
+        // CanUse() 안에서 야바위꾼 사용 조건 5개 확인
+        if (!augment.CanUse(
+                state,
+                turnManager.CurrentTeam))
         {
             return false;
         }
@@ -556,11 +557,12 @@ public class GameRules
         // 최근 결과를 새 결과로 교체
         int lastIndex = state.StoredResults.Count - 1;
         state.StoredResults[lastIndex] = outcome.Result;
+        state.HasRethrownThisTurn = true;
 
         // 윷/모 추가 기회 여부 다시 계산
         turnManager.ReplaceThrowResult(
-            oldResult,
-            outcome.Result
+            GrantsExtraThrow(oldResult),
+            GrantsExtraThrow(outcome.Result)
         );
 
         // 재던지기 결과 이벤트

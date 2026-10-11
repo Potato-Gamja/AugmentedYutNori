@@ -239,7 +239,7 @@ public bool Contains(Vector3 worldPosition)
         text.characterSize = stackTextSize;
         text.anchor = TextAnchor.MiddleCenter;
         text.alignment = TextAlignment.Center;
-        text.fontStyle = FontStyle.Bold;
+        text.fontStyle = FontStyle.Normal;
         text.color = stackTextColor;
 
         var textRenderer = go.GetComponent<MeshRenderer>();

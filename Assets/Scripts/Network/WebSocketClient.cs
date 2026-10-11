@@ -1,5 +1,6 @@
 using System;
 using System.Text;
+using System.Threading.Tasks;
 using NativeWebSocket;
 using UnityEngine;
 
@@ -79,6 +80,12 @@ public class WebSocketClient : MonoBehaviour
     public bool Send(MessageType type)
     {
         return SendRaw(MessageSerializer.Serialize(type));
+    }
+
+    public async Task CloseAndWait()
+    {
+        closingByUser = true;
+        await CloseSocket();
     }
 
     private bool SendRaw(string json)

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -10,18 +11,24 @@ public sealed class GameFlowHudPresenter
     private readonly GameHudPanel hud;
     private readonly BoardState boardState;
     private readonly GameState gameState;
+    private readonly AugmentCatalog augmentCatalog;
     private readonly IReadOnlyList<PieceView> pieceViews;
+    private readonly Func<int> currentTeamProvider;
 
     public GameFlowHudPresenter(
         GameHudPanel hud,
         BoardState boardState,
         GameState gameState,
-        IReadOnlyList<PieceView> pieceViews)
+        AugmentCatalog augmentCatalog,
+        IReadOnlyList<PieceView> pieceViews,
+        Func<int> currentTeamProvider = null)
     {
         this.hud = hud;
         this.boardState = boardState;
         this.gameState = gameState;
+        this.augmentCatalog = augmentCatalog;
         this.pieceViews = pieceViews;
+        this.currentTeamProvider = currentTeamProvider;
     }
 
     public void RefreshPlayerPanels()
@@ -57,7 +64,9 @@ public sealed class GameFlowHudPresenter
             foreach (IAugment augment in boardState.GetAugments(team))
                 augmentIds.Add(augment.Id);
 
-            hud.SetPlayerState(team, waiting, onBoard, finished, augmentIds, waitingSlots);
+            bool rethrowUsed = gameState != null && gameState.HasRethrownThisTurn &&
+                               team == (currentTeamProvider?.Invoke() ?? team);
+            hud.SetPlayerState(team, waiting, onBoard, finished, augmentIds, waitingSlots, rethrowUsed);
         }
     }
 
@@ -95,14 +104,22 @@ public sealed class GameFlowHudPresenter
 
     public bool CanUseRethrow(int team)
     {
-        if (gameState == null || gameState.StoredResults.Count == 0) return false;
+        if (gameState == null) return false;
         RethrowAugment rethrow = GetRethrowAugment(team);
-        return rethrow != null &&
-               !gameState.HasMovedThisTurn &&
-               rethrow.CanUse(
-                   boardState,
-                   team,
-                   gameState.StoredResults[gameState.StoredResults.Count - 1]);
+        return rethrow != null && rethrow.CanUse(gameState, team);
+    }
+
+    public bool DidGrantExtraThrow(YutThrowOutcome outcome, int team)
+    {
+        if (gameState == null) return false;
+        if (outcome.IsResultChanged || !outcome.Result.GrantsExtraThrow()) return false;
+
+        foreach (IAugment augment in gameState.Board.GetAugments(team))
+        {
+            if (augment is HunterAugment) return false;
+        }
+
+        return true;
     }
 
     public static string MoveOptionLabel(MoveOption option)

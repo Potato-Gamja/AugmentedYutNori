@@ -15,6 +15,7 @@ public class GameHudPanel : UIBase
     [SerializeField] private TMP_Text instructionText;
     [SerializeField] private Button throwButton;
     [SerializeField] private Button rethrowButton;
+    [SerializeField] private Button settingsButton;
 
     [Header("P0 HUD")]
     [SerializeField] private RectTransform storedResultRoot;
@@ -35,6 +36,10 @@ public class GameHudPanel : UIBase
     [Header("Team Piece Art")]
     [SerializeField] private List<Sprite> teamPieceSprites = new();
     [SerializeField] private List<Sprite> teamPieceGlowSprites = new();
+    [Header("Augment Art")]
+    [SerializeField] private List<Sprite> augmentIcons = new();
+    [SerializeField] private Sprite augmentActiveRing;
+    [SerializeField] private TextAsset augmentDefinitions;
 
     private TurnHudView turnView;
     private PlayerStatusView playerView;
@@ -50,6 +55,7 @@ public class GameHudPanel : UIBase
     public event Action ThrowClicked;
     public event Action RethrowClicked;
     public event Action<int, int> WaitingPieceClicked;
+    public event Action SettingsClicked;
 
     public override void Init()
     {
@@ -67,6 +73,7 @@ public class GameHudPanel : UIBase
             timerText,
             visualTurnSeconds);
         playerView.BindWaitingPieceClicks((team, slot) => WaitingPieceClicked?.Invoke(team, slot));
+        playerView.ConfigureAugmentIcons(augmentIcons, augmentActiveRing, augmentDefinitions);
         storedResultView.Configure(
             resultText,
             storedResultRoot,
@@ -94,7 +101,11 @@ public class GameHudPanel : UIBase
             rethrowButton.onClick.RemoveListener(RaiseRethrowClicked);
             rethrowButton.onClick.AddListener(RaiseRethrowClicked);
         }
+        settingsButton?.onClick.AddListener(RaiseSettingsClicked);
     }
+
+    private void OnDestroy() => settingsButton?.onClick.RemoveListener(RaiseSettingsClicked);
+    private void RaiseSettingsClicked() => SettingsClicked?.Invoke();
 
     private void RaiseThrowClicked()
     {
@@ -159,10 +170,11 @@ public class GameHudPanel : UIBase
         int waiting,
         int onBoard,
         int finished,
-        IReadOnlyList<string> augmentIds,
-        IReadOnlyCollection<int> waitingSlots = null)
+        IReadOnlyList<string> augmentNames,
+        IReadOnlyCollection<int> waitingSlots = null,
+        bool rethrowUsed = false)
     {
-        playerView?.SetState(team, waiting, onBoard, finished, augmentIds, waitingSlots);
+        playerView?.SetState(team, waiting, onBoard, finished, augmentNames, waitingSlots, rethrowUsed);
     }
 
     public void SetSelectedWaitingPiece(int team, int slotIndex)
@@ -173,6 +185,14 @@ public class GameHudPanel : UIBase
     public void SetWaitingPieceAvailable(int team, int slotIndex, bool available)
     {
         playerView?.SetWaitingPieceAvailable(team, slotIndex, available);
+    }
+
+    public void SetPlayerConnectionState(
+        int team,
+        PlayerStatusView.ConnectionState state,
+        int graceSec = 0)
+    {
+        playerView?.SetConnectionState(team, state, graceSec);
     }
 
     public void MarkResultPending(int resultIndex, int team)
@@ -189,6 +209,11 @@ public class GameHudPanel : UIBase
     }
 
     public void HideMoveOptionChoices() => storedResultView?.HideChoices();
+
+    public void ShowThrowResult(YutThrowOutcome outcome, bool grantedExtraThrow, int team)
+    {
+        resultRevealView?.Show(outcome, grantedExtraThrow, team);
+    }
 
     public void ShowThrowResult(YutResult result, int remainingThrows, int team)
     {

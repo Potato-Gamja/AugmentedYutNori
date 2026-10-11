@@ -33,6 +33,6 @@ public enum MessageType
     ERROR,              // S→C 요청 거부·오류
     PLAYER_DISCONNECTED,// S→C 다른 플레이어 연결 끊김 (재접속 대기)
     PLAYER_RECONNECTED, // S→C 끊겼던 플레이어 재접속
-    GAME_SNAPSHOT,      // S→C 현재 게임 상태
-    SYNC_REQUEST        // C→S 현재 게임 상태 요청
+    GAME_SNAPSHOT,
+    SYNC_REQUEST
 }

@@ -12,17 +12,20 @@ public class LobbyController : MonoBehaviour
     [SerializeField] private string gameSceneName = "LSU_Game_UI";
 
     private LobbyPanel lobbyPanel;
+    private MainMenuPanel mainMenuPanel;
     private RoomPanel roomPanel;
     private string localPlayerId;
 
     // 네트워크 계약:
     // CreateRoomRequested -> ApiClient에서 POST /players 후 POST /rooms 호출.
     // JoinRoomRequested   -> POST /players 후 WebSocketClient.Connect(roomCode, guestToken), JOIN_ROOM 전송.
+    // QuickJoinRequested  -> 서버 빠른 참가 API가 참가할 roomCode를 반환하면 기존 JOIN_ROOM 흐름으로 연결.
     // ReadyRequested      -> WebSocket으로 READY 전송.
     // LeaveRoomRequested  -> WebSocket으로 LEAVE_ROOM 전송 후 연결 해제.
     // ApiClient/WebSocketClient가 머지되면 해당 구현을 이 이벤트에 연결하거나 아래 요청 메서드 내부로 옮긴다.
     public event Action<string> CreateRoomRequested;
     public event Action<string, string> JoinRoomRequested;
+    public event Action<string> QuickJoinRequested;
     public event Action<bool> ReadyRequested;
     public event Action LeaveRoomRequested;
 
@@ -36,19 +39,30 @@ public class LobbyController : MonoBehaviour
             return;
         }
 
-        lobbyPanel = uiManager.Open<LobbyPanel>();
+        mainMenuPanel = uiManager.Open<MainMenuPanel>();
+        lobbyPanel = uiManager.Get<LobbyPanel>();
         roomPanel = uiManager.Get<RoomPanel>();
-        if (lobbyPanel == null || roomPanel == null)
+        if (mainMenuPanel == null || lobbyPanel == null || roomPanel == null)
         {
-            Debug.LogError("[Lobby] LobbyPanel과 RoomPanel을 UIManager 프리팹 목록에 등록해 주세요.", this);
+            Debug.LogError("[Lobby] MainMenuPanel, LobbyPanel, RoomPanel을 UIManager 프리팹 목록에 등록해 주세요.", this);
             enabled = false;
             return;
         }
 
         lobbyPanel.CreateRoomRequested += OnCreateRoomRequested;
         lobbyPanel.JoinRoomRequested += OnJoinRoomRequested;
+        lobbyPanel.QuickJoinRequested += OnQuickJoinRequested;
+        lobbyPanel.MainMenuRequested += OnMainMenuRequested;
+        lobbyPanel.SettingsRequested += OnSettingsRequested;
+        lobbyPanel.CollectionRequested += OnCollectionRequested;
         roomPanel.ReadyRequested += OnReadyRequested;
         roomPanel.LeaveRequested += OnLeaveRequested;
+        mainMenuPanel.PlayRequested += OnPlayRequested;
+        mainMenuPanel.GachaRequested += OnGachaRequested;
+        mainMenuPanel.CollectionRequested += OnCollectionRequested;
+        mainMenuPanel.ProfileRequested += OnProfileRequested;
+        mainMenuPanel.AchievementRequested += OnAchievementRequested;
+        mainMenuPanel.SettingsRequested += OnSettingsRequested;
     }
 
     private void OnDestroy()
@@ -57,13 +71,61 @@ public class LobbyController : MonoBehaviour
         {
             lobbyPanel.CreateRoomRequested -= OnCreateRoomRequested;
             lobbyPanel.JoinRoomRequested -= OnJoinRoomRequested;
+            lobbyPanel.QuickJoinRequested -= OnQuickJoinRequested;
+            lobbyPanel.MainMenuRequested -= OnMainMenuRequested;
+            lobbyPanel.SettingsRequested -= OnSettingsRequested;
+            lobbyPanel.CollectionRequested -= OnCollectionRequested;
         }
         if (roomPanel != null)
         {
             roomPanel.ReadyRequested -= OnReadyRequested;
             roomPanel.LeaveRequested -= OnLeaveRequested;
         }
+        if (mainMenuPanel != null)
+        {
+            mainMenuPanel.PlayRequested -= OnPlayRequested;
+            mainMenuPanel.GachaRequested -= OnGachaRequested;
+            mainMenuPanel.CollectionRequested -= OnCollectionRequested;
+            mainMenuPanel.ProfileRequested -= OnProfileRequested;
+            mainMenuPanel.AchievementRequested -= OnAchievementRequested;
+            mainMenuPanel.SettingsRequested -= OnSettingsRequested;
+        }
     }
+
+    private void OnSettingsRequested()
+    {
+        SettingsPanel panel = uiManager?.Open<SettingsPanel>();
+        panel?.SetExitGameVisible(false);
+    }
+
+    private void OnCollectionRequested()
+    {
+        uiManager?.Open<CollectionPanel>();
+    }
+
+    private void OnPlayRequested()
+    {
+        uiManager.Close<MainMenuPanel>();
+        uiManager.Open<LobbyPanel>();
+        lobbyPanel.ShowStatus(string.Empty);
+    }
+
+    private void OnMainMenuRequested()
+    {
+        uiManager.Close<LobbyPanel>();
+        uiManager.Open<MainMenuPanel>();
+    }
+
+    private void OnGachaRequested() => mainMenuPanel.ShowStatus("뽑기 기능은 준비 중입니다.");
+    private void OnProfileRequested()
+    {
+        ProfilePanel panel = uiManager?.Open<ProfilePanel>();
+        if (panel == null) return;
+
+        LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
+        panel.ShowProfile(coordinator?.LocalPlayerId, coordinator?.LocalNickname);
+    }
+    private void OnAchievementRequested() => mainMenuPanel.ShowStatus("업적 기능은 준비 중입니다.");
 
     private void OnCreateRoomRequested(string nickname)
     {
@@ -77,6 +139,20 @@ public class LobbyController : MonoBehaviour
         lobbyPanel.SetBusy(true);
         lobbyPanel.ShowStatus("방에 참가하는 중입니다.");
         JoinRoomRequested?.Invoke(nickname, roomCode);
+    }
+
+    private void OnQuickJoinRequested(string nickname)
+    {
+        // 서버 담당 연결 지점: 참가 가능한 방 조회/생성 후 roomCode를 받아 기존 참가 흐름으로 이어 준다.
+        if (QuickJoinRequested == null)
+        {
+            lobbyPanel.ShowStatus("빠른 참가 서버 기능을 준비 중입니다.");
+            return;
+        }
+
+        lobbyPanel.SetBusy(true);
+        lobbyPanel.ShowStatus("참가 가능한 방을 찾는 중입니다.");
+        QuickJoinRequested.Invoke(nickname);
     }
 
     private void OnReadyRequested(bool ready)

@@ -149,7 +149,7 @@ public sealed class GameFlowSelectionController
             Color color = pair.Value.Count == 1
                 ? GameFlowHudPresenter.ResultColor(pair.Value[0].Result)
                 : Color.white;
-            pair.Key.SetDestinationBadge(GetDestinationBadge(pair.Key, pair.Value, piece.Team), piece.Team);
+            //pair.Key.SetDestinationBadge(GetDestinationBadge(pair.Key, pair.Value, piece.Team), piece.Team);
             pair.Key.SetHighlight(color, piece.Team);
             highlighted.Add(pair.Key);
             CreateLabel(pair.Key, pair.Value);
@@ -239,7 +239,7 @@ public sealed class GameFlowSelectionController
         {
             var badgeObject = new GameObject("ResultBadge");
             badgeObject.transform.SetParent(labelObject.transform, false);
-            badgeObject.transform.localScale = new Vector3(1.35f, 0.86f, 1f);
+            badgeObject.transform.localScale = new Vector3(1f, 1f, 1f);
             SpriteRenderer badge = badgeObject.AddComponent<SpriteRenderer>();
             badge.sprite = destination.GetResultBadgeSprite(getCurrentTeam());
             if (badge.sprite == null) badge.sprite = source.sprite;
@@ -250,11 +250,11 @@ public sealed class GameFlowSelectionController
 
         TextMesh text = labelObject.AddComponent<TextMesh>();
         text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        text.fontSize = 64;
+        text.fontSize = 60;
         text.characterSize = 0.065f;
         text.anchor = TextAnchor.MiddleCenter;
         text.alignment = TextAlignment.Center;
-        text.fontStyle = FontStyle.Bold;
+        text.fontStyle = FontStyle.Normal;
 
         text.text = options.Count > 1
             ? "선택"
@@ -266,26 +266,26 @@ public sealed class GameFlowSelectionController
         labels.Add(labelObject);
     }
 
-    private DestinationBadgeType GetDestinationBadge(
-        NodeView destination,
-        IReadOnlyList<MoveOption> options,
-        int movingTeam)
-    {
-        foreach (MoveOption option in options)
-            if (option.IsFinished) return DestinationBadgeType.Finish;
+    //private DestinationBadgeType GetDestinationBadge(
+    //    NodeView destination,
+    //    IReadOnlyList<MoveOption> options,
+    //    int movingTeam)
+    //{
+    //    foreach (MoveOption option in options)
+    //        if (option.IsFinished) return DestinationBadgeType.Finish;
 
-        BoardNode node = destination.Node ?? boardState.Graph.GetNode(destination.Id);
-        if (node == null) return DestinationBadgeType.None;
+    //    BoardNode node = destination.Node ?? boardState.Graph.GetNode(destination.Id);
+    //    if (node == null) return DestinationBadgeType.None;
 
-        bool hasSameTeam = false;
-        foreach (Piece occupant in boardState.GetPiecesAt(node))
-        {
-            if (occupant.Team != movingTeam) return DestinationBadgeType.Capture;
-            hasSameTeam = true;
-        }
+    //    bool hasSameTeam = false;
+    //    foreach (Piece occupant in boardState.GetPiecesAt(node))
+    //    {
+    //        if (occupant.Team != movingTeam) return DestinationBadgeType.Capture;
+    //        hasSameTeam = true;
+    //    }
 
-        return hasSameTeam ? DestinationBadgeType.Carry : DestinationBadgeType.None;
-    }
+    //    return hasSameTeam ? DestinationBadgeType.Carry : DestinationBadgeType.None;
+    //}
 
     private static bool AreEquivalent(IReadOnlyList<MoveOption> options)
     {
