@@ -128,7 +128,7 @@ public static class SettingsUiAssembler
     private static void RegisterSettingsInScenes()
     {
         string activePath = SceneManager.GetActiveScene().path;
-        foreach (string scenePath in new[] { "Assets/Scenes/Game_2.unity", "Assets/Scenes/Lobby.unity" })
+        foreach (string scenePath in new[] { "Assets/Scenes/Game.unity", "Assets/Scenes/Lobby.unity" })
         {
             Scene scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
             UIManager manager = Object.FindFirstObjectByType<UIManager>();

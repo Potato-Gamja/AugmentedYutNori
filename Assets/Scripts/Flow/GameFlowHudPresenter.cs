@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -12,19 +13,22 @@ public sealed class GameFlowHudPresenter
     private readonly GameState gameState;
     private readonly AugmentCatalog augmentCatalog;
     private readonly IReadOnlyList<PieceView> pieceViews;
+    private readonly Func<int> currentTeamProvider;
 
     public GameFlowHudPresenter(
         GameHudPanel hud,
         BoardState boardState,
         GameState gameState,
         AugmentCatalog augmentCatalog,
-        IReadOnlyList<PieceView> pieceViews)
+        IReadOnlyList<PieceView> pieceViews,
+        Func<int> currentTeamProvider = null)
     {
         this.hud = hud;
         this.boardState = boardState;
         this.gameState = gameState;
         this.augmentCatalog = augmentCatalog;
         this.pieceViews = pieceViews;
+        this.currentTeamProvider = currentTeamProvider;
     }
 
     public void RefreshPlayerPanels()
@@ -56,11 +60,13 @@ public sealed class GameFlowHudPresenter
                 else if (piece.IsFinished) finished++;
             }
 
-            var augmentNames = new List<string>();
+            var augmentIds = new List<string>();
             foreach (IAugment augment in boardState.GetAugments(team))
-                augmentNames.Add(augmentCatalog.Find(augment.Id).name);
+                augmentIds.Add(augment.Id);
 
-            hud.SetPlayerState(team, waiting, onBoard, finished, augmentNames, waitingSlots);
+            bool rethrowUsed = gameState != null && gameState.HasRethrownThisTurn &&
+                               team == (currentTeamProvider?.Invoke() ?? team);
+            hud.SetPlayerState(team, waiting, onBoard, finished, augmentIds, waitingSlots, rethrowUsed);
         }
     }
 
@@ -101,6 +107,19 @@ public sealed class GameFlowHudPresenter
         if (gameState == null) return false;
         RethrowAugment rethrow = GetRethrowAugment(team);
         return rethrow != null && rethrow.CanUse(gameState, team);
+    }
+
+    public bool DidGrantExtraThrow(YutThrowOutcome outcome, int team)
+    {
+        if (gameState == null) return false;
+        if (outcome.IsResultChanged || !outcome.Result.GrantsExtraThrow()) return false;
+
+        foreach (IAugment augment in gameState.Board.GetAugments(team))
+        {
+            if (augment is HunterAugment) return false;
+        }
+
+        return true;
     }
 
     public static string MoveOptionLabel(MoveOption option)

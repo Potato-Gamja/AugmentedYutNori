@@ -394,6 +394,9 @@ MonoBehaviour:
   apiBaseUrl: http://localhost:8080
   webSocketUrl: ws://localhost:8080/ws
   playerPrefsKeyPrefix: 
+  loginSceneName: PJWScene_Login
+  lobbySceneName: Lobby
+  allowGuestLogin: 1
 --- !u!114 &2094785097
 MonoBehaviour:
   m_ObjectHideFlags: 0
