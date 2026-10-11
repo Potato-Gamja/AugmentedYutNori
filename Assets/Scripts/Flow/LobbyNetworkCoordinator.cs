@@ -16,7 +16,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     [SerializeField] private string playerPrefsKeyPrefix = "";
 
     [Header("로그인")]
-    [SerializeField] private string loginSceneName = "PJWScene_Login";
+    [SerializeField] private string loginSceneName = "Login";
     [SerializeField] private string lobbySceneName = "Lobby";
     // 서버 로그인 연동 전·에디터 테스트에서는 게스트 생성을 유지한다.
     // 끄면 토큰이 없는 사용자를 로그인 씬으로 보낸다.
