@@ -78,6 +78,17 @@ public class GameEndedMessage
 {
     public int winnerTeam;
     public GameEndReason reason;
+    public RankingEntry[] rankings = new RankingEntry[0]; // 이번 판 등수 목록 (서버가 비워 보낼 수 있음)
+}
+
+// GAME_ENDED 순위 한 줄 (플레이어 = 팀). rank는 1부터, 같은 등수 다음은 건너뜀
+// 기권·끊김으로 나간 플레이어는 꼴찌 등수 + rewardGold 0
+public class RankingEntry
+{
+    public string playerId;
+    public int team;
+    public int rank;
+    public int rewardGold;
 }
 
 public enum GameEndReason
