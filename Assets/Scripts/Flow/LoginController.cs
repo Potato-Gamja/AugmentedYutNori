@@ -22,6 +22,7 @@ public class LoginController : MonoBehaviour
     private ApiClient apiClient;
     private IGoogleSignIn googleSignIn;
     private AuthApi authApi;
+    private FirebaseTokenRefresher tokenRefresher;
     private PlayerIdentity playerIdentity;
     private bool signingIn;
     private CancellationTokenSource signInCancel;
@@ -40,10 +41,13 @@ public class LoginController : MonoBehaviour
         loginPanel.GoogleLoginPressed += OnGoogleLoginPressed;
         loginPanel.GoogleLoginRequested += OnGoogleLoginRequested;
         loginPanel.CancelRequested += OnCancelRequested;
+        loginPanel.ContinueRequested += OnContinueRequested;
 
         apiClient = new ApiClient(apiBaseUrl);
         authApi = new AuthApi(apiClient);
+        tokenRefresher = new FirebaseTokenRefresher(authSettings);
         playerIdentity = new PlayerIdentity(playerPrefsKeyPrefix);
+        loginPanel.SetContinueAvailable(HasSavedLogin(), playerIdentity.Nickname);
 
         loginPanel.SetBusy(true);
         loginPanel.ShowStatus("로그인을 준비하는 중입니다.");
@@ -71,6 +75,7 @@ public class LoginController : MonoBehaviour
         loginPanel.GoogleLoginPressed -= OnGoogleLoginPressed;
         loginPanel.GoogleLoginRequested -= OnGoogleLoginRequested;
         loginPanel.CancelRequested -= OnCancelRequested;
+        loginPanel.ContinueRequested -= OnContinueRequested;
     }
 
     private void OnGoogleLoginPressed()
@@ -81,6 +86,49 @@ public class LoginController : MonoBehaviour
     private void OnGoogleLoginRequested()
     {
         if (googleSignIn != null && !googleSignIn.StartOnPointerDown) SignIn();
+    }
+
+    // 이 기기에 저장된 구글 로그인이 있는지 (게스트 토큰은 제외). 갱신 토큰이 있어야 다시 로그인할 수 있다
+    private bool HasSavedLogin() =>
+        playerIdentity.IsGoogleLogin && !string.IsNullOrEmpty(playerIdentity.FirebaseRefreshToken);
+
+    // 저장된 Firebase 갱신 토큰으로 브라우저 없이 다시 로그인한다.
+    // 새 Firebase ID 토큰 → 서버 /auth/firebase → 새 게임 토큰이라, 서버를 재시작해 예전 게임 토큰이 무효가 돼도 들어갈 수 있다
+    private async void OnContinueRequested()
+    {
+        if (signingIn || !HasSavedLogin()) return;
+        signingIn = true;
+        loginPanel.SetBusy(true);
+        loginPanel.ShowStatus("이전 계정으로 로그인하는 중입니다.");
+
+        try
+        {
+            FirebaseSignInResult firebaseUser = await tokenRefresher.RefreshAsync(playerIdentity.FirebaseRefreshToken);
+            if (this == null) return;
+            Debug.Log($"[Login] 저장된 로그인으로 Firebase 토큰 갱신: uid={firebaseUser.Uid}");
+
+            await CompleteServerLogin(firebaseUser);
+        }
+        catch (Exception exception)
+        {
+            if (this == null) return;
+            if (exception is RefreshFailedException { Expired: true })
+            {
+                // 갱신 토큰이 더 이상 유효하지 않음 → 저장된 로그인을 지우고 구글 로그인을 다시 하게 한다
+                playerIdentity.Clear();
+                loginPanel.SetContinueAvailable(false, null);
+            }
+            else
+            {
+                Debug.LogException(exception, this);
+            }
+            loginPanel.ShowStatus(ToUserMessage(exception));
+            loginPanel.SetBusy(false);
+        }
+        finally
+        {
+            signingIn = false;
+        }
     }
 
     // 브라우저 창을 그냥 닫으면 게임은 결과를 알 수 없으므로, 취소 버튼으로 기다림을 끝내고 다시 시도하게 한다
@@ -106,17 +154,7 @@ public class LoginController : MonoBehaviour
             Debug.Log($"[Login] Firebase 로그인 성공: uid={firebaseUser.Uid}, email={firebaseUser.Email}");
 
             loginPanel.SetCancelable(false);
-            loginPanel.ShowStatus("서버에 로그인하는 중입니다.");
-            FirebaseLoginResponse login = await authApi.LoginWithFirebaseAsync(firebaseUser.IdToken);
-            KeepLocalNicknameIfServerHasNone(login);
-            playerIdentity.ApplyLogin(login);
-            apiClient.Token = playerIdentity.Token;
-            Debug.Log($"[Login] 서버 로그인 성공: playerId={playerIdentity.PlayerId}, nickname={playerIdentity.Nickname}");
-
-            if (string.IsNullOrWhiteSpace(playerIdentity.Nickname))
-                OpenNicknamePanel();
-            else
-                SceneManager.LoadScene(nextSceneName);
+            await CompleteServerLogin(firebaseUser);
         }
         catch (Exception exception)
         {
@@ -132,6 +170,22 @@ public class LoginController : MonoBehaviour
             signInCancel = null;
             signingIn = false;
         }
+    }
+
+    // Firebase ID 토큰을 서버 게임 토큰으로 바꿔 저장하고, 닉네임이 없으면 닉네임부터 정한 뒤 로비로 간다
+    private async System.Threading.Tasks.Task CompleteServerLogin(FirebaseSignInResult firebaseUser)
+    {
+        loginPanel.ShowStatus("서버에 로그인하는 중입니다.");
+        FirebaseLoginResponse login = await authApi.LoginWithFirebaseAsync(firebaseUser.IdToken);
+        KeepLocalNicknameIfServerHasNone(login);
+        playerIdentity.ApplyLogin(login, firebaseUser.RefreshToken);
+        apiClient.Token = playerIdentity.Token;
+        Debug.Log($"[Login] 서버 로그인 성공: playerId={playerIdentity.PlayerId}, nickname={playerIdentity.Nickname}");
+
+        if (string.IsNullOrWhiteSpace(playerIdentity.Nickname))
+            OpenNicknamePanel();
+        else
+            SceneManager.LoadScene(nextSceneName);
     }
 
     // 서버 닉네임 API가 생기기 전에는 닉네임을 이 기기에만 저장하므로, 서버가 빈 닉네임을 주면 같은 계정의 저장값을 유지한다

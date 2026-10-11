@@ -14,6 +14,12 @@ public class PlayerIdentity
     public string Token { get; private set; }
     public string Nickname { get; private set; }
 
+    // 어떤 방법으로 받은 토큰인지. 구분이 없던 예전 저장값은 게스트로 본다
+    public bool IsGoogleLogin { get; private set; }
+
+    // 구글 로그인 때 받은 Firebase 갱신 토큰. "이전 로그인으로 계속하기"에서 새 게임 토큰을 받을 때 쓴다
+    public string FirebaseRefreshToken { get; private set; }
+
     public bool HasToken => !string.IsNullOrEmpty(Token);
 
     public PlayerIdentity(string keyPrefix = "")
@@ -46,18 +52,23 @@ public class PlayerIdentity
         PlayerId = PlayerPrefs.GetString(Key("playerId"), "");
         Token = PlayerPrefs.GetString(Key("token"), "");
         Nickname = PlayerPrefs.GetString(Key("nickname"), "");
+        IsGoogleLogin = PlayerPrefs.GetString(Key("authType"), "") == AuthTypeGoogle;
+        FirebaseRefreshToken = PlayerPrefs.GetString(Key("refreshToken"), "");
     }
 
     // 구글 로그인 결과 저장. 게스트 토큰과 같은 자리에 저장하므로 이후 흐름(WebSocket 접속 등)은 그대로다
-    public void ApplyLogin(FirebaseLoginResponse response)
+    public void ApplyLogin(FirebaseLoginResponse response, string firebaseRefreshToken)
     {
-        Save(response.playerId, response.token, response.nickname);
+        Save(response.playerId, response.token, response.nickname, AuthTypeGoogle);
+        FirebaseRefreshToken = firebaseRefreshToken ?? "";
+        PlayerPrefs.SetString(Key("refreshToken"), FirebaseRefreshToken);
+        PlayerPrefs.Save();
     }
 
     // 닉네임만 바꿔 저장 (닉네임 설정 화면에서 서버 저장이 끝난 뒤)
     public void ApplyNickname(string nickname)
     {
-        Save(PlayerId, Token, nickname);
+        Save(PlayerId, Token, nickname, IsGoogleLogin ? AuthTypeGoogle : AuthTypeGuest);
     }
 
     // 저장된 토큰이 있으면 그대로, 없으면 서버에서 게스트 토큰을 받는다. 에디터 테스트용
@@ -66,7 +77,7 @@ public class PlayerIdentity
         if (HasToken) return;
 
         GuestLoginResponse response = await auth.CreateGuestAsync(nickname);
-        Save(response.playerId, response.guestToken, string.IsNullOrEmpty(response.nickname) ? nickname : response.nickname);
+        Save(response.playerId, response.guestToken, string.IsNullOrEmpty(response.nickname) ? nickname : response.nickname, AuthTypeGuest);
     }
 
     // 토큰이 만료됐거나(401) 다른 플레이어로 시작하고 싶을 때
@@ -75,18 +86,26 @@ public class PlayerIdentity
         PlayerPrefs.DeleteKey(Key("playerId"));
         PlayerPrefs.DeleteKey(Key("token"));
         PlayerPrefs.DeleteKey(Key("nickname"));
+        PlayerPrefs.DeleteKey(Key("authType"));
+        PlayerPrefs.DeleteKey(Key("refreshToken"));
         PlayerPrefs.Save();
-        PlayerId = Token = Nickname = "";
+        PlayerId = Token = Nickname = FirebaseRefreshToken = "";
+        IsGoogleLogin = false;
     }
 
-    private void Save(string playerId, string token, string nickname)
+    private const string AuthTypeGoogle = "google";
+    private const string AuthTypeGuest = "guest";
+
+    private void Save(string playerId, string token, string nickname, string authType)
     {
         PlayerId = playerId ?? "";
         Token = token ?? "";
         Nickname = nickname ?? "";
+        IsGoogleLogin = authType == AuthTypeGoogle;
         PlayerPrefs.SetString(Key("playerId"), PlayerId);
         PlayerPrefs.SetString(Key("token"), Token);
         PlayerPrefs.SetString(Key("nickname"), Nickname);
+        PlayerPrefs.SetString(Key("authType"), authType);
         PlayerPrefs.Save();
     }
 

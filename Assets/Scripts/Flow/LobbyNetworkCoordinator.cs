@@ -117,10 +117,14 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         lobbyController.ReadyRequested += OnReadyRequested;
         lobbyController.LeaveRoomRequested += OnLeaveRoomRequested;
 
-        if (playerIdentity.HasToken)
+        if (!IsLoggedIn())
+        {
+            if (!allowGuestLogin) GoToLogin();
+        }
+        else
+        {
             lobbyController.SetLocalPlayer(playerIdentity.PlayerId);
-        else if (!allowGuestLogin)
-            GoToLogin();
+        }
     }
 
     private void UnbindLobbyController()
@@ -172,7 +176,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     // 로그인(또는 게스트 가입)된 플레이어가 있는지 확인한다
     private async System.Threading.Tasks.Task EnsurePlayer(string nickname)
     {
-        if (!playerIdentity.HasToken)
+        if (!IsLoggedIn())
         {
             if (!allowGuestLogin)
             {
@@ -185,6 +189,12 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
         apiClient.Token = playerIdentity.Token;
         lobbyController?.SetLocalPlayer(playerIdentity.PlayerId);
+    }
+
+    // 게스트를 허용하지 않으면 구글 로그인 토큰만 로그인으로 친다 (예전에 만든 게스트 토큰이 남아 있어도 로그인 씬으로 보낸다)
+    private bool IsLoggedIn()
+    {
+        return playerIdentity.HasToken && (allowGuestLogin || playerIdentity.IsGoogleLogin);
     }
 
     private void OnUnauthorized()

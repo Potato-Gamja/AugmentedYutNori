@@ -22,6 +22,8 @@ public interface IGoogleSignIn
 public class FirebaseSignInResult
 {
     public string IdToken;
+    // Firebase 갱신 토큰. 저장해 두면 다음에 브라우저 없이 새 IdToken을 받을 수 있다 (FirebaseTokenRefresher)
+    public string RefreshToken;
     public string Uid;
     public string Email;
     public string DisplayName;
