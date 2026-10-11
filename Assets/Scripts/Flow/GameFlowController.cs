@@ -487,6 +487,8 @@ public class GameFlowController : MonoBehaviour
     {
         Debug.LogWarning($"[GameFlow] 요청이 거절됐습니다. {reason}", this);
         selectionController?.Clear();
+        // 이동은 MOVE_APPLIED를 받아야 적용되므로, 거절되면 말 화면만 원래 상태로 되돌리면 된다
+        if (!isMoving) RefreshPieceLayout();
         hudPresenter?.RefreshStoredResults();
         hudPresenter?.RefreshPlayerPanels();
         RefreshSessionInteraction();
