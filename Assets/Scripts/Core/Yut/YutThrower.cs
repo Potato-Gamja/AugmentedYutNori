@@ -2,11 +2,24 @@ public readonly struct YutThrowOutcome
 {
     public readonly bool[] Sticks;     // true = 평평한 면(배)
     public readonly YutResult Result;
+    public readonly YutResult OriginalResult; // 윷의 원래 결과, 증강에 의해 바뀌었을 수 있음
 
+    // 증강으로 결과가 바뀌었는지
+    public bool IsResultChanged => Result != OriginalResult;
+
+    // 결과가 바뀌지 않은 경우
     public YutThrowOutcome(bool[] sticks, YutResult result)
     {
         Sticks = sticks;
         Result = result;
+        OriginalResult = result;
+    }
+
+    public YutThrowOutcome(bool[] sticks, YutResult result, YutResult originalResult)
+    {
+        Sticks = sticks;
+        Result = result;
+        OriginalResult = originalResult;
     }
 }
 public interface IGetResult //차후 윷가락이 늘어날지도 모르기 때문에 메서드 분리

@@ -130,13 +130,17 @@ public class GameRules
                 $"Core={result}, Server={serverResult}");
         }
 
-        YutThrowOutcome outcome = new YutThrowOutcome(sticks, serverResult);
+        // 도박사면 도↔모를 바꾼다 (윷가락 모양은 원래 결과 그대로)
+        YutResult stored = HasGambler(turnManager.CurrentTeam) ? GamblerAugment.Swap(serverResult) : serverResult;
+        bool swapped = stored != serverResult;
+
+        YutThrowOutcome outcome = new YutThrowOutcome(sticks, stored, serverResult);
 
         // StoredResults = [Yut, Gae] 이런식으로 나중에 이동에 사용할 수 있도록 결과 저장
         state.StoredResults.Add(outcome.Result);
 
         // 던지기 횟수 소비 + 윷/모 추가 던지기 처리
-        turnManager.ConsumeThrow(GrantsExtraThrow(outcome.Result));
+        turnManager.ConsumeThrow(!swapped && GrantsExtraThrow(outcome.Result));
 
         // 윷을 던졌다는 사실 외부에 알리기 (애니메이션이나, 결과 텍스트로 보여줄 수 있음)
         gameEvents.RaiseThrown(outcome);
@@ -470,6 +474,10 @@ public class GameRules
     // 이번 결과로 한 번 더 던지는지 (사냥꾼을 가졌다면 윷·모여도 추가 던지기 없음)
     private bool GrantsExtraThrow(YutResult result) =>
         result.GrantsExtraThrow() && !HasHunter(turnManager.CurrentTeam);
+
+    // 이 팀이 도박사를 가졌는지
+    private bool HasGambler(int team) =>
+        state.Board.GetAugments(team).Exists(augment => augment is GamblerAugment);
 
     // 서버에서 받은 재던지기 결과 적용
     public bool ApplyRethrow(
