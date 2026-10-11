@@ -9,6 +9,7 @@
     { "id": "Pacifist", "name": "평화주의자", "description": "잡히지 않는 대신 잡을 수 없다" },
     { "id": "Marathoner", "name": "마라토너", "description": "지름길로 갈 수 없는 대신 한 칸 더 간다" },
     { "id": "Assassin", "name": "암살자", "description": "이동 후 한 칸 앞의 상대 말을 잡는다 (도착 칸은 못 잡음)" },
-    { "id": "Loner", "name": "외톨이", "description": "판 위에 말을 하나만 둘 수 있지만 잡히지 않는다" }
+    { "id": "Loner", "name": "외톨이", "description": "판 위에 말을 하나만 둘 수 있지만 잡히지 않는다" },
+    { "id": "Hunter", "name": "사냥꾼", "description": "잡으면 두 번 더 던지지만 윷·모가 나와도 한 번 더 던지지 못한다" }
   ]
 }

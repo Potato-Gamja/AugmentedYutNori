@@ -8,7 +8,7 @@ public class GameState
     public List<YutResult> StoredResults { get; } = new List<YutResult>();
 
     // 플레이어가 앞으로 윷을 던질 수 있는 횟수
-    // 윷이나 모가 나오면 추가 기회는 result.GrantsExtraThrow에
+    // 윷이나 모가 나오면 추가 기회는 GameRules.GrantsExtraThrow에
     public int RemainingThrows { get; set; }
     // 승자가 없으면 null, 승자가 나오면 팀 번호 저장
     public int? WinnerTeam { get; set; }

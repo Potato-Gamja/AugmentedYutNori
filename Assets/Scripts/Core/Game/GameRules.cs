@@ -136,7 +136,7 @@ public class GameRules
         state.StoredResults.Add(outcome.Result);
 
         // 던지기 횟수 소비 + 윷/모 추가 던지기 처리
-        turnManager.ConsumeThrow(outcome.Result);
+        turnManager.ConsumeThrow(GrantsExtraThrow(outcome.Result));
 
         // 윷을 던졌다는 사실 외부에 알리기 (애니메이션이나, 결과 텍스트로 보여줄 수 있음)
         gameEvents.RaiseThrown(outcome);
@@ -268,10 +268,11 @@ public class GameRules
             gameEvents.RaisePieceCaptured(capturedPiece);
         }
 
-        // 상대 말을 잡으면 추가 던지기 1회
+        // 상대 말을 잡으면 추가 던지기 (사냥꾼은 2번)
         if (result.CapturedPieces.Count > 0)
         {
-            turnManager.AddExtraThrow();
+            int bonus = HasHunter(turnManager.CurrentTeam) ? HunterAugment.CaptureBonusThrows : 1;
+            turnManager.AddExtraThrow(bonus);
         }
 
         // 같이 이동한 말 확인 (업힌 말이 있으면 여러개일 수 있어서)
@@ -462,6 +463,13 @@ public class GameRules
         );
     }
 
+    // 이 팀이 사냥꾼을 가졌는지
+    private bool HasHunter(int team) =>
+        state.Board.GetAugments(team).Exists(augment => augment is HunterAugment);
+
+    // 이번 결과로 한 번 더 던지는지 (사냥꾼을 가졌다면 윷·모여도 추가 던지기 없음)
+    private bool GrantsExtraThrow(YutResult result) =>
+        result.GrantsExtraThrow() && !HasHunter(turnManager.CurrentTeam);
 
     // 서버에서 받은 재던지기 결과 적용
     public bool ApplyRethrow(
@@ -545,8 +553,8 @@ public class GameRules
 
         // 윷/모 추가 기회 여부 다시 계산
         turnManager.ReplaceThrowResult(
-            oldResult,
-            outcome.Result
+            GrantsExtraThrow(oldResult),
+            GrantsExtraThrow(outcome.Result)
         );
 
         // 재던지기 결과 이벤트

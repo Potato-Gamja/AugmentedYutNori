@@ -26,13 +26,14 @@ public class TurnManager
     }
 
     // 윷을 한 번 던졌을 때 호출
-    public void ConsumeThrow(YutResult result)
+    // grantsExtraThrow: 이번 결과로 한 번 더 던지는지 (GameRules가 증강까지 보고 정함)
+    public void ConsumeThrow(bool grantsExtraThrow)
     {
         if (state.RemainingThrows <= 0)
             return;
         state.RemainingThrows--;
 
-        if (result.GrantsExtraThrow())
+        if (grantsExtraThrow)
         {
             state.RemainingThrows++;    
         }
@@ -40,9 +41,9 @@ public class TurnManager
 
     // 윷/모 이외의 혹시 모를 규칙 때문에 추가 기회 받는 경우
     // 예를 들어서 상대 말을 잡는 경우
-    public void AddExtraThrow()
+    public void AddExtraThrow(int count = 1)
     {
-        state.RemainingThrows++;
+        state.RemainingThrows += count;
     }
 
     public bool HasRemainingThrow()
@@ -53,15 +54,15 @@ public class TurnManager
     // 재던지기로 기존 결과가 새 결과로 교체됐을 때
     // 기본 던지기 횟수는 다시 소비하지 않고, 윷/모 추가 기회만 다시 계산한다.
     public void ReplaceThrowResult(
-        YutResult oldResult,
-        YutResult newResult)
+        bool oldGrantsExtraThrow,
+        bool newGrantsExtraThrow)
     {
-        if (oldResult.GrantsExtraThrow())
+        if (oldGrantsExtraThrow)
         {
             state.RemainingThrows--;
         }
 
-        if (newResult.GrantsExtraThrow())
+        if (newGrantsExtraThrow)
         {
             state.RemainingThrows++;
         }
