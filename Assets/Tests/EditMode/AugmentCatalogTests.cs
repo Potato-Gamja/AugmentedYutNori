@@ -27,7 +27,7 @@ public class AugmentCatalogTests
 
         foreach (var id in ids)
         {
-            augments.Add(id, team => new BackDoSwitchAugment(team));
+            augments.Add(id, team => new ContrarianAugment(team));
         }
 
         return augments;

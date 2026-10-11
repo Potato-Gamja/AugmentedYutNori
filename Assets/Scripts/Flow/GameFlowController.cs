@@ -87,7 +87,13 @@ public class GameFlowController : MonoBehaviour
         BindPieces();
         lastStateHash = StateHasher.HashHex(gameState, turnManager);
 
-        hudPresenter = new GameFlowHudPresenter(hud, boardState, gameState, augmentCatalog, pieceViews);
+        hudPresenter = new GameFlowHudPresenter(
+            hud,
+            boardState,
+            gameState,
+            augmentCatalog,
+            pieceViews,
+            () => CurrentTeam);
         selectionController = new GameFlowSelectionController(
             boardView,
             boardState,
@@ -358,8 +364,10 @@ public class GameFlowController : MonoBehaviour
 
     private void OnThrown(YutThrowOutcome outcome)
     {
-        hud?.ShowThrowResult(outcome.Result, gameState.RemainingThrows, CurrentTeam);
+        bool grantedExtraThrow = hudPresenter.DidGrantExtraThrow(outcome, CurrentTeam);
+        hud?.ShowThrowResult(outcome, grantedExtraThrow, CurrentTeam);
         hudPresenter.RefreshStoredResults();
+        hudPresenter.RefreshPlayerPanels();
 
         if (gameState.RemainingThrows > 0)
         {

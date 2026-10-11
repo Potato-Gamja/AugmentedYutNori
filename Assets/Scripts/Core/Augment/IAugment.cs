@@ -3,9 +3,9 @@ using System.Collections.Generic;
 // 증강 효과. BoardState가 말 이동을 계산/적용하는 단계마다 등록된 증강을 Priority 순서로 호출한다.
 //
 // 말 하나가 움직일 때 호출 순서
-//   1. ModifyMoveCount : 굴린 칸 수 보정           (예: 빽도 전환, 잔걸음 강화, 빠른 출발)
-//   2. ModifyPaths     : 계산된 경로 추가/제거      (예: 통행 금지 칸, 추가 지름길)
-//   3. ModifyCaptures  : 잡힐 말 목록 보정          (예: 튼튼한 업기)
+//   1. ModifyMoveCount : 굴린 칸 수 보정            (예: 수행자, 스프린터)
+//   2. ModifyPaths     : 계산된 경로 추가/제거      (예: 청개구리)
+//   3. ModifyCaptures  : 잡힐 말 목록 보정          (예: 프렌드쉴드)
 //   4. OnMoved         : 이동이 끝난 뒤 효과        (예: 도착 칸 효과)
 //
 // 증강은 모든 팀의 이동에 호출된다. 내 말에만 적용하려면 context.IsMine(this)로 확인할 것.
