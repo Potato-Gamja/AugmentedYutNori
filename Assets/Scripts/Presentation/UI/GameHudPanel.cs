@@ -15,6 +15,7 @@ public class GameHudPanel : UIBase
     [SerializeField] private TMP_Text instructionText;
     [SerializeField] private Button throwButton;
     [SerializeField] private Button rethrowButton;
+    [SerializeField] private Button settingsButton;
 
     [Header("P0 HUD")]
     [SerializeField] private RectTransform storedResultRoot;
@@ -26,9 +27,15 @@ public class GameHudPanel : UIBase
     [SerializeField] private Sprite chipBack;
     [SerializeField] private Sprite resultRevealBackground;
     [SerializeField] private Sprite resultRevealGlow;
+    [SerializeField] private Sprite yutStickFlat;
+    [SerializeField] private Sprite yutStickRound;
+    [SerializeField] private Sprite yutStickBackdo;
     [SerializeField] private Image timerFill;
     [SerializeField] private TMP_Text timerText;
     [SerializeField] private float visualTurnSeconds = 30f;
+    [Header("Team Piece Art")]
+    [SerializeField] private List<Sprite> teamPieceSprites = new();
+    [SerializeField] private List<Sprite> teamPieceGlowSprites = new();
 
     private TurnHudView turnView;
     private PlayerStatusView playerView;
@@ -44,6 +51,7 @@ public class GameHudPanel : UIBase
     public event Action ThrowClicked;
     public event Action RethrowClicked;
     public event Action<int, int> WaitingPieceClicked;
+    public event Action SettingsClicked;
 
     public override void Init()
     {
@@ -70,7 +78,13 @@ public class GameHudPanel : UIBase
             chipConsumeRed,
             chipConsumeBlue,
             chipBack);
-        resultRevealView.Configure(resultText, resultRevealBackground, resultRevealGlow);
+        resultRevealView.Configure(
+            resultText,
+            resultRevealBackground,
+            resultRevealGlow,
+            yutStickFlat,
+            yutStickRound,
+            yutStickBackdo);
 
         if (throwButton != null)
         {
@@ -82,7 +96,11 @@ public class GameHudPanel : UIBase
             rethrowButton.onClick.RemoveListener(RaiseRethrowClicked);
             rethrowButton.onClick.AddListener(RaiseRethrowClicked);
         }
+        settingsButton?.onClick.AddListener(RaiseSettingsClicked);
     }
+
+    private void OnDestroy() => settingsButton?.onClick.RemoveListener(RaiseSettingsClicked);
+    private void RaiseSettingsClicked() => SettingsClicked?.Invoke();
 
     private void RaiseThrowClicked()
     {
@@ -137,19 +155,38 @@ public class GameHudPanel : UIBase
     }
     public void SetTimerRunning(bool value) => turnView?.SetTimerRunning(value);
 
+    public void ConfigurePlayers(int teamCount, int piecesPerTeam)
+    {
+        playerView?.Configure(teamCount, piecesPerTeam, teamPieceSprites, teamPieceGlowSprites);
+    }
+
     public void SetPlayerState(
         int team,
         int waiting,
         int onBoard,
         int finished,
-        IReadOnlyList<string> augmentIds)
+        IReadOnlyList<string> augmentNames,
+        IReadOnlyCollection<int> waitingSlots = null)
     {
-        playerView?.SetState(team, waiting, onBoard, finished, augmentIds);
+        playerView?.SetState(team, waiting, onBoard, finished, augmentNames, waitingSlots);
     }
 
     public void SetSelectedWaitingPiece(int team, int slotIndex)
     {
         playerView?.SetSelectedWaitingPiece(team, slotIndex);
+    }
+
+    public void SetWaitingPieceAvailable(int team, int slotIndex, bool available)
+    {
+        playerView?.SetWaitingPieceAvailable(team, slotIndex, available);
+    }
+
+    public void SetPlayerConnectionState(
+        int team,
+        PlayerStatusView.ConnectionState state,
+        int graceSec = 0)
+    {
+        playerView?.SetConnectionState(team, state, graceSec);
     }
 
     public void MarkResultPending(int resultIndex, int team)

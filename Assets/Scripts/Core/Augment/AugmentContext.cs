@@ -29,6 +29,6 @@ public class AugmentContext
     // 움직이는 말이 이 증강 주인의 말인지 (내 말에만 적용되는 증강에서 사용)
     public bool IsMine(IAugment augment) => augment.OwnerTeam == Team;
 
-    // piece가 이 증강 주인의 말인지 (방패처럼 상대 이동 중에 내 말을 지키는 증강에서 사용)
+    // piece가 이 증강 주인의 말인지 (프렌드쉴드처럼 상대 이동 중에 내 말을 지키는 증강에서 사용)
     public static bool IsOwnedBy(IAugment augment, Piece piece) => piece != null && augment.OwnerTeam == piece.Team;
 }

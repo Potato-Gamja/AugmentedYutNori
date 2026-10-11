@@ -72,16 +72,14 @@ public sealed class GameFlowSelectionController
     {
         if (team != getCurrentTeam()) return;
 
-        int waitingIndex = 0;
         foreach (PieceView view in pieceViews)
         {
-            if (view.Team != team || view.Piece == null || !view.Piece.IsWaiting) continue;
-            if (waitingIndex == slotIndex)
+            if (view.Team == team && view.SlotIndex == slotIndex &&
+                view.Piece != null && view.Piece.IsWaiting)
             {
                 SelectPiece(view == SelectedPiece ? null : view);
                 return;
             }
-            waitingIndex++;
         }
     }
 
@@ -96,6 +94,9 @@ public sealed class GameFlowSelectionController
         highlighted.Clear();
         targets.Clear();
 
+        foreach (PieceView view in pieceViews)
+            if (view != null) hud?.SetWaitingPieceAvailable(view.Team, view.SlotIndex, false);
+
         foreach (GameObject label in labels)
             if (label != null) UnityEngine.Object.Destroy(label);
         labels.Clear();
@@ -106,11 +107,14 @@ public sealed class GameFlowSelectionController
     public void RefreshTurnHighlights(bool enabled = true)
     {
         foreach (PieceView view in pieceViews)
+        {
+            bool canMove = enabled && view.Team == getCurrentTeam() &&
+                           view.Piece != null && !view.Piece.IsFinished &&
+                           gameRules.GetMoveOptions(view.Piece.Id).Count > 0;
             view.SetTurnHighlighted(
-                enabled &&
-                view.Team == getCurrentTeam() &&
-                view.Piece != null &&
-                !view.Piece.IsFinished);
+                canMove);
+            hud?.SetWaitingPieceAvailable(view.Team, view.SlotIndex, canMove && view.Piece.IsWaiting);
+        }
     }
 
     private void SelectPiece(PieceView piece)
@@ -123,13 +127,13 @@ public sealed class GameFlowSelectionController
         if (piece.Piece.IsWaiting)
             hud?.SetSelectedWaitingPiece(piece.Team, GetWaitingSlotIndex(piece));
 
-        hud?.SetInstruction("Select a destination.");
+        hud?.SetInstruction("이동할 칸을 선택하세요.");
         presenter.RefreshStoredResults(piece.Piece);
 
         foreach (MoveOption option in gameRules.GetMoveOptions(piece.Piece.Id))
         {
             BoardNode node = boardState.Graph.GetNode(option.DestinationNodeId);
-            NodeView destination = boardView.GetView(node);
+            NodeView destination = option.IsFinished ? FindVisibleGoalEntry() : boardView.GetView(node);
             if (destination == null) continue;
 
             if (!targets.TryGetValue(destination, out List<MoveOption> options))
@@ -145,11 +149,22 @@ public sealed class GameFlowSelectionController
             Color color = pair.Value.Count == 1
                 ? GameFlowHudPresenter.ResultColor(pair.Value[0].Result)
                 : Color.white;
-            pair.Key.SetDestinationBadge(GetDestinationBadge(pair.Key, pair.Value, piece.Team), piece.Team);
-            pair.Key.SetHighlight(color);
+            //pair.Key.SetDestinationBadge(GetDestinationBadge(pair.Key, pair.Value, piece.Team), piece.Team);
+            pair.Key.SetHighlight(color, piece.Team);
             highlighted.Add(pair.Key);
             CreateLabel(pair.Key, pair.Value);
         }
+    }
+
+    // Core와 서버에는 골인 목적지를 Start 노드 ID로 그대로 전달한다.
+    // Start 노드는 판 밖에 있으므로, 화면에서는 참먹이(보이는 출발 칸)를 골인 선택 지점으로 사용한다.
+    private NodeView FindVisibleGoalEntry()
+    {
+        foreach (NodeView view in boardView.GetNodeViews())
+            if (view.Type == BoardNodeType.End)
+                return view;
+
+        return boardView.GetView(boardState.Graph.StartNode);
     }
 
     private void UseDestinationOptions(IReadOnlyList<MoveOption> options)
@@ -173,22 +188,23 @@ public sealed class GameFlowSelectionController
 
     private int GetWaitingSlotIndex(PieceView target)
     {
-        int index = 0;
-        foreach (PieceView view in pieceViews)
-        {
-            if (view.Team != target.Team || view.Piece == null || !view.Piece.IsWaiting) continue;
-            if (view == target) return index;
-            index++;
-        }
-        return -1;
+        return target != null ? target.SlotIndex : -1;
     }
 
     private PieceView PickPiece(Vector3 world)
     {
+        PieceView best = null;
+        float bestDistance = float.MaxValue;
         foreach (PieceView view in pieceViews)
-            if (view != null && view.gameObject.activeInHierarchy && view.Contains(world))
-                return view;
-        return null;
+        {
+            if (view == null || !view.gameObject.activeInHierarchy || !view.Contains(world)) continue;
+
+            float distance = view.DistanceTo(world);
+            if (distance >= bestDistance) continue;
+            best = view;
+            bestDistance = distance;
+        }
+        return best;
     }
 
     private NodeView PickNode(Vector3 world)
@@ -216,51 +232,60 @@ public sealed class GameFlowSelectionController
     {
         var labelObject = new GameObject("MoveResultLabel");
         labelObject.transform.SetParent(destination.transform, false);
-        labelObject.transform.localPosition = new Vector3(0f, 1.02f, 0f);
+        labelObject.transform.localPosition = new Vector3(0f, 0.72f, 0f);
+
+        SpriteRenderer source = destination.GetComponentInChildren<SpriteRenderer>();
+        if (source != null)
+        {
+            var badgeObject = new GameObject("ResultBadge");
+            badgeObject.transform.SetParent(labelObject.transform, false);
+            badgeObject.transform.localScale = new Vector3(1f, 1f, 1f);
+            SpriteRenderer badge = badgeObject.AddComponent<SpriteRenderer>();
+            badge.sprite = destination.GetResultBadgeSprite(getCurrentTeam());
+            if (badge.sprite == null) badge.sprite = source.sprite;
+            badge.color = Color.white;
+            badge.sortingLayerID = source.sortingLayerID;
+            badge.sortingOrder = 34;
+        }
 
         TextMesh text = labelObject.AddComponent<TextMesh>();
         text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        text.fontSize = 54;
-        text.characterSize = 0.055f;
+        text.fontSize = 60;
+        text.characterSize = 0.065f;
         text.anchor = TextAnchor.MiddleCenter;
         text.alignment = TextAlignment.Center;
-        text.fontStyle = FontStyle.Bold;
+        text.fontStyle = FontStyle.Normal;
 
-        var names = new List<string>();
-        foreach (MoveOption option in options)
-        {
-            string name = GameFlowHudPresenter.MoveOptionLabel(option);
-            if (!names.Contains(name)) names.Add(name);
-        }
-
-        text.text = string.Join("/", names);
-        text.color = options.Count == 1 ? GameFlowHudPresenter.ResultColor(options[0].Result) : Color.white;
+        text.text = options.Count > 1
+            ? "선택"
+            : GameFlowHudPresenter.ResultLabel(options[0].Result);
+        text.color = Color.white;
         MeshRenderer renderer = labelObject.GetComponent<MeshRenderer>();
         renderer.sharedMaterial = text.font.material;
         renderer.sortingOrder = 35;
         labels.Add(labelObject);
     }
 
-    private DestinationBadgeType GetDestinationBadge(
-        NodeView destination,
-        IReadOnlyList<MoveOption> options,
-        int movingTeam)
-    {
-        foreach (MoveOption option in options)
-            if (option.IsFinished) return DestinationBadgeType.Finish;
+    //private DestinationBadgeType GetDestinationBadge(
+    //    NodeView destination,
+    //    IReadOnlyList<MoveOption> options,
+    //    int movingTeam)
+    //{
+    //    foreach (MoveOption option in options)
+    //        if (option.IsFinished) return DestinationBadgeType.Finish;
 
-        BoardNode node = destination.Node ?? boardState.Graph.GetNode(destination.Id);
-        if (node == null) return DestinationBadgeType.None;
+    //    BoardNode node = destination.Node ?? boardState.Graph.GetNode(destination.Id);
+    //    if (node == null) return DestinationBadgeType.None;
 
-        bool hasSameTeam = false;
-        foreach (Piece occupant in boardState.GetPiecesAt(node))
-        {
-            if (occupant.Team != movingTeam) return DestinationBadgeType.Capture;
-            hasSameTeam = true;
-        }
+    //    bool hasSameTeam = false;
+    //    foreach (Piece occupant in boardState.GetPiecesAt(node))
+    //    {
+    //        if (occupant.Team != movingTeam) return DestinationBadgeType.Capture;
+    //        hasSameTeam = true;
+    //    }
 
-        return hasSameTeam ? DestinationBadgeType.Carry : DestinationBadgeType.None;
-    }
+    //    return hasSameTeam ? DestinationBadgeType.Carry : DestinationBadgeType.None;
+    //}
 
     private static bool AreEquivalent(IReadOnlyList<MoveOption> options)
     {

@@ -34,8 +34,12 @@ public class NodeView : MonoBehaviour
     [SerializeField] private Sprite captureBadgeSprite;
     [SerializeField] private Sprite carryRedBadgeSprite;
     [SerializeField] private Sprite carryBlueBadgeSprite;
+    [SerializeField] private Sprite carryGreenBadgeSprite;
+    [SerializeField] private Sprite carryYellowBadgeSprite;
     [SerializeField] private Sprite finishBadgeSprite;
-[SerializeField] private Sprite destinationHighlightSprite;
+    [SerializeField] private Sprite destinationHighlightSprite;
+    [SerializeField] private List<Sprite> teamDestinationHighlightSprites = new();
+    [SerializeField] private List<Sprite> teamResultBadgeSprites = new();
 
     
     private SpriteRenderer destinationBadge;
@@ -80,6 +84,25 @@ private SpriteRenderer outline;
 
         outline.color = color;
         outline.enabled = true;
+    }
+
+    public void SetHighlight(Color color, int team)
+    {
+        SetHighlight(color);
+        if (outline == null || teamDestinationHighlightSprites == null ||
+            team < 0 || team >= teamDestinationHighlightSprites.Count ||
+            teamDestinationHighlightSprites[team] == null) return;
+
+        outline.sprite = teamDestinationHighlightSprites[team];
+        outline.transform.localScale = Vector3.one;
+        outline.color = Color.white;
+    }
+
+    public Sprite GetResultBadgeSprite(int team)
+    {
+        return teamResultBadgeSprites != null && team >= 0 && team < teamResultBadgeSprites.Count
+            ? teamResultBadgeSprites[team]
+            : null;
     }
 
 public void ClearHighlight()
@@ -133,7 +156,13 @@ private SpriteRenderer CreateOutline()
         destinationBadge.sprite = badgeType == DestinationBadgeType.Capture
             ? captureBadgeSprite
             : badgeType == DestinationBadgeType.Carry
-                ? (movingTeam == 0 ? carryRedBadgeSprite : carryBlueBadgeSprite)
+                ? movingTeam switch
+                {
+                    0 => carryRedBadgeSprite,
+                    1 => carryBlueBadgeSprite,
+                    2 => carryGreenBadgeSprite,
+                    _ => carryYellowBadgeSprite
+                }
                 : finishBadgeSprite;
         destinationBadge.enabled = destinationBadge.sprite != null;
     }

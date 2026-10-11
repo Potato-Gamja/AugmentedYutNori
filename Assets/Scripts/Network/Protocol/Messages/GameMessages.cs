@@ -87,3 +87,10 @@ public enum GameEndReason
     FORFEIT,        // 기권 / 방 나감
     DISCONNECTED,   // 재접속 유예시간 초과
 }
+
+// C→S STATE_HASH
+public class StateHashReport
+{
+    public long seq;
+    public string stateHash;
+}

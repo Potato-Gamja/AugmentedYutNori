@@ -16,6 +16,11 @@ public class AugmentCardView : MonoBehaviour
         augmentDescription.text = definition.description;
 
         selectButton = GetComponent<Button>();
+        if (onCardSelected == null)
+        {
+            if (selectButton != null) selectButton.interactable = false;
+            return;
+        }
         selectButton.onClick.AddListener(() => onCardSelected(definition.id));
     }
 }

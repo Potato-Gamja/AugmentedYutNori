@@ -21,17 +21,20 @@ public class PieceView : MonoBehaviour
     [SerializeField] private Sprite selectedRingSprite;
     [SerializeField] private Sprite selectedFloorSprite;
     [SerializeField] private Sprite selectedFloorShadowSprite;
+    [SerializeField] private Sprite stackBadgeSprite;
     [SerializeField] private Color stackTextColor = Color.white;
     [SerializeField] private float stackTextSize = 0.08f;
 
     private Vector3 homePosition;
     private Color normalColor;
     private TextMesh stackText;
+    private SpriteRenderer stackBadge;
     private SpriteRenderer highlightOutline;
     private SpriteRenderer availableGlow;
     private SpriteRenderer selectedRing;
     private SpriteRenderer selectedFloor;
     private SpriteRenderer selectedFloorShadow;
+    private Vector3 baseScale;
     private bool isSelected;
     
     private bool worldVisible = true;
@@ -59,30 +62,55 @@ private bool isTurnHighlighted;
 
 private void Awake()
     {
+        baseScale = transform.localScale;
         if (spriteRenderer == null) spriteRenderer = GetComponentInChildren<SpriteRenderer>();
         if (bodySprite != null) spriteRenderer.sprite = bodySprite;
         homePosition = transform.position;
         normalColor = spriteRenderer.color;
         if (availableGlowSprite != null)
         {
-            selectedFloor = CreateEffectRenderer("SelectedFloor", selectedFloorSprite, -3);
-            selectedFloorShadow = CreateEffectRenderer("SelectedFloorShadow", selectedFloorShadowSprite, -2);
-            availableGlow = CreateEffectRenderer("AvailableGlow", availableGlowSprite, -1);
-            selectedRing = CreateEffectRenderer("SelectedRing", selectedRingSprite, 1);
+            selectedFloor = FindOrCreateEffectRenderer("SelectedFloor", selectedFloorSprite, -3);
+            selectedFloorShadow = FindOrCreateEffectRenderer("SelectedFloorShadow", selectedFloorShadowSprite, -2);
+            availableGlow = FindOrCreateEffectRenderer("AvailableGlow", availableGlowSprite, -1);
+            selectedRing = FindOrCreateEffectRenderer("SelectedRing", selectedRingSprite, 1);
         }
-        else highlightOutline = CreateHighlightOutline();
-        stackText = CreateStackText();
+        else highlightOutline = FindOrCreateHighlightOutline();
+        stackText = transform.Find("StackCount")?.GetComponent<TextMesh>() ?? CreateStackText();
+        stackBadge = FindOrCreateEffectRenderer("StackBadge", stackBadgeSprite, 2);
+        if (stackBadge != null)
+        {
+            stackBadge.transform.SetParent(transform, false);
+            stackBadge.transform.localPosition = new Vector3(0.28f, 0.28f, 0f);
+            stackBadge.transform.localScale = Vector3.one * 0.9f;
+        }
+        stackText.transform.localPosition = new Vector3(0.28f, 0.28f, 0f);
+        stackText.color = GetStackTextColor(team);
         SetStackCount(1);
         RefreshHighlight();
     }
 
-public void Bind(Piece piece)
+    public void Bind(Piece piece)
     {
         Piece = piece;
         transform.position = homePosition;
         gameObject.SetActive(true);
         // 대기 말은 PlayerPanel 슬롯으로 표시한다. 월드 말은 판에 진입할 때 켠다.
         SetWorldVisible(!piece.IsWaiting);
+    }
+
+    /// <summary>
+    /// GAME_START에서 3·4팀을 받은 경우 씬에 없는 PieceView 복제본의 고정 ID와 표시색을 지정한다.
+    /// 서버의 pieceId 규칙은 GameSetup.PieceId(team, slot)과 같아야 한다.
+    /// </summary>
+    public void ConfigureRuntimeIdentity(int configuredTeam, int configuredSlot, Color teamColor)
+    {
+        team = configuredTeam;
+        slotIndex = configuredSlot;
+        name = $"Piece_Team{configuredTeam + 1}_{configuredSlot}";
+        normalColor = teamColor;
+        if (spriteRenderer != null) spriteRenderer.color = teamColor;
+        if (stackText != null) stackText.color = GetStackTextColor(team);
+        RefreshHighlight();
     }
 
     // 잡혔을 때 대기석으로 돌아감
@@ -96,7 +124,9 @@ public void ReturnHome()
 public void SetSelected(bool selected)
     {
         isSelected = selected;
-        transform.localScale = selected ? Vector3.one * 1.15f : Vector3.one;
+        transform.localScale = selected
+            ? new Vector3(baseScale.x * 1.15f, baseScale.y * 1.15f, baseScale.z)
+            : baseScale;
         RefreshHighlight();
     }
 
@@ -135,7 +165,9 @@ private void RefreshHighlight()
     // 업힌 말 수. 2개 이상일 때만 숫자 표시
     public void SetStackCount(int count)
     {
-        stackText.text = count >= 2 ? count.ToString() : "";
+        bool stacked = count >= 2;
+        stackText.text = stacked ? count.ToString() : "";
+        if (stackBadge != null) stackBadge.enabled = worldVisible && stacked;
     }
 
     // 업힌 말끼리 같은 자리에 겹치므로, 맨 위에 그려질 말을 정한다
@@ -147,16 +179,25 @@ public void SetSortingOrder(int order)
         if (availableGlow != null) availableGlow.sortingOrder = order - 1;
         if (selectedRing != null) selectedRing.sortingOrder = order + 1;
         if (highlightOutline != null) highlightOutline.sortingOrder = order - 1;
-        stackText.GetComponent<MeshRenderer>().sortingOrder = order + 2;
+        if (stackBadge != null) stackBadge.sortingOrder = order + 2;
+        stackText.GetComponent<MeshRenderer>().sortingOrder = order + 3;
     }
 
 public bool Contains(Vector3 worldPosition)
     {
         if (!gameObject.activeInHierarchy || !worldVisible) return false;
 
-        Vector3 center = transform.position;
+        Vector3 center = spriteRenderer.bounds.center;
         center.z = worldPosition.z;
-        return Vector3.Distance(center, worldPosition) <= spriteRenderer.bounds.extents.x;
+        float radius = Mathf.Max(spriteRenderer.bounds.extents.x, spriteRenderer.bounds.extents.y);
+        return Vector3.Distance(center, worldPosition) <= radius;
+    }
+
+    // 같은 칸에서 여러 팀 말의 클릭 영역이 겹칠 때 실제 보이는 말과 가장 가까운 대상을 고르는 데 사용한다.
+    public float DistanceTo(Vector3 worldPosition)
+    {
+        Vector3 center = spriteRenderer.bounds.center;
+        return Vector2.Distance(center, worldPosition);
     }
 
     // points: 지나갈 칸들의 월드 좌표. hideAtEnd: 골인하면 도착 후 사라짐
@@ -198,7 +239,7 @@ public bool Contains(Vector3 worldPosition)
         text.characterSize = stackTextSize;
         text.anchor = TextAnchor.MiddleCenter;
         text.alignment = TextAlignment.Center;
-        text.fontStyle = FontStyle.Bold;
+        text.fontStyle = FontStyle.Normal;
         text.color = stackTextColor;
 
         var textRenderer = go.GetComponent<MeshRenderer>();
@@ -206,6 +247,17 @@ public bool Contains(Vector3 worldPosition)
         textRenderer.sortingLayerID = spriteRenderer.sortingLayerID;
         textRenderer.sortingOrder = spriteRenderer.sortingOrder + 1;
         return text;
+    }
+
+    private static Color GetStackTextColor(int teamIndex)
+    {
+        return teamIndex switch
+        {
+            0 => new Color32(170, 45, 45, 255),
+            1 => new Color32(35, 88, 165, 255),
+            2 => new Color32(32, 127, 83, 255),
+            _ => new Color32(117, 75, 18, 255)
+        };
     }
 
     private SpriteRenderer CreateHighlightOutline()
@@ -223,6 +275,12 @@ public bool Contains(Vector3 worldPosition)
         return outline;
     }
 
+    private SpriteRenderer FindOrCreateHighlightOutline()
+    {
+        SpriteRenderer existing = spriteRenderer.transform.Find("TurnHighlightOutline")?.GetComponent<SpriteRenderer>();
+        return existing != null ? existing : CreateHighlightOutline();
+    }
+
 
 // P0 아트는 같은 캔버스와 Pivot을 사용하므로 로컬 좌표 0에서 정확히 겹친다.
     private SpriteRenderer CreateEffectRenderer(string objectName, Sprite sprite, int orderOffset)
@@ -238,6 +296,12 @@ public bool Contains(Vector3 worldPosition)
         return renderer;
     }
 
+    private SpriteRenderer FindOrCreateEffectRenderer(string objectName, Sprite sprite, int orderOffset)
+    {
+        SpriteRenderer existing = spriteRenderer.transform.Find(objectName)?.GetComponent<SpriteRenderer>();
+        return existing != null ? existing : CreateEffectRenderer(objectName, sprite, orderOffset);
+    }
+
 
 /// <summary>
     /// 대기석은 PlayerPanel UI가 대신 표시하므로 월드 스프라이트의 중복 노출을 제어한다.
@@ -247,6 +311,7 @@ public bool Contains(Vector3 worldPosition)
     {
         worldVisible = visible;
         if (stackText != null) stackText.gameObject.SetActive(visible);
+        if (stackBadge != null) stackBadge.enabled = visible && !string.IsNullOrEmpty(stackText.text);
         RefreshHighlight();
     }
 }

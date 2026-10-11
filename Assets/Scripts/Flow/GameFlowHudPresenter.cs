@@ -10,12 +10,21 @@ public sealed class GameFlowHudPresenter
     private readonly GameHudPanel hud;
     private readonly BoardState boardState;
     private readonly GameState gameState;
+    private readonly AugmentCatalog augmentCatalog;
+    private readonly IReadOnlyList<PieceView> pieceViews;
 
-    public GameFlowHudPresenter(GameHudPanel hud, BoardState boardState, GameState gameState)
+    public GameFlowHudPresenter(
+        GameHudPanel hud,
+        BoardState boardState,
+        GameState gameState,
+        AugmentCatalog augmentCatalog,
+        IReadOnlyList<PieceView> pieceViews)
     {
         this.hud = hud;
         this.boardState = boardState;
         this.gameState = gameState;
+        this.augmentCatalog = augmentCatalog;
+        this.pieceViews = pieceViews;
     }
 
     public void RefreshPlayerPanels()
@@ -32,21 +41,35 @@ public sealed class GameFlowHudPresenter
             int waiting = 0;
             int onBoard = 0;
             int finished = 0;
+            var waitingSlots = new List<int>();
 
             foreach (Piece piece in boardState.Pieces)
             {
                 if (piece.Team != team) continue;
-                if (piece.IsWaiting) waiting++;
+                if (piece.IsWaiting)
+                {
+                    waiting++;
+                    PieceView view = FindView(piece);
+                    if (view != null) waitingSlots.Add(view.SlotIndex);
+                }
                 else if (piece.IsOnBoard) onBoard++;
                 else if (piece.IsFinished) finished++;
             }
 
-            var augmentIds = new List<string>();
+            var augmentNames = new List<string>();
             foreach (IAugment augment in boardState.GetAugments(team))
-                augmentIds.Add(augment.Id);
+                augmentNames.Add(augmentCatalog.Find(augment.Id).name);
 
-            hud.SetPlayerState(team, waiting, onBoard, finished, augmentIds);
+            hud.SetPlayerState(team, waiting, onBoard, finished, augmentNames, waitingSlots);
         }
+    }
+
+    private PieceView FindView(Piece piece)
+    {
+        if (pieceViews == null) return null;
+        foreach (PieceView view in pieceViews)
+            if (view != null && view.Piece == piece) return view;
+        return null;
     }
 
     public void RefreshStoredResults(Piece contextPiece = null)
@@ -54,7 +77,7 @@ public sealed class GameFlowHudPresenter
         if (hud == null || gameState == null) return;
         if (gameState.StoredResults.Count == 0)
         {
-            hud.SetResults("Stored Results: -");
+            hud.SetResults("저장 결과: -");
             return;
         }
 
@@ -70,19 +93,14 @@ public sealed class GameFlowHudPresenter
             results.Add($"{ResultLabel(result)} {baseCount}{bonusText}");
         }
 
-        hud.SetResults($"Stored: {string.Join("  ", results)}");
+        hud.SetResults($"저장: {string.Join("  ", results)}");
     }
 
     public bool CanUseRethrow(int team)
     {
-        if (gameState == null || gameState.StoredResults.Count == 0) return false;
+        if (gameState == null) return false;
         RethrowAugment rethrow = GetRethrowAugment(team);
-        return rethrow != null &&
-               !gameState.HasMovedThisTurn &&
-               rethrow.CanUse(
-                   boardState,
-                   team,
-                   gameState.StoredResults[gameState.StoredResults.Count - 1]);
+        return rethrow != null && rethrow.CanUse(gameState, team);
     }
 
     public static string MoveOptionLabel(MoveOption option)

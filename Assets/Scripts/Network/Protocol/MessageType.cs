@@ -20,6 +20,7 @@ public enum MessageType
     MOVE_APPLIED,       // S→C 확정된 이동 (상대 기기는 이걸로 재계산)
     TURN_CHANGED,       // S→C 턴 변경
     GAME_ENDED,         // S→C 게임 종료
+    STATE_HASH,         // C→S MOVE_APPLIED 적용 후 내 상태 해시 (서버에서 양쪽 비교)
 
     // ── 증강 ──
     AUGMENT_CHOICES,    // S→C 증강 후보
@@ -30,4 +31,8 @@ public enum MessageType
     PING,               // C→S 연결 확인
     PONG,               // S→C 연결 확인 응답
     ERROR,              // S→C 요청 거부·오류
+    PLAYER_DISCONNECTED,// S→C 다른 플레이어 연결 끊김 (재접속 대기)
+    PLAYER_RECONNECTED, // S→C 끊겼던 플레이어 재접속
+    GAME_SNAPSHOT,
+    SYNC_REQUEST
 }

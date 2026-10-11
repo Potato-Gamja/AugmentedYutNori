@@ -4,6 +4,7 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 
 public enum GameFlowState { GameStart, AugmentSelect, Throw, Move, EndTurn, Finish }
 
@@ -20,6 +21,7 @@ public class GameFlowController : MonoBehaviour
     [SerializeField] private TextAsset augmentsJson;
     [SerializeField] private bool skipAugmentSelection = true;
     [SerializeField] private GameSetup setup = new GameSetup();
+    [SerializeField] private string mainMenuSceneName = "Lobby";
 
     private readonly Dictionary<Piece, PieceView> views = new();
 
@@ -28,9 +30,13 @@ public class GameFlowController : MonoBehaviour
     private TurnManager turnManager;
     private GameEvents gameEvents;
     private GameRules gameRules;
+    // Flow는 규칙 구현을 직접 실행하지 않고 세션에 명령을 보낸 뒤 확정 이벤트만 화면에 반영한다.
+    private IGameSession gameSession;
+    private IGameSessionFactory sessionFactory;
     private GameHudPanel hud;
     private GameFlowHudPresenter hudPresenter;
     private GameFlowSelectionController selectionController;
+    private SettingsPanel settingsPanel;
     private Camera mainCamera;
     private AugmentCatalog augmentCatalog;
     private GameFlowState currentState;
@@ -40,6 +46,7 @@ public class GameFlowController : MonoBehaviour
     private int? pendingTurnTeam;
     private int? pendingWinnerTeam;
     private string lastStateHash;
+    private readonly Dictionary<string, int> playerTeams = new();
 
     public GameFlowState CurrentState => currentState;
     public int CurrentTeam => turnManager != null ? turnManager.CurrentTeam : 0;
@@ -72,6 +79,7 @@ public class GameFlowController : MonoBehaviour
         }
 
         OpenHud();
+        EnsurePieceViewsForSetup();
         CreateCoreState();
         var errors = setup.CheckScenePieces(pieceViews.Select(v => (v.Team, v.SlotIndex)));
         if (errors.Count > 0)
@@ -79,7 +87,7 @@ public class GameFlowController : MonoBehaviour
         BindPieces();
         lastStateHash = StateHasher.HashHex(gameState, turnManager);
 
-        hudPresenter = new GameFlowHudPresenter(hud, boardState, gameState);
+        hudPresenter = new GameFlowHudPresenter(hud, boardState, gameState, augmentCatalog, pieceViews);
         selectionController = new GameFlowSelectionController(
             boardView,
             boardState,
@@ -92,6 +100,7 @@ public class GameFlowController : MonoBehaviour
             hudPresenter);
 
         SubscribeEvents();
+        BindSettingsPanel();
         RefreshPieceLayout();
         hudPresenter.RefreshPlayerPanels();
         ChangeState(GameFlowState.GameStart);
@@ -106,12 +115,26 @@ public class GameFlowController : MonoBehaviour
         setup = gameSetup ?? throw new ArgumentNullException(nameof(gameSetup));
     }
 
+    /// <summary>
+    /// GameInstaller가 게임 설정과 Local/Remote 세션 생성 방식을 함께 주입할 때 사용한다.
+    /// Network 담당은 GameFlowController를 직접 수정하지 않고 GameInstaller에 Remote Factory를 등록한다.
+    /// </summary>
+    public void Configure(GameSetup gameSetup, IGameSessionFactory factory)
+    {
+        Configure(gameSetup);
+        sessionFactory = factory ?? throw new ArgumentNullException(nameof(factory));
+    }
+
     private bool ValidateSetup()
     {
         setup ??= GameSetup.CreateLocalDefault();
         try
         {
             setup.Validate();
+            if (setup.teamCount > 4)
+                throw new ArgumentException($"클라이언트는 2~4팀만 지원합니다. (현재 {setup.teamCount})");
+            if (setup.piecesPerTeam > 4)
+                throw new ArgumentException($"현재 HUD는 팀당 1~4개의 말만 지원합니다. (현재 {setup.piecesPerTeam})");
             return true;
         }
         catch (ArgumentException exception)
@@ -141,7 +164,43 @@ public class GameFlowController : MonoBehaviour
         hud.ThrowClicked += OnThrowButtonClicked;
         hud.RethrowClicked += OnRethrowButtonClicked;
         hud.WaitingPieceClicked += OnWaitingPieceClicked;
+        hud.SettingsClicked += OnSettingsClicked;
+        hud.ConfigurePlayers(setup.teamCount, setup.piecesPerTeam);
         hud.SetRethrowVisible(false);
+    }
+
+    private void EnsurePieceViewsForSetup()
+    {
+        pieceViews.RemoveAll(view => view == null);
+
+        foreach (PieceView view in pieceViews)
+        {
+            bool used = view.Team >= 0 && view.Team < setup.teamCount &&
+                        view.SlotIndex >= 0 && view.SlotIndex < setup.piecesPerTeam;
+            view.gameObject.SetActive(used);
+        }
+
+        for (int team = 0; team < setup.teamCount; team++)
+        {
+            for (int slot = 0; slot < setup.piecesPerTeam; slot++)
+            {
+                if (pieceViews.Exists(view => view.Team == team && view.SlotIndex == slot)) continue;
+
+                PieceView source = pieceViews.Find(view => view.Team == 0 && view.SlotIndex == slot);
+                if (source == null) source = pieceViews.Find(view => view.SlotIndex == slot);
+                if (source == null)
+                {
+                    Debug.LogError($"[GameFlow] 팀 {team + 1}, 말 {slot + 1}을 만들 기준 PieceView가 없습니다.", this);
+                    continue;
+                }
+
+                PieceView created = Instantiate(source, source.transform.parent);
+                created.ConfigureRuntimeIdentity(team, slot, GameHudPanel.GetTeamColor(team));
+                pieceViews.Add(created);
+            }
+        }
+
+        pieceViews.RemoveAll(view => !view.gameObject.activeSelf);
     }
     
     private void CreateCoreState()
@@ -159,11 +218,11 @@ public class GameFlowController : MonoBehaviour
             new YutThrower(new SystemRandomProvider()),
             new StandardGetResult(),
             CreateAugmentPool());
-        /*
-        setup.Validate();
-        teamCount = setup.teamCount;
-        boardView.Graph.AllowSkipShortcut = setup.allowSkipShortcut;
-        */
+        // Installer가 없는 기존 단독 씬은 로컬 세션으로 계속 실행한다.
+        // 서버 게임은 GameInstaller가 주입한 Factory를 통해 RemoteGameSession을 생성한다.
+        gameSession = sessionFactory != null
+            ? sessionFactory.Create(gameRules, gameEvents, gameState, turnManager)
+            : new LocalGameSession(gameRules, gameEvents);
     }
 
     // json에 저장되어 있는 모든 증강 가져오기
@@ -202,14 +261,24 @@ public class GameFlowController : MonoBehaviour
 
     private void SubscribeEvents()
     {
-        gameEvents.Thrown += OnThrown;
-        gameEvents.PieceMoved += OnMoved;
-        gameEvents.TurnChanged += OnTurnChanged;
-        gameEvents.AugmentSelected += OnAugmentSelectedEvent;
-        gameEvents.GameEnded += OnGameEnded;
+        gameSession.Thrown += OnThrown;
+        gameSession.Moved += OnMoved;
+        gameSession.TurnChanged += OnTurnChanged;
+        gameSession.AugmentChoices += OnAugmentChoices;
+        gameSession.AugmentSelected += OnAugmentSelectedEvent;
+        gameSession.GameEnded += OnGameEnded;
+        gameSession.RequestRejected += OnRequestRejected;
         boardState.PiecesReturnedByBoardChange += OnPiecesReturnedByBoardChange;
         boardState.DesyncDetected += OnDesyncDetected;
         boardView.LayoutReloaded += OnBoardLayoutReloaded;
+        if (gameSession is RemoteGameSession remote)
+        {
+            remote.PlayerDisconnected += OnRemotePlayerDisconnected;
+            remote.PlayerReconnected += OnRemotePlayerReconnected;
+            remote.PlayerRemoved += OnRemotePlayerRemoved;
+            remote.AutomatedMoveApplied += OnAutomatedMoveApplied;
+            remote.ConnectionAvailabilityChanged += OnConnectionAvailabilityChanged;
+        }
     }
 
     private void OnDestroy()
@@ -219,15 +288,28 @@ public class GameFlowController : MonoBehaviour
             hud.ThrowClicked -= OnThrowButtonClicked;
             hud.RethrowClicked -= OnRethrowButtonClicked;
             hud.WaitingPieceClicked -= OnWaitingPieceClicked;
+            hud.SettingsClicked -= OnSettingsClicked;
         }
+        if (settingsPanel != null) settingsPanel.ExitGameRequested -= OnExitGameRequested;
 
-        if (gameEvents != null)
+        if (gameSession != null)
         {
-            gameEvents.Thrown -= OnThrown;
-            gameEvents.PieceMoved -= OnMoved;
-            gameEvents.TurnChanged -= OnTurnChanged;
-            gameEvents.AugmentSelected -= OnAugmentSelectedEvent;
-            gameEvents.GameEnded -= OnGameEnded;
+            if (gameSession is RemoteGameSession remote)
+            {
+                remote.PlayerDisconnected -= OnRemotePlayerDisconnected;
+                remote.PlayerReconnected -= OnRemotePlayerReconnected;
+            remote.PlayerRemoved -= OnRemotePlayerRemoved;
+            remote.AutomatedMoveApplied -= OnAutomatedMoveApplied;
+            remote.ConnectionAvailabilityChanged -= OnConnectionAvailabilityChanged;
+            }
+            gameSession.Thrown -= OnThrown;
+            gameSession.Moved -= OnMoved;
+            gameSession.TurnChanged -= OnTurnChanged;
+            gameSession.AugmentChoices -= OnAugmentChoices;
+            gameSession.AugmentSelected -= OnAugmentSelectedEvent;
+            gameSession.GameEnded -= OnGameEnded;
+            gameSession.RequestRejected -= OnRequestRejected;
+            if (gameSession is IDisposable disposable) disposable.Dispose();
         }
 
         if (boardState != null)
@@ -240,7 +322,8 @@ public class GameFlowController : MonoBehaviour
 
     private void Update()
     {
-        if (currentState != GameFlowState.Move || isMoving || !setup.CanControl(CurrentTeam) ||
+        if (currentState != GameFlowState.Move || isMoving || gameSession == null ||
+            gameSession.IsCommandPending || !setup.CanControl(CurrentTeam) ||
             Mouse.current == null || mainCamera == null ||
             !Mouse.current.leftButton.wasPressedThisFrame) return;
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
@@ -254,43 +337,23 @@ public class GameFlowController : MonoBehaviour
 
     public void OnThrowButtonClicked()
     {
-        if (currentState != GameFlowState.Throw || gameRules == null || !setup.CanControl(CurrentTeam)) return;
-        // 규격 확인 필요: IGameSession이 준비되면 gameRules 직접 호출 대신 RequestThrow를 호출하고 응답까지 HUD 입력을 잠근다.
-        try
-        {
-            gameRules.ThrowYut();
-        }
-        catch (InvalidOperationException exception)
-        {
-            Debug.LogWarning($"[GameFlow] {exception.Message}", this);
-        }
+        if (!CanSendCommand(GameFlowState.Throw, CurrentTeam)) return;
+        gameSession.RequestThrow();
+        RefreshSessionInteraction();
     }
 
     public void OnRethrowButtonClicked()
     {
-        if (currentState != GameFlowState.Move || gameRules == null || !setup.CanControl(CurrentTeam)) return;
-        // 규격 확인 필요: IGameSession.RequestRethrow의 성공/실패 응답 형식에 맞춰 교체한다.
-        if (!gameRules.TryRethrow(out _)) return;
-        hudPresenter.RefreshStoredResults();
-        hudPresenter.RefreshPlayerPanels();
+        if (!CanSendCommand(GameFlowState.Move, CurrentTeam)) return;
+        gameSession.RequestRethrow();
+        RefreshSessionInteraction();
     }
 
     public void OnAugmentSelected(string augmentId)
     {
-        if (currentState != GameFlowState.AugmentSelect || gameRules == null ||
-            !setup.CanControl(augmentSelectionTeam)) return;
-        // 규격 확인 필요: 서버가 준 AUGMENT_CHOICES 중 하나인지 IGameSession에서 검증한 뒤 결과 이벤트로 갱신한다.
-        gameRules.SelectAugment(augmentSelectionTeam, augmentId);
-
-        augmentSelectionTeam++;
-        if (augmentSelectionTeam < teamCount)
-        {
-            ChangeState(GameFlowState.AugmentSelect);
-            return;
-        }
-
-        augmentSelectionTeam = 0;
-        ChangeState(GameFlowState.Throw);
+        if (!CanSendCommand(GameFlowState.AugmentSelect, augmentSelectionTeam)) return;
+        gameSession.RequestAugment(augmentId);
+        RefreshSessionInteraction();
     }
 
     private void OnThrown(YutThrowOutcome outcome)
@@ -301,7 +364,7 @@ public class GameFlowController : MonoBehaviour
         if (gameState.RemainingThrows > 0)
         {
             ChangeState(GameFlowState.Throw);
-            hud?.SetInstruction($"{GameFlowHudPresenter.ResultLabel(outcome.Result)}! Throw again.");
+            hud?.SetInstruction($"{GameFlowHudPresenter.ResultLabel(outcome.Result)}! 한 번 더 던지세요.");
         }
         else if (gameRules.HasAnyStoredMove())
         {
@@ -309,7 +372,118 @@ public class GameFlowController : MonoBehaviour
         }
     }
 
-    private void OnAugmentSelectedEvent(IAugment augment) => hudPresenter.RefreshPlayerPanels();
+    private void OnAugmentSelectedEvent(int team, IAugment augment)
+    {
+        hudPresenter.RefreshPlayerPanels();
+        uiManager?.Close<AugmentSelectPanel>();
+
+        if (team >= teamCount - 1)
+        {
+            augmentSelectionTeam = 0;
+            ChangeState(GameFlowState.Throw);
+        }
+        else
+        {
+            hud?.SetInstruction("증강 선택지를 기다리는 중입니다.");
+        }
+    }
+
+    private void OnSettingsClicked()
+    {
+        settingsPanel = uiManager?.Open<SettingsPanel>();
+        settingsPanel?.SetExitGameVisible(true);
+    }
+
+    private void BindSettingsPanel()
+    {
+        settingsPanel = uiManager?.Get<SettingsPanel>();
+        if (settingsPanel == null) return;
+        settingsPanel.SetExitGameVisible(true);
+        settingsPanel.ExitGameRequested += OnExitGameRequested;
+    }
+
+    private void OnExitGameRequested()
+    {
+        settingsPanel?.Close();
+        LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
+        if (coordinator != null)
+        {
+            coordinator.LeaveGameToMainMenu();
+            return;
+        }
+
+        SceneManager.LoadScene(mainMenuSceneName);
+    }
+
+    // 로비/GAME_START 담당 연결 지점:
+    // 서버가 playerId와 team 목록을 GAME_START에 포함하면 게임 시작 전에 이 메서드로 등록한다.
+    public void RegisterPlayerTeam(string playerId, int team)
+    {
+        if (string.IsNullOrEmpty(playerId) || team < 0 || team >= teamCount) return;
+        playerTeams[playerId] = team;
+    }
+
+    private void OnRemotePlayerDisconnected(string playerId, int graceSec)
+    {
+        if (playerTeams.TryGetValue(playerId, out int team))
+            hud?.SetPlayerConnectionState(team, PlayerStatusView.ConnectionState.Reconnecting, graceSec);
+        hud?.SetInstruction("연결이 끊긴 플레이어를 기다리는 중입니다.");
+    }
+
+    private void OnRemotePlayerReconnected(string playerId)
+    {
+        if (playerTeams.TryGetValue(playerId, out int team))
+            hud?.SetPlayerConnectionState(team, PlayerStatusView.ConnectionState.Connected);
+        hud?.SetInstruction("플레이어가 재접속했습니다.");
+    }
+
+    private void OnRemotePlayerRemoved(string playerId, int team)
+    {
+        hud?.SetPlayerConnectionState(team, PlayerStatusView.ConnectionState.Removed);
+        selectionController?.Clear();
+        foreach (PieceView view in pieceViews)
+            if (view != null && view.Team == team) view.SetWorldVisible(false);
+
+        hud?.SetInstruction($"플레이어 {team + 1}이 게임에서 나갔습니다.");
+    }
+
+    private void OnAutomatedMoveApplied(int team)
+    {
+        hud?.SetInstruction($"플레이어 {team + 1} 자동 진행 중");
+    }
+
+    private void OnConnectionAvailabilityChanged(bool connected)
+    {
+        hud?.SetConnectionAvailable(connected);
+        if (!connected)
+        {
+            selectionController?.Clear();
+            hud?.SetTimerRunning(false);
+            hud?.SetInstruction("서버 재접속을 기다리는 중입니다.");
+            return;
+        }
+
+        hud?.SetTimerRunning(currentState == GameFlowState.Throw || currentState == GameFlowState.Move);
+        hud?.SetInstruction("서버에 다시 연결되었습니다.");
+        RefreshSessionInteraction();
+    }
+
+    private void OnAugmentChoices(int team, IReadOnlyList<string> ids)
+    {
+        augmentSelectionTeam = team;
+        if (currentState != GameFlowState.AugmentSelect) ChangeState(GameFlowState.AugmentSelect);
+        OpenAugmentSelection(ids);
+    }
+
+    private void OnRequestRejected(string reason)
+    {
+        Debug.LogWarning($"[GameFlow] 요청이 거절됐습니다. {reason}", this);
+        selectionController?.Clear();
+        hudPresenter?.RefreshStoredResults();
+        hudPresenter?.RefreshPlayerPanels();
+        RefreshSessionInteraction();
+        hud?.SetInstruction(reason);
+    }
 
     private void OnTurnChanged(int team)
     {
@@ -338,24 +512,33 @@ public class GameFlowController : MonoBehaviour
         {
             case GameFlowState.GameStart:
                 augmentSelectionTeam = 0;
-                ChangeState(skipAugmentSelection ? GameFlowState.Throw : GameFlowState.AugmentSelect);
+                if (skipAugmentSelection)
+                {
+                    ChangeState(GameFlowState.Throw);
+                }
+                else
+                {
+                    ChangeState(GameFlowState.AugmentSelect);
+                    if (gameSession is LocalGameSession localSession)
+                        localSession.BeginAugmentSelection(teamCount);
+                }
                 break;
 
             case GameFlowState.Throw:
-                PrepareInteractiveState();
+                PrepareInteractiveState(false);
                 hud?.SetInteractionState(setup.CanControl(CurrentTeam), false);
-                hud?.SetTurn($"Team {CurrentTeam + 1} Turn", CurrentTeam);
-                hud?.SetInstruction(gameState.StoredResults.Count > 0 ? "Bonus throw." : "Throw Yut.");
+                hud?.SetTurn($"플레이어 {CurrentTeam + 1} 차례", CurrentTeam);
+                hud?.SetInstruction(gameState.StoredResults.Count > 0 ? "추가 윷을 던지세요." : "윷을 던지세요.");
                 hud?.SetThrowInteractable(gameState.RemainingThrows > 0);
                 hud?.SetRethrowVisible(false);
                 hud?.SetTimerRunning(true);
                 break;
 
             case GameFlowState.Move:
-                PrepareInteractiveState();
+                PrepareInteractiveState(true);
                 hud?.SetInteractionState(setup.CanControl(CurrentTeam), false);
-                hud?.SetTurn($"Team {CurrentTeam + 1} Turn", CurrentTeam);
-                hud?.SetInstruction("Select a piece.");
+                hud?.SetTurn($"플레이어 {CurrentTeam + 1} 차례", CurrentTeam);
+                hud?.SetInstruction("이동할 말을 선택하세요.");
                 hud?.SetThrowInteractable(false);
                 hud?.SetRethrowVisible(hudPresenter.CanUseRethrow(CurrentTeam));
                 hud?.SetTimerRunning(true);
@@ -367,31 +550,58 @@ public class GameFlowController : MonoBehaviour
                 hudPresenter.RefreshPlayerPanels();
                 hud?.SetInteractionState(false, false);
                 int winner = pendingWinnerTeam ?? gameState.WinnerTeam ?? CurrentTeam;
-                hud?.SetInstruction($"Team {winner + 1} wins!");
+                hud?.SetInstruction($"플레이어 {winner + 1} 승리!");
                 hud?.SetThrowInteractable(false);
                 hud?.SetRethrowVisible(false);
                 hud?.SetTimerRunning(false);
                 uiManager?.Open<ResultPopup>()?.SetWinner(
-                    $"Team {winner + 1}",
+                    $"플레이어 {winner + 1}",
                     GameHudPanel.GetTeamColor(winner));
                 break;
 
             case GameFlowState.AugmentSelect:
-                OpenAugmentSelection();
+                PrepareAugmentSelection();
                 break;
         }
     }
 
-    private void PrepareInteractiveState()
+    private void PrepareInteractiveState(bool allowPieceSelection)
     {
         selectionController.Clear();
-        selectionController.RefreshTurnHighlights();
+        selectionController.RefreshTurnHighlights(allowPieceSelection);
         hudPresenter.RefreshPlayerPanels();
     }
 
-    private void OpenAugmentSelection()
+    private bool CanSendCommand(GameFlowState requiredState, int team)
+    {
+        return currentState == requiredState && gameSession != null &&
+               !gameSession.IsCommandPending && setup.CanControl(team);
+    }
+
+    private void RefreshSessionInteraction()
+    {
+        if (hud == null || gameSession == null) return;
+
+        int controlledTeam = currentState == GameFlowState.AugmentSelect
+            ? augmentSelectionTeam
+            : CurrentTeam;
+        hud.SetInteractionState(setup.CanControl(controlledTeam), gameSession.IsCommandPending);
+    }
+
+    private void PrepareAugmentSelection()
     {
         selectionController.Clear();
+        hud?.SetTurn($"플레이어 {augmentSelectionTeam + 1} 증강 선택", augmentSelectionTeam);
+        hud?.SetThrowInteractable(false);
+        hud?.SetRethrowVisible(false);
+        hud?.SetTimerRunning(false);
+        hud?.SetInteractionState(setup.CanControl(augmentSelectionTeam), gameSession?.IsCommandPending ?? false);
+        hud?.SetInstruction("증강 선택지를 기다리는 중입니다.");
+    }
+
+    private void OpenAugmentSelection(IReadOnlyList<string> ids)
+    {
+        PrepareAugmentSelection();
         AugmentSelectPanel panel = uiManager != null ? uiManager.Get<AugmentSelectPanel>() : null;
         if (panel == null)
         {
@@ -399,32 +609,19 @@ public class GameFlowController : MonoBehaviour
             return;
         }
 
-        hud?.SetTurn($"Team {augmentSelectionTeam + 1} Augment", augmentSelectionTeam);
-        hud?.SetThrowInteractable(false);
-        hud?.SetRethrowVisible(false);
-        hud?.SetTimerRunning(false);
-
         if (!setup.CanControl(augmentSelectionTeam))
         {
             uiManager?.Close<AugmentSelectPanel>();
-            hud?.SetInstruction("Waiting for augment selection.");
-            return;
-        }
-
-        // 원격 모드는 서버의 AUGMENT_CHOICES를 GameRules.SetAugmentChoices로 먼저 적용한 뒤
-        // IGameSession 이벤트에서 이 화면을 열어야 한다. 현재는 로컬 모드 후보만 생성한다.
-        if (!setup.IsLocalMode)
-        {
-            hud?.SetInstruction("Waiting for server augment choices.");
+            hud?.SetInstruction("다른 플레이어의 증강 선택을 기다리는 중입니다.");
             return;
         }
 
         List<AugmentDefinition> selection = new();
-        foreach (var id in gameRules.GetAugmentChoices(augmentSelectionTeam, 3))
+        foreach (string id in ids)
             selection.Add(augmentCatalog.Find(id));
         panel.Setup(selection, OnAugmentSelected);
         uiManager.Open<AugmentSelectPanel>();
-        hud?.SetInstruction("Select an augment.");
+        hud?.SetInstruction("증강을 선택하세요.");
     }
 
     private void OnWaitingPieceClicked(int team, int slotIndex)
@@ -444,13 +641,9 @@ public class GameFlowController : MonoBehaviour
         selectionController.Clear();
         if (entersBoard) movingView.SetWorldVisible(true);
 
-        // 규격 확인 필요: IGameSession.RequestMove(pieceId, resultIndex, destinationNodeId)로 교체하고
-        // MOVE_APPLIED를 받은 뒤에만 실제 이동 애니메이션을 재생한다.
-        if (gameRules.MovePiece(movingView.Piece.Id, option.ResultIndex, option.DestinationNodeId)) return;
-
         if (entersBoard) movingView.SetWorldVisible(false);
-        hudPresenter.RefreshStoredResults();
-        ChangeState(gameState.RemainingThrows > 0 ? GameFlowState.Throw : GameFlowState.Move);
+        gameSession.RequestMove(movingView.Piece.Id, option.ResultIndex, option.DestinationNodeId);
+        RefreshSessionInteraction();
     }
 
     private void OnMoved(MoveResult result)
@@ -458,6 +651,10 @@ public class GameFlowController : MonoBehaviour
         var points = new List<Vector3>();
         foreach (BoardNode node in result.Path.Nodes)
         {
+            // 골인은 참먹이(보이는 출발 칸)를 통과한 뒤 판 밖 Start 노드로 처리된다.
+            // 이동 연출은 참먹이에서 끝내고, 규칙상의 Start 이동과 완주 판정은 그대로 유지한다.
+            if (result.Path.IsFinished && node.Type == BoardNodeType.Start) continue;
+
             NodeView view = boardView.GetView(node);
             if (view != null) points.Add(view.Position);
         }
@@ -517,7 +714,7 @@ public class GameFlowController : MonoBehaviour
         Debug.LogError("[GameFlow] 서버 이동을 현재 상태에서 재현할 수 없습니다. 전체 상태 동기화가 필요합니다.", this);
         selectionController?.Clear();
         hud?.SetInteractionState(false, false);
-        hud?.SetInstruction("State sync required.");
+        hud?.SetInstruction("게임 상태를 다시 동기화해야 합니다.");
     }
 
     private void OnBoardLayoutReloaded()
@@ -525,8 +722,8 @@ public class GameFlowController : MonoBehaviour
         selectionController.Clear();
         RefreshPieceLayout();
         hudPresenter.RefreshPlayerPanels();
-        selectionController.RefreshTurnHighlights(currentState != GameFlowState.Finish);
-        if (currentState == GameFlowState.Move) hud?.SetInstruction("Select a piece.");
+        selectionController.RefreshTurnHighlights(currentState == GameFlowState.Move);
+        if (currentState == GameFlowState.Move) hud?.SetInstruction("이동할 말을 선택하세요.");
     }
 
     private void RefreshPieceLayout()

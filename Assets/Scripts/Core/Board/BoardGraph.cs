@@ -90,6 +90,15 @@ public class BoardGraph
         return result;
     }
 
+    // 지름길을 무시하고 원래 길(바깥 길)로만 가는 경로.
+    // 갈 곳이 없으면 null (예: 마라토너 증강)
+    public BoardPath GetNormalPath(BoardNode start, BoardNode cameFrom, int moveCount)
+    {
+        if (start == null || moveCount <= 0) return null;
+        BoardNode normal = start.GetNext(cameFrom);
+        return normal == null ? null : MoveForward(start, cameFrom, normal, moveCount);
+    }
+
     private BoardPath MoveForward(BoardNode start, BoardNode cameFrom, BoardNode first, int moveCount)
     {
         var path = new List<BoardNode>();
