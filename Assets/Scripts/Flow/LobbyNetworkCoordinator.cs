@@ -285,6 +285,15 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         return playerIdentity.HasToken && (allowGuestLogin || playerIdentity.IsGoogleLogin);
     }
 
+    // 뽑기 1회. 서버 응답의 보유 골드를 PlayerIdentity 캐시에 반영한다
+    public async System.Threading.Tasks.Task<GachaResultResponse> DrawGachaAsync()
+    {
+        await silentLoginTask;
+        GachaResultResponse response = await gachaApi.DrawAsync();
+        playerIdentity.ApplyGold(response.gold);
+        return response;
+    }
+
     private void OnUnauthorized()
     {
         playerIdentity.Clear();
