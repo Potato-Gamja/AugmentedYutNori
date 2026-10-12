@@ -21,17 +21,22 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     // 서버 로그인 연동 전·에디터 테스트에서는 게스트 생성을 유지한다.
     // 끄면 토큰이 없는 사용자를 로그인 씬으로 보낸다.
     [SerializeField] private bool allowGuestLogin = true;
+    // 로비에서 바로 시작해도 저장된 Firebase 갱신 토큰으로 서버에 다시 로그인한다 (서버 재시작으로 토큰이 무효여도 새로 받음)
+    [SerializeField] private FirebaseAuthSettings authSettings;
 
     private static LobbyNetworkCoordinator instance;
 
     private ApiClient apiClient;
     private AuthApi authApi;
+    private GachaApi gachaApi;
     private PlayerIdentity playerIdentity;
     private string pendingRoomCode;
     private string pendingNickname;
     private bool leaveRequested;
     // GAME_ENDED가 재전송돼도 보상을 한 번만 더하도록 (GAME_START마다 초기화)
     private bool rewardAppliedThisGame;
+    // 로비 자동 재로그인. 끝나기 전에 방 생성·뽑기 같은 서버 요청이 나가지 않도록 기다린다
+    private System.Threading.Tasks.Task silentLoginTask = System.Threading.Tasks.Task.CompletedTask;
     private readonly Dictionary<string, int> playerTeams = new();
 
     public string LocalPlayerId => playerIdentity?.PlayerId ?? string.Empty;
@@ -59,6 +64,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
         apiClient = new ApiClient(apiBaseUrl);
         authApi = new AuthApi(apiClient);
+        gachaApi = new GachaApi(apiClient);
         playerIdentity = new PlayerIdentity(playerPrefsKeyPrefix);
         apiClient.Token = playerIdentity.Token;
         apiClient.Unauthorized += OnUnauthorized;
@@ -127,6 +133,54 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         else
         {
             lobbyController.SetLocalPlayer(playerIdentity.PlayerId);
+            if (silentLoginTask.IsCompleted && !PlayerIdentity.IsVerifiedThisRun(playerIdentity.Token))
+                silentLoginTask = SilentLoginAsync();
+        }
+    }
+
+    // 저장된 구글 로그인으로 서버 토큰을 새로 받는다 (Login 씬의 "계속하기"와 같은 흐름, 화면 없이).
+    // 이번 실행에서 서버가 이미 확인한 토큰(Login 씬에서 막 로그인 등)이면 건너뛴다
+    private async System.Threading.Tasks.Task SilentLoginAsync()
+    {
+        if (!playerIdentity.IsGoogleLogin || string.IsNullOrEmpty(playerIdentity.FirebaseRefreshToken)) return;
+        if (authSettings == null)
+        {
+            Debug.LogWarning("[LobbyNetwork] FirebaseAuthSettings가 없어 자동 재로그인을 건너뜁니다.", this);
+            return;
+        }
+
+        try
+        {
+            FirebaseSignInResult firebaseUser = await new FirebaseTokenRefresher(authSettings)
+                .RefreshAsync(playerIdentity.FirebaseRefreshToken);
+            FirebaseLoginResponse login = await authApi.LoginWithFirebaseAsync(firebaseUser.IdToken);
+
+            // 서버에 닉네임이 없으면 같은 계정의 저장값을 쓰고(Login 씬과 같은 규칙), 그것도 없으면 Login 씬에서 닉네임부터 정한다
+            if (string.IsNullOrWhiteSpace(login.nickname) && login.playerId == playerIdentity.PlayerId)
+                login.nickname = playerIdentity.Nickname;
+            if (string.IsNullOrWhiteSpace(login.nickname))
+            {
+                Debug.Log("[LobbyNetwork] 서버 계정에 닉네임이 없어 로그인 화면으로 이동합니다.");
+                GoToLogin();
+                return;
+            }
+
+            playerIdentity.ApplyLogin(login, firebaseUser.RefreshToken);
+            apiClient.Token = playerIdentity.Token;
+            lobbyController?.SetLocalPlayer(playerIdentity.PlayerId);
+            Debug.Log($"[LobbyNetwork] 자동 재로그인: playerId={playerIdentity.PlayerId}, gold={playerIdentity.Gold}");
+        }
+        catch (RefreshFailedException exception) when (exception.Expired)
+        {
+            // 갱신 토큰 만료·취소 → 구글 로그인부터 다시
+            playerIdentity.Clear();
+            apiClient.Token = null;
+            GoToLogin();
+        }
+        catch (Exception exception)
+        {
+            // 네트워크·서버 문제면 저장된 값으로 계속 둔다. 이후 요청이 401이면 OnUnauthorized가 로그인 화면으로 보낸다
+            Debug.LogWarning($"[LobbyNetwork] 자동 재로그인 실패, 저장된 로그인으로 계속합니다: {exception.Message}");
         }
     }
 
@@ -179,6 +233,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     // 로그인(또는 게스트 가입)된 플레이어가 있는지 확인한다
     private async System.Threading.Tasks.Task EnsurePlayer(string nickname)
     {
+        await silentLoginTask;
         if (!IsLoggedIn())
         {
             if (!allowGuestLogin)
@@ -198,6 +253,15 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     private bool IsLoggedIn()
     {
         return playerIdentity.HasToken && (allowGuestLogin || playerIdentity.IsGoogleLogin);
+    }
+
+    // 뽑기 1회. 서버 응답의 보유 골드를 PlayerIdentity 캐시에 반영한다
+    public async System.Threading.Tasks.Task<GachaResultResponse> DrawGachaAsync()
+    {
+        await silentLoginTask;
+        GachaResultResponse response = await gachaApi.DrawAsync();
+        playerIdentity.ApplyGold(response.gold);
+        return response;
     }
 
     private void OnUnauthorized()

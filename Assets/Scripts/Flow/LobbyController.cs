@@ -116,7 +116,7 @@ public class LobbyController : MonoBehaviour
         uiManager.Open<MainMenuPanel>();
     }
 
-    private void OnGachaRequested() => mainMenuPanel.ShowStatus("뽑기 기능은 준비 중입니다.");
+    private void OnGachaRequested() => uiManager?.Open<GachaPanel>();
     private void OnProfileRequested()
     {
         ProfilePanel panel = uiManager?.Open<ProfilePanel>();

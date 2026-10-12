@@ -26,6 +26,16 @@ public class PlayerIdentity
 
     public bool HasToken => !string.IsNullOrEmpty(Token);
 
+    // 이번 실행에서 서버 로그인으로 받은 토큰. 로비 자동 재로그인이 같은 토큰을 다시 확인하지 않도록 한다
+    private static string verifiedTokenThisRun;
+
+    public static bool IsVerifiedThisRun(string token) =>
+        !string.IsNullOrEmpty(token) && token == verifiedTokenThisRun;
+
+    // 도메인 리로드를 끈 에디터에서도 Play할 때마다 비운다 (서버가 재시작됐을 수 있음)
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetVerifiedToken() => verifiedTokenThisRun = null;
+
     public PlayerIdentity(string keyPrefix = "")
     {
         this.keyPrefix = (keyPrefix ?? "") + EditorInstancePrefix();
@@ -66,6 +76,7 @@ public class PlayerIdentity
     {
         string previousPlayerId = PlayerId;
         Save(response.playerId, response.token, response.nickname, AuthTypeGoogle);
+        verifiedTokenThisRun = Token;
         FirebaseRefreshToken = firebaseRefreshToken ?? "";
         PlayerPrefs.SetString(Key("refreshToken"), FirebaseRefreshToken);
 
@@ -90,6 +101,13 @@ public class PlayerIdentity
             return entry.rewardGold;
         }
         return 0;
+    }
+
+    // 서버가 알려 준 보유 골드로 맞춘다 (뽑기 응답 등)
+    public void ApplyGold(int gold)
+    {
+        SetGoldInternal(gold);
+        PlayerPrefs.Save();
     }
 
     private void SetGoldInternal(int gold)
