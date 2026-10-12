@@ -74,6 +74,15 @@ public class GameInstaller : MonoBehaviour, IGameSessionFactory
             activeSetup = localSetup ?? GameSetup.CreateLocalDefault();
         }
 
+        if (activeMode == GameSessionMode.Remote &&
+            (activeSetup.localTeam < 0 || activeSetup.localTeam >= activeSetup.teamCount))
+        {
+            Debug.LogError("[GameInstaller] 온라인 게임의 내 팀 정보가 없습니다. 로비에서 GAME_START를 받은 뒤 입장해 주세요.", this);
+            gameFlowController.enabled = false;
+            enabled = false;
+            return;
+        }
+
         if (activeMode == GameSessionMode.Remote && remoteSessionFactory == null)
         {
             Debug.LogError(

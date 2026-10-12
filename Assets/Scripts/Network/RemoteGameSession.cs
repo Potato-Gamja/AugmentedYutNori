@@ -7,11 +7,11 @@ using System.Collections.Generic;
 ///
 /// 서버 담당 확인 사항:
 /// - 방 전체 broadcast는 seq를 1씩 증가시킨다. PONG/개인 ERROR처럼 seq=0인 메시지는 순서 검사에서 제외한다.
-/// - GAME_START의 teamCount는 2~4, localTeam은 0~teamCount-1로 보낸다.
+/// - GAME_START의 teamCount는 2~4. 내 localTeam은 로비의 인증된 playerId와 ROOM_STATE 배정으로 정한다.
 /// - THROW_RESULT/MOVE_APPLIED/AUGMENT_SELECTED에는 행동한 team을 반드시 포함한다.
 /// - MOVE는 말 id·칸 수·도착 칸만 보낸다. 내 이동도 먼저 적용하지 않고, 서버의 MOVE_APPLIED를 받은 뒤 모든 기기가 같은 순서로 적용한다.
 /// - MOVE_APPLIED의 movedPieceIds/capturedPieceIds/isFinished와 Core 적용 결과가 다르면 서버와 판이 어긋난 것으로 알린다.
-/// - MOVE 거절 또는 seq 누락 뒤 완전 복구는 향후 snapshot/RECONNECT 메시지 계약이 필요하다.
+/// - GAME_SNAPSHOT 전체 상태 복원은 별도의 클라이언트 적용 작업이 필요하다.
 /// </summary>
 public sealed class RemoteGameSession : IGameSession, IDisposable
 {
@@ -27,6 +27,8 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
     private bool commandPending;
     private bool hasReceivedSequence;
     private long lastSequence;
+    private readonly Queue<WsEnvelope> pendingMessages;
+    private bool receivingLiveMessages;
 
     public bool IsCommandPending => commandPending;
 
@@ -52,7 +54,8 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
         GameEvents gameEvents,
         GameState gameState,
         TurnManager turnManager,
-        GameSetup setup)
+        GameSetup setup,
+        IEnumerable<WsEnvelope> pendingMessages = null)
     {
         this.socket = socket ?? throw new ArgumentNullException(nameof(socket));
         this.rules = rules ?? throw new ArgumentNullException(nameof(rules));
@@ -60,6 +63,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
         this.gameState = gameState ?? throw new ArgumentNullException(nameof(gameState));
         this.turnManager = turnManager ?? throw new ArgumentNullException(nameof(turnManager));
         this.setup = setup ?? throw new ArgumentNullException(nameof(setup));
+        this.pendingMessages = new Queue<WsEnvelope>(pendingMessages ?? Array.Empty<WsEnvelope>());
 
         socket.MessageReceived += OnMessageReceived;
         socket.Connected += OnConnected;
@@ -96,10 +100,16 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
             return;
         }
 
-        SendCommand(MessageType.SELECT_AUGMENT, new SelectAugmentRequest
+        if (!CanSendCommand(false)) return;
+        if (!socket.Send(MessageType.SELECT_AUGMENT, new SelectAugmentRequest
         {
             augmentId = augmentId,
-        });
+        }))
+        {
+            Reject("증강 선택을 서버에 보내지 못했습니다.");
+            return;
+        }
+        commandPending = true;
     }
 
     public void RequestMove(int pieceId, int resultIndex, int destinationNodeId)
@@ -127,6 +137,11 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
 
     private void OnMessageReceived(WsEnvelope envelope)
     {
+        if (!receivingLiveMessages)
+        {
+            pendingMessages.Enqueue(envelope);
+            return;
+        }
         if (envelope == null || !AcceptSequence(envelope)) return;
 
         try
@@ -276,7 +291,9 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
     private void ApplyAugmentSelected(AugmentSelectedMessage message)
     {
         if (message == null) throw new InvalidOperationException("AUGMENT_SELECTED 내용이 없습니다.");
-        IAugment augment = rules.SelectAugment(message.team, message.augmentId);
+        if (message.team < 0 || message.team >= setup.teamCount)
+            throw new InvalidOperationException("증강을 선택한 팀 번호가 올바르지 않습니다.");
+        IAugment augment = rules.ApplyConfirmedAugment(message.team, message.augmentId);
         if (message.team == setup.localTeam) commandPending = false;
         AugmentSelected?.Invoke(message.team, augment);
     }
@@ -394,7 +411,14 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
         commandPending = true;
     }
 
-    private bool CanSendCommand()
+    // Flow가 말과 HUD, 이벤트 구독을 준비한 뒤 씬 전환 중 받은 메시지를 순서대로 적용한다.
+    public void ReplayPendingMessages()
+    {
+        receivingLiveMessages = true;
+        while (pendingMessages.Count > 0) OnMessageReceived(pendingMessages.Dequeue());
+    }
+
+    private bool CanSendCommand(bool requireCurrentTurn = true)
     {
         if (commandPending)
         {
@@ -406,7 +430,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
             Reject("서버에 연결되어 있지 않습니다.");
             return false;
         }
-        if (!setup.CanControl(turnManager.CurrentTeam))
+        if (requireCurrentTurn && !setup.CanControl(turnManager.CurrentTeam))
         {
             Reject("현재 조작할 수 있는 팀의 차례가 아닙니다.");
             return false;

@@ -44,6 +44,8 @@ public class GameFlowController : MonoBehaviour
     private bool isMoving;
     private int teamCount;
     private int augmentSelectionTeam;
+    private IReadOnlyList<string> currentAugmentChoices = Array.Empty<string>();
+    private bool localAugmentConfirmed;
     private int? pendingTurnTeam;
     private int? pendingWinnerTeam;
     private string lastStateHash;
@@ -112,6 +114,7 @@ public class GameFlowController : MonoBehaviour
         RefreshPieceLayout();
         hudPresenter.RefreshPlayerPanels();
         ChangeState(GameFlowState.GameStart);
+        if (gameSession is RemoteGameSession remoteSession) remoteSession.ReplayPendingMessages();
     }
 
     /// <summary>
@@ -394,6 +397,17 @@ public class GameFlowController : MonoBehaviour
     private void OnAugmentSelectedEvent(int team, IAugment augment)
     {
         hudPresenter.RefreshPlayerPanels();
+        if (gameSession is RemoteGameSession)
+        {
+            // 다른 팀의 확정 결과는 HUD만 갱신하고 내 선택 창을 유지한다.
+            if (team == setup.localTeam && currentState == GameFlowState.AugmentSelect)
+            {
+                localAugmentConfirmed = true;
+                uiManager?.Close<AugmentSelectPanel>();
+                hud?.SetInstruction("선택 완료! 다른 플레이어의 선택을 기다리는 중입니다.");
+            }
+            return; // PLAYING 진입은 서버 TURN_CHANGED로 확정한다.
+        }
         uiManager?.Close<AugmentSelectPanel>();
 
         if (team >= teamCount - 1)
@@ -521,6 +535,9 @@ public class GameFlowController : MonoBehaviour
 
     private void OnAugmentChoices(int team, IReadOnlyList<string> ids)
     {
+        if (gameSession is RemoteGameSession && team != setup.localTeam) return;
+        currentAugmentChoices = ids;
+        localAugmentConfirmed = false;
         augmentSelectionTeam = team;
         if (currentState != GameFlowState.AugmentSelect) ChangeState(GameFlowState.AugmentSelect);
         OpenAugmentSelection(ids);
@@ -535,6 +552,9 @@ public class GameFlowController : MonoBehaviour
         hudPresenter?.RefreshStoredResults();
         hudPresenter?.RefreshPlayerPanels();
         RefreshSessionInteraction();
+        if (gameSession is RemoteGameSession && currentState == GameFlowState.AugmentSelect &&
+            !localAugmentConfirmed && currentAugmentChoices.Count > 0)
+            OpenAugmentSelection(currentAugmentChoices);
         hud?.SetInstruction(reason);
     }
 
@@ -565,6 +585,12 @@ public class GameFlowController : MonoBehaviour
         {
             case GameFlowState.GameStart:
                 augmentSelectionTeam = 0;
+                if (gameSession is RemoteGameSession)
+                {
+                    augmentSelectionTeam = setup.localTeam;
+                    ChangeState(GameFlowState.AugmentSelect);
+                    break;
+                }
                 if (skipAugmentSelection)
                 {
                     ChangeState(GameFlowState.Throw);

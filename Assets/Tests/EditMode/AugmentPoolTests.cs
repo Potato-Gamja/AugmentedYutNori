@@ -37,6 +37,44 @@ public class AugmentPoolTests
 
     // ───── 후보 뽑기 (기존) ─────
 
+    [TestCase(3)]
+    [TestCase(1)]
+    [TestCase(0)]
+    [TestCase(2)]
+    public void PickConfirmed_WithoutPrivateOffer_CreatesOwnedAugment(int team)
+    {
+        var onlinePool = MakePool(new ThrowingRandomProvider());
+        IAugment augment = onlinePool.PickConfirmed(team, "Monk");
+        Assert.AreEqual(team, augment.OwnerTeam);
+        Assert.AreEqual("Monk", augment.Id);
+    }
+
+    [Test]
+    public void PickConfirmed_OutOfOrder_DoesNotChangeMyOffer()
+    {
+        pool.SetOffered(1, new[] { "Sprinter" });
+        pool.PickConfirmed(3, "Monk");
+        pool.PickConfirmed(0, "Monk");
+        Assert.AreEqual(1, pool.Pick(1, "Sprinter").OwnerTeam);
+    }
+
+    [Test]
+    public void PickConfirmed_UnknownOrDuplicateId_IsRejected()
+    {
+        Assert.Throws<ArgumentException>(() => pool.PickConfirmed(0, "Unknown"));
+        pool.PickConfirmed(0, "Monk");
+        Assert.Throws<InvalidOperationException>(() => pool.PickConfirmed(0, "Monk"));
+    }
+
+    [Test]
+    public void PickConfirmed_ClearsOwnOffer_AndKeepsLocalPickValidation()
+    {
+        pool.SetOffered(2, new[] { "Monk", "Sprinter" });
+        pool.PickConfirmed(2, "Monk");
+        Assert.Throws<InvalidOperationException>(() => pool.Pick(2, "Sprinter"));
+        Assert.Throws<InvalidOperationException>(() => pool.Pick(3, "Monk"));
+    }
+
     [Test]
     public void GetRandomIds_ReturnsRequestedCount_NoDuplicates()
     {

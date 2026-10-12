@@ -85,6 +85,17 @@ public class AugmentPool
         return factories[id](team);
     }
 
+    // 서버가 검증한 선택 결과는 다른 팀의 비공개 후보를 받지 않아도 적용한다.
+    public IAugment PickConfirmed(int team, string id)
+    {
+        if (!factories.TryGetValue(id, out Func<int, IAugment> factory))
+            throw new ArgumentException($"'{id}'는 등록되지 않은 증강입니다.");
+        if (!GetPicked(team).Add(id))
+            throw new InvalidOperationException($"팀 {team}이 '{id}'를 이미 선택했습니다.");
+        offered.Remove(team);
+        return factory(team);
+    }
+
     private HashSet<string> GetPicked(int team)
     {
         if (!picked.TryGetValue(team, out HashSet<string> set))

@@ -41,6 +41,8 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     // GAME_ENDED가 재전송돼도 보상을 한 번만 더하도록 (GAME_START마다 초기화)
     private bool rewardAppliedThisGame;
     private Task silentLoginTask = Task.CompletedTask;
+    private bool waitingForGameSession;
+    private readonly List<WsEnvelope> pendingGameMessages = new();
     private readonly Dictionary<string, int> playerTeams = new();
     private readonly List<PlayerDisplayInfo> playerProfiles = new();
 
@@ -77,7 +79,12 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
         // 게임 씬의 GameInstaller가 같은 WebSocket 연결로 RemoteGameSession을 만들 수 있게 등록한다.
         GameInstaller.RegisterRemoteSessionFactory((rules, events, state, turn, setup) =>
-            new RemoteGameSession(webSocketClient, rules, events, state, turn, setup));
+        {
+            var session = new RemoteGameSession(webSocketClient, rules, events, state, turn, setup, pendingGameMessages);
+            pendingGameMessages.Clear();
+            waitingForGameSession = false;
+            return session;
+        });
 
         webSocketClient.Connected += OnConnected;
         webSocketClient.Disconnected += OnDisconnected;
@@ -386,6 +393,10 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     private void OnMessageReceived(WsEnvelope envelope)
     {
+        // GAME_START 직후의 개인 선택지·확정 메시지가 씬 로딩 중 사라지지 않도록 보관한다.
+        if (waitingForGameSession && envelope.type != MessageType.GAME_START &&
+            envelope.type != MessageType.ROOM_STATE && envelope.type != MessageType.PONG)
+            pendingGameMessages.Add(envelope);
         try
         {
             switch (envelope.type)
@@ -406,6 +417,8 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
                     // 서버 공통 GameSetup에는 localTeam이 없으므로 최신 ROOM_STATE의 배정을 사용한다.
                     started.localTeam = localTeam;
+                    pendingGameMessages.Clear();
+                    waitingForGameSession = true;
                     rewardAppliedThisGame = false;
                     GameInstaller.PreparePlayerProfiles(playerProfiles);
                     lobbyController?.ReceiveGameStart(started);
