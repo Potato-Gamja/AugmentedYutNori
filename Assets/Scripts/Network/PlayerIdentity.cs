@@ -26,7 +26,6 @@ public class PlayerIdentity
 
     public bool HasToken => !string.IsNullOrEmpty(Token);
 
-    // 이번 실행에서 서버 로그인으로 받은 토큰. 로비 자동 재로그인이 같은 토큰을 다시 확인하지 않도록 한다
     private static string verifiedTokenThisRun;
 
     public static bool IsVerifiedThisRun(string token) =>
@@ -103,7 +102,6 @@ public class PlayerIdentity
         return 0;
     }
 
-    // 서버가 알려 준 보유 골드로 맞춘다 (뽑기 응답 등)
     public void ApplyGold(int gold)
     {
         SetGoldInternal(gold);

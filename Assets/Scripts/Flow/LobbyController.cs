@@ -9,7 +9,7 @@ using UnityEngine.SceneManagement;
 public class LobbyController : MonoBehaviour
 {
     [SerializeField] private UIManager uiManager;
-    [SerializeField] private string gameSceneName = "LSU_Game_UI";
+    [SerializeField] private string gameSceneName = "Game";
 
     private LobbyPanel lobbyPanel;
     private MainMenuPanel mainMenuPanel;

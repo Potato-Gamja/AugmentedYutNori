@@ -285,15 +285,6 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         return playerIdentity.HasToken && (allowGuestLogin || playerIdentity.IsGoogleLogin);
     }
 
-    // 뽑기 1회. 서버 응답의 보유 골드를 PlayerIdentity 캐시에 반영한다
-    public async System.Threading.Tasks.Task<GachaResultResponse> DrawGachaAsync()
-    {
-        await silentLoginTask;
-        GachaResultResponse response = await gachaApi.DrawAsync();
-        playerIdentity.ApplyGold(response.gold);
-        return response;
-    }
-
     private void OnUnauthorized()
     {
         playerIdentity.Clear();
@@ -406,10 +397,18 @@ public class LobbyNetworkCoordinator : MonoBehaviour
                     break;
 
                 case MessageType.GAME_START:
+                    GameStartMessage started = MessageSerializer.ReadPayload<GameStartMessage>(envelope);
+                    if (started == null)
+                        throw new InvalidOperationException("GAME_START 내용이 비어 있습니다.");
+                    if (!playerTeams.TryGetValue(LocalPlayerId, out int localTeam) ||
+                        localTeam < 0 || localTeam >= started.teamCount)
+                        throw new InvalidOperationException("내 팀 정보를 찾을 수 없습니다. 대기방에 다시 참가해 주세요.");
+
+                    // 서버 공통 GameSetup에는 localTeam이 없으므로 최신 ROOM_STATE의 배정을 사용한다.
+                    started.localTeam = localTeam;
                     rewardAppliedThisGame = false;
                     GameInstaller.PreparePlayerProfiles(playerProfiles);
-                    lobbyController?.ReceiveGameStart(
-                        MessageSerializer.ReadPayload<GameStartMessage>(envelope));
+                    lobbyController?.ReceiveGameStart(started);
                     break;
 
                 case MessageType.GAME_ENDED:
