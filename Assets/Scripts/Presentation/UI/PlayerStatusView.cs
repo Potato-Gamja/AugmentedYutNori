@@ -13,13 +13,25 @@ public sealed class PlayerStatusView : MonoBehaviour
     public enum ConnectionState { Connected, Reconnecting, Removed }
     private const int MaxTeamCount = 4;
     private const int MaxPieceSlotCount = 4;
-    private const int AugmentSlotCount = 3;
+    private const int AugmentSlotCount = 4;
+    private static readonly string[] AugmentIds =
+    {
+        "Assassin", "Hunter", "Marathoner", "Monk", "Sprinter", "Loner",
+        "Pacifist", "FriendShield", "Gambler", "Rethrow", "Contrarian"
+    };
     private int activeTeamCount = 2;
     private int pieceSlotCount = MaxPieceSlotCount;
     private int currentActiveTeam;
     private Action<int, int> waitingPieceClicked;
     private IReadOnlyList<Sprite> teamPieceSprites;
     private IReadOnlyList<Sprite> teamPieceGlowSprites;
+    private readonly Dictionary<string, Sprite> augmentIconById = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, AugmentDefinition> augmentDefinitionById = new(StringComparer.Ordinal);
+    private Sprite augmentActiveRing;
+    private RectTransform augmentTooltip;
+    private Image augmentTooltipIcon;
+    private TMP_Text augmentTooltipName;
+    private TMP_Text augmentTooltipDescription;
     private readonly Dictionary<int, float> reconnectDeadlines = new();
 
     private void Update()
@@ -83,13 +95,38 @@ public sealed class PlayerStatusView : MonoBehaviour
         }
     }
 
+    public void ConfigureAugmentIcons(IReadOnlyList<Sprite> icons, Sprite activeRing, TextAsset definitions)
+    {
+        augmentIconById.Clear();
+        if (icons != null)
+        {
+            int count = Mathf.Min(AugmentIds.Length, icons.Count);
+            for (int i = 0; i < count; i++)
+                if (icons[i] != null) augmentIconById[AugmentIds[i]] = icons[i];
+        }
+        augmentActiveRing = activeRing;
+
+        augmentDefinitionById.Clear();
+        if (definitions != null)
+        {
+            AugmentDefinitionFile file = JsonUtility.FromJson<AugmentDefinitionFile>(definitions.text);
+            if (file?.augments != null)
+                foreach (AugmentDefinition definition in file.augments)
+                    if (definition != null && !string.IsNullOrEmpty(definition.id))
+                        augmentDefinitionById[definition.id] = definition;
+        }
+
+        BindAugmentTooltip();
+    }
+
     public void SetState(
         int team,
         int waiting,
         int onBoard,
         int finished,
-        IReadOnlyList<string> augmentNames,
-        IReadOnlyCollection<int> waitingSlots = null)
+        IReadOnlyList<string> augmentIds,
+        IReadOnlyCollection<int> waitingSlots = null,
+        bool rethrowUsed = false)
     {
         Transform panel = FindPanel(team);
         if (panel == null) return;
@@ -121,9 +158,91 @@ public sealed class PlayerStatusView : MonoBehaviour
         {
             Transform slot = panel.Find($"AugmentSlot_{i}");
             if (slot == null) continue;
-            TMP_Text label = GetOrCreateAugmentLabel(slot);
-            label.text = augmentNames != null && i < augmentNames.Count ? augmentNames[i] : string.Empty;
+            bool hasAugment = augmentIds != null && i < augmentIds.Count;
+            bool isUsed = hasAugment && augmentIds[i] == "Rethrow" && rethrowUsed;
+            Image icon = slot.GetComponent<Image>();
+            if (icon != null)
+            {
+                icon.sprite = hasAugment && augmentIconById.TryGetValue(augmentIds[i], out Sprite sprite)
+                    ? sprite
+                    : null;
+                icon.enabled = icon.sprite != null;
+                icon.preserveAspect = true;
+                icon.color = isUsed ? new Color32(110, 100, 90, 255) : Color.white;
+                icon.raycastTarget = hasAugment;
+            }
+
+            Transform usedBadge = slot.Find("UsedBadge");
+            if (usedBadge != null) usedBadge.gameObject.SetActive(isUsed);
+
+            AugmentTooltipTrigger trigger = slot.GetComponent<AugmentTooltipTrigger>();
+            if (trigger == null) trigger = slot.gameObject.AddComponent<AugmentTooltipTrigger>();
+            if (hasAugment)
+            {
+                string augmentId = augmentIds[i];
+                trigger.enabled = true;
+                trigger.Configure(
+                    () => ShowAugmentTooltip(slot as RectTransform, augmentId),
+                    HideAugmentTooltip);
+            }
+            else
+            {
+                trigger.Configure(null, null);
+                trigger.enabled = false;
+            }
+
+            Image activeRing = slot.Find("ActiveRing")?.GetComponent<Image>();
+            if (activeRing != null)
+            {
+                activeRing.sprite = augmentActiveRing;
+                activeRing.color = TurnHudView.GetTeamColor(team);
+                activeRing.preserveAspect = true;
+                activeRing.gameObject.SetActive(hasAugment && team == currentActiveTeam && augmentActiveRing != null);
+            }
         }
+    }
+
+    private void BindAugmentTooltip()
+    {
+        augmentTooltip = transform.Find("AugmentTooltip") as RectTransform;
+        if (augmentTooltip == null) return;
+        augmentTooltipIcon = augmentTooltip.Find("Icon")?.GetComponent<Image>();
+        augmentTooltipName = augmentTooltip.Find("Name")?.GetComponent<TMP_Text>();
+        augmentTooltipDescription = augmentTooltip.Find("Description")?.GetComponent<TMP_Text>();
+        augmentTooltip.gameObject.SetActive(false);
+    }
+
+    private void ShowAugmentTooltip(RectTransform slot, string augmentId)
+    {
+        if (slot == null || augmentTooltip == null || !augmentDefinitionById.TryGetValue(augmentId, out AugmentDefinition definition))
+            return;
+
+        if (augmentTooltipIcon != null)
+        {
+            augmentTooltipIcon.sprite = augmentIconById.TryGetValue(augmentId, out Sprite sprite) ? sprite : null;
+            augmentTooltipIcon.enabled = augmentTooltipIcon.sprite != null;
+            augmentTooltipIcon.preserveAspect = true;
+        }
+        if (augmentTooltipName != null) augmentTooltipName.text = definition.name;
+        if (augmentTooltipDescription != null) augmentTooltipDescription.text = definition.description;
+
+        RectTransform panel = slot.parent as RectTransform;
+        if (panel == null) return;
+
+        augmentTooltip.SetParent(panel, false);
+        augmentTooltip.anchorMin = new Vector2(0f, 1f);
+        augmentTooltip.anchorMax = new Vector2(0f, 1f);
+        augmentTooltip.pivot = new Vector2(0f, 0.5f);
+        augmentTooltip.anchoredPosition = new Vector2(
+            slot.anchoredPosition.x + slot.rect.width + 10f,
+            slot.anchoredPosition.y - slot.rect.height * 0.5f);
+        augmentTooltip.SetAsLastSibling();
+        augmentTooltip.gameObject.SetActive(true);
+    }
+
+    private void HideAugmentTooltip()
+    {
+        if (augmentTooltip != null) augmentTooltip.gameObject.SetActive(false);
     }
 
     public void SetSelectedWaitingPiece(int team, int slotIndex)
@@ -158,6 +277,15 @@ public sealed class PlayerStatusView : MonoBehaviour
             Image header = panel.Find("Header")?.GetComponent<Image>();
             if (header != null)
                 header.color = team == activeTeam ? TurnHudView.GetTeamColor(team) : InactiveHeaderColor(team);
+
+            for (int i = 0; i < AugmentSlotCount; i++)
+            {
+                Transform slot = panel.Find($"AugmentSlot_{i}");
+                Image icon = slot?.GetComponent<Image>();
+                Transform ring = slot?.Find("ActiveRing");
+                if (ring != null)
+                    ring.gameObject.SetActive(team == activeTeam && icon != null && icon.enabled && augmentActiveRing != null);
+            }
 
             TMP_Text headerLabel = panel.Find("Header")?.GetComponentInChildren<TMP_Text>(true);
             if (headerLabel != null)
@@ -332,28 +460,6 @@ public sealed class PlayerStatusView : MonoBehaviour
         rect.anchorMin = rect.anchorMax = new Vector2(right ? 1f : 0f, top ? 1f : 0f);
         rect.pivot = new Vector2(right ? 1f : 0f, top ? 1f : 0f);
         rect.anchoredPosition = new Vector2(right ? -24f : 24f, top ? -24f : 24f);
-    }
-
-    private static TMP_Text GetOrCreateAugmentLabel(Transform slot)
-    {
-        TMP_Text label = slot.Find("Label")?.GetComponent<TMP_Text>();
-        if (label != null) return label;
-
-        GameObject labelObject = new("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
-        labelObject.transform.SetParent(slot, false);
-        RectTransform rect = labelObject.GetComponent<RectTransform>();
-        rect.anchorMin = Vector2.zero;
-        rect.anchorMax = Vector2.one;
-        rect.offsetMin = new Vector2(4f, 4f);
-        rect.offsetMax = new Vector2(-4f, -4f);
-
-        label = labelObject.GetComponent<TextMeshProUGUI>();
-        label.alignment = TextAlignmentOptions.Center;
-        label.fontSize = 14f;
-        label.textWrappingMode = TextWrappingModes.NoWrap;
-        label.overflowMode = TextOverflowModes.Ellipsis;
-        label.color = new Color32(58, 38, 24, 255);
-        return label;
     }
 
     private static Color32 InactiveHeaderColor(int team)

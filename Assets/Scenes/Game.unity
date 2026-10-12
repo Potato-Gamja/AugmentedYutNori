@@ -2573,6 +2573,7 @@ MonoBehaviour:
     localTeam: -1
     allowSkipShortcut: 0
     boardLayoutId: default
+  mainMenuSceneName: Lobby
 --- !u!4 &498729574
 Transform:
   m_ObjectHideFlags: 0
@@ -7922,16 +7923,16 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 828511336472889071, guid: e44c14272cc20f148b45da5696d1af57, type: 3}
       propertyPath: prefabs.Array.size
-      value: 3
+      value: 9
       objectReference: {fileID: 0}
     - target: {fileID: 828511336472889071, guid: e44c14272cc20f148b45da5696d1af57, type: 3}
       propertyPath: 'prefabs.Array.data[1]'
       value: 
-      objectReference: {fileID: 5793705701553640848, guid: e815eb21413eee24d95d05588f8714a5, type: 3}
+      objectReference: {fileID: 5793705701553640848, guid: b1c94cb38d172a9409f2bb2ac591651f, type: 3}
     - target: {fileID: 828511336472889071, guid: e44c14272cc20f148b45da5696d1af57, type: 3}
       propertyPath: 'prefabs.Array.data[2]'
       value: 
-      objectReference: {fileID: 3902274386178256672, guid: 3115031a856300942b4bbcff85970213, type: 3}
+      objectReference: {fileID: 3902274386178256672, guid: 1244c9c7d6980d64d8e8a644e68ffd23, type: 3}
     - target: {fileID: 907884088127722632, guid: e44c14272cc20f148b45da5696d1af57, type: 3}
       propertyPath: m_AnchorMax.x
       value: 1

@@ -57,6 +57,7 @@ mergeInto(LibraryManager.library, {
           return user.getIdToken().then(function (idToken) {
             state.send("OnGoogleSignInSucceeded", JSON.stringify({
               idToken: idToken,
+              refreshToken: user.refreshToken,
               uid: user.uid,
               email: user.email,
               displayName: user.displayName

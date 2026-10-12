@@ -35,6 +35,11 @@ public class ApiClient
         return Send<TResponse>(UnityWebRequest.kHttpVerbPOST, path, JsonConvert.SerializeObject(body, MessageSerializer.Settings));
     }
 
+    public Task<TResponse> Patch<TRequest, TResponse>(string path, TRequest body)
+    {
+        return Send<TResponse>("PATCH", path, JsonConvert.SerializeObject(body, MessageSerializer.Settings));
+    }
+
     private async Task<TResponse> Send<TResponse>(string method, string path, string json)
     {
         using var request = new UnityWebRequest(BaseUrl + path, method)

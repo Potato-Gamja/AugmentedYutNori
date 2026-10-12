@@ -36,27 +36,51 @@ public sealed class YutResultRevealView : MonoBehaviour
         TryBindResultPanel();
     }
 
-    public void Show(YutResult result, int remainingThrows, int team)
+    public void Show(YutThrowOutcome outcome, bool grantedExtraThrow, int team)
     {
         if (TryBindResultPanel())
         {
-            ShowInResultPanel(result, remainingThrows, team);
+            ShowInResultPanel(outcome, grantedExtraThrow, team);
             return;
         }
 
         EnsureCreated();
-        int steps = result.Steps();
-        title.text = result.DisplayName();
+        int steps = outcome.Result.Steps();
+        title.text = outcome.IsResultChanged
+            ? $"{outcome.OriginalResult.DisplayName()} → {outcome.Result.DisplayName()}"
+            : outcome.Result.DisplayName();
         title.color = TurnHudView.GetTeamColor(team);
 
         string moveText = steps < 0 ? $"뒤로 {Mathf.Abs(steps)}칸" : $"앞으로 {steps}칸";
-        detail.text = result.GrantsExtraThrow() && remainingThrows > 0
-            ? $"{moveText} · 추가 던지기 1회"
-            : moveText;
+        if (outcome.IsResultChanged)
+            detail.text = $"도박사 효과 · {moveText} · 추가 던지기 없음";
+        else if (outcome.Result.GrantsExtraThrow() && !grantedExtraThrow)
+            detail.text = $"사냥꾼 효과 · {moveText} · 추가 던지기 없음";
+        else
+            detail.text = grantedExtraThrow ? $"{moveText} · 추가 던지기 1회" : moveText;
 
         if (routine != null) StopCoroutine(routine);
         revealRoot.SetActive(true);
         routine = StartCoroutine(Play());
+    }
+
+    public void Show(YutResult result, int remainingThrows, int team)
+    {
+        bool[] sticks = GetRepresentativeSticks(result);
+        Show(new YutThrowOutcome(sticks, result), result.GrantsExtraThrow() && remainingThrows > 0, team);
+    }
+
+    private static bool[] GetRepresentativeSticks(YutResult result)
+    {
+        return result switch
+        {
+            YutResult.BackDo => new[] { true, false, false, false },
+            YutResult.Do => new[] { false, true, false, false },
+            YutResult.Gae => new[] { false, true, true, false },
+            YutResult.Geol => new[] { false, true, true, true },
+            YutResult.Yut => new[] { true, true, true, true },
+            _ => new[] { false, false, false, false }
+        };
     }
 
     private bool TryBindResultPanel()
@@ -73,49 +97,91 @@ public sealed class YutResultRevealView : MonoBehaviour
         return panelResult != null && panelSteps != null;
     }
 
-    private void ShowInResultPanel(YutResult result, int remainingThrows, int team)
+    private void ShowInResultPanel(YutThrowOutcome outcome, bool grantedExtraThrow, int team)
     {
-        int steps = result.Steps();
-        panelResult.text = result.DisplayName();
+        int steps = outcome.Result.Steps();
+        panelResult.text = outcome.OriginalResult.DisplayName();
         panelResult.color = TurnHudView.GetTeamColor(team);
         panelSteps.text = steps < 0 ? "1칸 뒤로" : $"{steps}칸 이동";
-        if (result.GrantsExtraThrow() && remainingThrows > 0)
+        if (grantedExtraThrow)
             panelSteps.text += " · 한 번 더";
+        else if (outcome.Result.GrantsExtraThrow())
+            panelSteps.text += " · 사냥꾼 효과 · 추가 던지기 없음";
 
-        Sprite[] faces = GetStickFaces(result);
         for (int i = 0; i < panelSticks.Length; i++)
         {
             if (panelSticks[i] == null) continue;
-            if (faces[i] != null) panelSticks[i].sprite = faces[i];
+            Sprite face = GetStickFace(outcome.Sticks, i);
+            if (face != null) panelSticks[i].sprite = face;
             panelSticks[i].color = Color.white;
             panelSticks[i].preserveAspect = true;
+            panelSticks[i].rectTransform.localScale = Vector3.one;
         }
 
         if (routine != null) StopCoroutine(routine);
-        routine = StartCoroutine(PulsePanelResult());
+        routine = outcome.IsResultChanged
+            ? StartCoroutine(PlayResultChange(outcome, steps))
+            : StartCoroutine(PulsePanelResult());
     }
 
-    private Sprite[] GetStickFaces(YutResult result)
+    private Sprite GetStickFace(bool[] sticks, int index)
     {
-        var faces = new[] { stickRound, stickRound, stickRound, stickRound };
-        int flatCount = result switch
+        if (sticks == null || index < 0 || index >= sticks.Length || !sticks[index])
+            return stickRound;
+
+        return index == StandardGetResult.MarkedStick && stickBackdo != null
+            ? stickBackdo
+            : stickFlat;
+    }
+
+    private IEnumerator PlayResultChange(YutThrowOutcome outcome, int steps)
+    {
+        const float effectDuration = 0.9f;
+        const float resultPause = 0.2f;
+        float elapsed = 0f;
+        Color effectColor = new Color32(255, 205, 82, 255);
+        panelSteps.text = "도박사 효과";
+
+        Vector2[] originalPositions = new Vector2[panelSticks.Length];
+        for (int i = 0; i < panelSticks.Length; i++)
+            if (panelSticks[i] != null) originalPositions[i] = panelSticks[i].rectTransform.anchoredPosition;
+
+        while (elapsed < effectDuration)
         {
-            YutResult.Do => 1,
-            YutResult.Gae => 2,
-            YutResult.Geol => 3,
-            YutResult.Yut => 4,
-            _ => 0
-        };
-        for (int i = 0; i < flatCount; i++) faces[i] = stickFlat;
-        if (result == YutResult.BackDo) faces[0] = stickBackdo != null ? stickBackdo : stickFlat;
-        if (result == YutResult.Yut && stickBackdo != null) faces[0] = stickBackdo;
-        return faces;
+            elapsed += Time.unscaledDeltaTime;
+            float t = Mathf.Clamp01(elapsed / effectDuration);
+            float envelope = Mathf.Sin(t * Mathf.PI);
+            float pulse = 1f + envelope * 0.1f;
+            Color color = Color.Lerp(Color.white, effectColor, envelope);
+            for (int i = 0; i < panelSticks.Length; i++)
+            {
+                if (panelSticks[i] == null) continue;
+                panelSticks[i].rectTransform.localScale = Vector3.one * pulse;
+                float offset = Mathf.Sin((t * 4f + i * 0.35f) * Mathf.PI * 2f) * 6f * envelope;
+                panelSticks[i].rectTransform.anchoredPosition = originalPositions[i] + Vector2.up * offset;
+                panelSticks[i].color = color;
+            }
+            yield return null;
+        }
+
+        for (int i = 0; i < panelSticks.Length; i++)
+        {
+            if (panelSticks[i] == null) continue;
+            panelSticks[i].rectTransform.localScale = Vector3.one;
+            panelSticks[i].rectTransform.anchoredPosition = originalPositions[i];
+            panelSticks[i].color = Color.white;
+        }
+
+        yield return new WaitForSecondsRealtime(resultPause);
+        panelResult.text = outcome.Result.DisplayName();
+        panelSteps.text = $"도박사 효과\n{(steps < 0 ? "1칸 뒤로" : $"{steps}칸 이동")}";
+        yield return PulsePanelResult();
     }
 
     private IEnumerator PulsePanelResult()
     {
         RectTransform resultRect = panelResult.rectTransform;
-        const float duration = 0.22f;
+        const float duration = 0.45f;
         float elapsed = 0f;
         while (elapsed < duration)
         {

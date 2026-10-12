@@ -16,7 +16,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     [SerializeField] private string playerPrefsKeyPrefix = "";
 
     [Header("로그인")]
-    [SerializeField] private string loginSceneName = "PJWScene_Login";
+    [SerializeField] private string loginSceneName = "Login";
     [SerializeField] private string lobbySceneName = "Lobby";
     // 서버 로그인 연동 전·에디터 테스트에서는 게스트 생성을 유지한다.
     // 끄면 토큰이 없는 사용자를 로그인 씬으로 보낸다.
@@ -30,10 +30,13 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     private string pendingRoomCode;
     private string pendingNickname;
     private bool leaveRequested;
+    // GAME_ENDED가 재전송돼도 보상을 한 번만 더하도록 (GAME_START마다 초기화)
+    private bool rewardAppliedThisGame;
     private readonly Dictionary<string, int> playerTeams = new();
 
     public string LocalPlayerId => playerIdentity?.PlayerId ?? string.Empty;
     public string LocalNickname => playerIdentity?.Nickname ?? string.Empty;
+    public int LocalGold => playerIdentity?.Gold ?? 0;
 
     private void Awake()
     {
@@ -117,10 +120,14 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         lobbyController.ReadyRequested += OnReadyRequested;
         lobbyController.LeaveRoomRequested += OnLeaveRoomRequested;
 
-        if (playerIdentity.HasToken)
+        if (!IsLoggedIn())
+        {
+            if (!allowGuestLogin) GoToLogin();
+        }
+        else
+        {
             lobbyController.SetLocalPlayer(playerIdentity.PlayerId);
-        else if (!allowGuestLogin)
-            GoToLogin();
+        }
     }
 
     private void UnbindLobbyController()
@@ -172,7 +179,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     // 로그인(또는 게스트 가입)된 플레이어가 있는지 확인한다
     private async System.Threading.Tasks.Task EnsurePlayer(string nickname)
     {
-        if (!playerIdentity.HasToken)
+        if (!IsLoggedIn())
         {
             if (!allowGuestLogin)
             {
@@ -185,6 +192,12 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
         apiClient.Token = playerIdentity.Token;
         lobbyController?.SetLocalPlayer(playerIdentity.PlayerId);
+    }
+
+    // 게스트를 허용하지 않으면 구글 로그인 토큰만 로그인으로 친다 (예전에 만든 게스트 토큰이 남아 있어도 로그인 씬으로 보낸다)
+    private bool IsLoggedIn()
+    {
+        return playerIdentity.HasToken && (allowGuestLogin || playerIdentity.IsGoogleLogin);
     }
 
     private void OnUnauthorized()
@@ -298,8 +311,18 @@ public class LobbyNetworkCoordinator : MonoBehaviour
                     break;
 
                 case MessageType.GAME_START:
+                    rewardAppliedThisGame = false;
                     lobbyController?.ReceiveGameStart(
                         MessageSerializer.ReadPayload<GameStartMessage>(envelope));
+                    break;
+
+                case MessageType.GAME_ENDED:
+                    // 게임 화면 처리는 RemoteGameSession이 하고, 여기서는 내 보상만 보유 골드 캐시에 더한다
+                    if (rewardAppliedThisGame) break;
+                    GameEndedMessage ended = MessageSerializer.ReadPayload<GameEndedMessage>(envelope);
+                    int reward = playerIdentity.ApplyGameReward(ended?.rankings);
+                    rewardAppliedThisGame = true;
+                    if (reward > 0) Debug.Log($"[LobbyNetwork] 게임 보상 {reward}골드, 보유 {playerIdentity.Gold}골드");
                     break;
 
                 case MessageType.ERROR:
