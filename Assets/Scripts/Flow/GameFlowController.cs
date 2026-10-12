@@ -29,6 +29,7 @@ public class GameFlowController : MonoBehaviour
     private GameState gameState;
     private TurnManager turnManager;
     private GameEvents gameEvents;
+    private GameSoundBinder soundBinder;   // 게임 이벤트 → 효과음
     private GameRules gameRules;
     // Flow는 규칙 구현을 직접 실행하지 않고 세션에 명령을 보낸 뒤 확정 이벤트만 화면에 반영한다.
     private IGameSession gameSession;
@@ -211,6 +212,7 @@ public class GameFlowController : MonoBehaviour
         gameState = new GameState(boardState);
         turnManager = new TurnManager(gameState, teamCount);
         gameEvents = new GameEvents();
+        soundBinder = new GameSoundBinder(gameEvents);
         gameRules = new GameRules(
             gameState,
             turnManager,
@@ -283,6 +285,7 @@ public class GameFlowController : MonoBehaviour
 
     private void OnDestroy()
     {
+        soundBinder?.Dispose();
         if (hud != null)
         {
             hud.ThrowClicked -= OnThrowButtonClicked;

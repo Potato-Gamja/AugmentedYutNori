@@ -19,6 +19,11 @@ public class ResultPopup : UIBase
         restartButton.onClick.AddListener(HandleRestart);
     }
 
+    protected override void OnOpen()
+    {
+        SoundManager.Play(SoundId.ResultPopup);
+    }
+
     public ResultPopup SetWinner(string winnername, Color winnerColor)
     {
         if (winnerText != null) winnerText.text = string.Format("{0} win", winnername);
