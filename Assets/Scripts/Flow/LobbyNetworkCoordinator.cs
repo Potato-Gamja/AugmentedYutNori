@@ -42,6 +42,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     private bool rewardAppliedThisGame;
     private Task silentLoginTask = Task.CompletedTask;
     private bool waitingForGameSession;
+    private bool logoutRequested;
     private readonly List<WsEnvelope> pendingGameMessages = new();
     private readonly Dictionary<string, int> playerTeams = new();
     private readonly List<PlayerDisplayInfo> playerProfiles = new();
@@ -292,6 +293,34 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         return playerIdentity.HasToken && (allowGuestLogin || playerIdentity.IsGoogleLogin);
     }
 
+    public async Task LogoutAsync()
+    {
+        if (logoutRequested) return;
+        logoutRequested = true;
+        try
+        {
+            // 진행 중인 자동 로그인이 로그아웃 후 토큰을 다시 저장하지 않도록 완료를 기다린다.
+            await silentLoginTask;
+            if (webSocketClient.IsConnected) webSocketClient.Send(MessageType.LEAVE_ROOM);
+            await webSocketClient.CloseAndWait();
+            playerIdentity.Clear();
+            apiClient.Token = null;
+            pendingRoomCode = null;
+            pendingNickname = null;
+            playerTeams.Clear();
+            playerProfiles.Clear();
+            pendingGameMessages.Clear();
+            waitingForGameSession = false;
+            SceneManager.LoadScene(loginSceneName);
+            Destroy(gameObject);
+        }
+        catch
+        {
+            logoutRequested = false;
+            throw;
+        }
+    }
+
     private void OnUnauthorized()
     {
         playerIdentity.Clear();
@@ -454,6 +483,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     {
         pendingRoomCode = null;
         pendingNickname = null;
+        if (logoutRequested) return;
 
         if (leaveRequested || byUser)
         {

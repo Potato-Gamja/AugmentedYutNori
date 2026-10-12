@@ -123,9 +123,9 @@ public class DesktopGoogleSignIn : IGoogleSignIn
   body {{ font-family: sans-serif; background: #304c7a; color: #3a2418; margin: 0; }}
   .card {{ background: #fff8ec; max-width: 420px; margin: 120px auto; padding: 40px; text-align: center; border-radius: 12px; }}
   button {{ font-size: 18px; padding: 14px 28px; border: 0; border-radius: 8px; cursor: pointer; }}
-  #login {{ background: #d75f50; color: #fff; width: 100%; }}
-  #cancel {{ background: transparent; color: #7a6a60; margin-top: 12px; font-size: 14px; }}
-  #status {{ min-height: 24px; margin-top: 16px; }}
+  button#login {{ background: #d75f50; color: #fff; width: 100%; }}
+  button#cancel {{ background: transparent; color: #7a6a60; margin-top: 12px; font-size: 14px; }}
+  div#status {{ min-height: 24px; margin-top: 16px; }}
 </style></head>
 <body><div class=""card"">
   <h2>증강 윷놀이</h2>

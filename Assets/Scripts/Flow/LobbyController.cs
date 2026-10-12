@@ -92,7 +92,7 @@ public class LobbyController : MonoBehaviour
             mainMenuPanel.SettingsRequested -= OnSettingsRequested;
         }
         if (profilePanel != null)
-            profilePanel.NicknameChangeRequested -= OnNicknameChangeRequested;
+            profilePanel.LogoutRequested -= OnLogoutRequested;
     }
 
     private void OnSettingsRequested()
@@ -127,13 +127,14 @@ public class LobbyController : MonoBehaviour
         profilePanel = uiManager?.Open<ProfilePanel>();
         if (profilePanel == null) return;
 
-        profilePanel.NicknameChangeRequested -= OnNicknameChangeRequested;
-        profilePanel.NicknameChangeRequested += OnNicknameChangeRequested;
+        profilePanel.LogoutRequested -= OnLogoutRequested;
+        profilePanel.LogoutRequested += OnLogoutRequested;
+        profilePanel.SetLogoutBusy(false);
 
         LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
         profilePanel.ShowProfile(coordinator?.LocalPlayerId, coordinator?.LocalNickname);
     }
-    private async void OnNicknameChangeRequested(string nickname)
+    private async void OnLogoutRequested()
     {
         if (profilePanel == null) return;
 
@@ -144,24 +145,19 @@ public class LobbyController : MonoBehaviour
             return;
         }
 
-        profilePanel.SetNicknameBusy(true);
-        profilePanel.ShowStatus("닉네임을 변경하는 중입니다.");
+        profilePanel.SetLogoutBusy(true);
+        profilePanel.ShowStatus("로그아웃 중입니다.");
         try
         {
-            string updatedNickname = await coordinator.ChangeNicknameAsync(nickname);
-            profilePanel.ApplyNickname(updatedNickname);
-            profilePanel.ShowStatus("닉네임이 변경되었습니다.");
-            lobbyPanel?.SetNickname(updatedNickname);
+            await coordinator.LogoutAsync();
         }
         catch (Exception exception)
         {
-            profilePanel.ShowStatus(exception is ApiException apiException
-                ? $"닉네임 변경에 실패했습니다. ({apiException.StatusCode})"
-                : exception.Message);
+            if (profilePanel != null) profilePanel.ShowStatus($"로그아웃하지 못했습니다: {exception.Message}");
         }
         finally
         {
-            profilePanel.SetNicknameBusy(false);
+            if (profilePanel != null) profilePanel.SetLogoutBusy(false);
         }
     }
     private void OnAchievementRequested() => mainMenuPanel.ShowStatus("업적 기능은 준비 중입니다.");
