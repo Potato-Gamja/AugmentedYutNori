@@ -1302,7 +1302,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GameInstaller
   gameFlowController: {fileID: 498729573}
-  defaultMode: 1
+  defaultMode: 0
   localSetup:
     teamCount: 4
     piecesPerTeam: 4

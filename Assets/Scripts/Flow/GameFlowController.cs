@@ -38,6 +38,7 @@ public class GameFlowController : MonoBehaviour
     private GameFlowHudPresenter hudPresenter;
     private GameFlowSelectionController selectionController;
     private SettingsPanel settingsPanel;
+    private ResultPopup resultPopup;
     private Camera mainCamera;
     private AugmentCatalog augmentCatalog;
     private GameFlowState currentState;
@@ -311,6 +312,11 @@ public class GameFlowController : MonoBehaviour
             hud.SettingsClicked -= OnSettingsClicked;
         }
         if (settingsPanel != null) settingsPanel.ExitGameRequested -= OnExitGameRequested;
+        if (resultPopup != null)
+        {
+            resultPopup.MainMenuClicked -= OnExitGameRequested;
+            resultPopup.ReturnToRoomClicked -= OnReturnToRoomRequested;
+        }
 
         if (gameSession != null)
         {
@@ -433,6 +439,13 @@ public class GameFlowController : MonoBehaviour
         if (settingsPanel == null) return;
         settingsPanel.SetExitGameVisible(true);
         settingsPanel.ExitGameRequested += OnExitGameRequested;
+    }
+
+    private void OnReturnToRoomRequested()
+    {
+        LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
+        if (coordinator != null) coordinator.ReturnToWaitingRoom();
+        else SceneManager.LoadScene(mainMenuSceneName);
     }
 
     private void OnExitGameRequested()
@@ -629,13 +642,21 @@ public class GameFlowController : MonoBehaviour
                 hudPresenter.RefreshPlayerPanels();
                 hud?.SetInteractionState(false, false);
                 int winner = pendingWinnerTeam ?? gameState.WinnerTeam ?? CurrentTeam;
-                hud?.SetInstruction($"{PlayerName(winner)} 승리!");
+                hud?.SetInstruction($"{PlayerName(winner)} win");
                 hud?.SetThrowInteractable(false);
                 hud?.SetRethrowVisible(false);
                 hud?.SetTimerRunning(false);
-                ResultPopup resultPopup = uiManager?.Open<ResultPopup>()?.SetWinner(
+                resultPopup = uiManager?.Open<ResultPopup>()?.SetWinner(
                     PlayerName(winner),
-                    GameHudPanel.GetTeamColor(winner));
+                    GameHudPanel.GetTeamColor(winner),
+                    hud?.ResolveProfileIcon(playerProfiles.FirstOrDefault(profile => profile.team == winner)?.iconId, winner));
+                if (resultPopup != null)
+                {
+                    resultPopup.MainMenuClicked -= OnExitGameRequested;
+                    resultPopup.MainMenuClicked += OnExitGameRequested;
+                    resultPopup.ReturnToRoomClicked -= OnReturnToRoomRequested;
+                    resultPopup.ReturnToRoomClicked += OnReturnToRoomRequested;
+                }
                 if (resultPopup != null && gameSession is RemoteGameSession remoteSession)
                     resultPopup.SetRankings(remoteSession.Rankings, playerProfiles);
                 break;

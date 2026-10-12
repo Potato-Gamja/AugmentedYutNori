@@ -118,6 +118,11 @@ public class RoomPanel : UIBase
         if (leaveButton != null) leaveButton.interactable = interactable;
     }
 
+    public void SetReadyInteractable(bool interactable)
+    {
+        if (readyButton != null) readyButton.interactable = interactable;
+    }
+
     public void ShowStatus(string message)
     {
         if (statusText != null) statusText.text = message ?? string.Empty;

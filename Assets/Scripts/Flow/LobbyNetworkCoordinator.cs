@@ -43,6 +43,9 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     private Task silentLoginTask = Task.CompletedTask;
     private bool waitingForGameSession;
     private bool logoutRequested;
+    private bool returnToRoomRequested;
+    private bool gameEnded;
+    private RoomStateMessage lastRoomState;
     private readonly List<WsEnvelope> pendingGameMessages = new();
     private readonly Dictionary<string, int> playerTeams = new();
     private readonly List<PlayerDisplayInfo> playerProfiles = new();
@@ -389,6 +392,11 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     private void OnReadyRequested(bool ready)
     {
+        if (!CanReadyInCurrentRoom)
+        {
+            lobbyController?.ReceiveError("재경기는 서버의 방 초기화 기능 연결 후 가능합니다.");
+            return;
+        }
         if (!webSocketClient.IsConnected ||
             !webSocketClient.Send(MessageType.READY, new ReadyRequest { ready = ready }))
         {
@@ -402,6 +410,28 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         if (webSocketClient.IsConnected) webSocketClient.Send(MessageType.LEAVE_ROOM);
         webSocketClient.Close();
     }
+
+    public void ReturnToWaitingRoom()
+    {
+        if (!webSocketClient.IsConnected || lastRoomState == null)
+        {
+            LeaveGameToMainMenu();
+            return;
+        }
+        returnToRoomRequested = true;
+        SceneManager.LoadScene(lobbySceneName);
+    }
+
+    // LobbyController.Start에서 패널 생성과 이벤트 연결이 끝난 뒤 호출한다.
+    public void RestoreWaitingRoom(LobbyController controller)
+    {
+        if (!returnToRoomRequested || controller == null || lastRoomState == null) return;
+        returnToRoomRequested = false;
+        controller.SetLocalPlayer(LocalPlayerId, LocalNickname);
+        controller.ReceiveRoomState(lastRoomState);
+    }
+
+    public bool CanReadyInCurrentRoom => !gameEnded;
 
     public async void LeaveGameToMainMenu()
     {
@@ -417,6 +447,8 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         pendingRoomCode = null;
         pendingNickname = null;
         leaveRequested = false;
+        returnToRoomRequested = false;
+        lastRoomState = null;
         SceneManager.LoadScene(lobbySceneName);
     }
 
@@ -432,6 +464,8 @@ public class LobbyNetworkCoordinator : MonoBehaviour
             {
                 case MessageType.ROOM_STATE:
                     RoomStateMessage room = MessageSerializer.ReadPayload<RoomStateMessage>(envelope);
+                    lastRoomState = room;
+                    if (gameEnded && room?.status == "WAITING") gameEnded = false;
                     CachePlayerTeams(room);
                     lobbyController?.ReceiveRoomState(room);
                     break;
@@ -446,6 +480,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
                     // 서버 공통 GameSetup에는 localTeam이 없으므로 최신 ROOM_STATE의 배정을 사용한다.
                     started.localTeam = localTeam;
+                    gameEnded = false;
                     pendingGameMessages.Clear();
                     waitingForGameSession = true;
                     rewardAppliedThisGame = false;
@@ -454,6 +489,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
                     break;
 
                 case MessageType.GAME_ENDED:
+                    gameEnded = true;
                     // 게임 화면 처리는 RemoteGameSession이 하고, 여기서는 내 보상만 보유 골드 캐시에 더한다
                     if (rewardAppliedThisGame) break;
                     GameEndedMessage ended = MessageSerializer.ReadPayload<GameEndedMessage>(envelope);

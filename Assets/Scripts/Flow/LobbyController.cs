@@ -64,6 +64,7 @@ public class LobbyController : MonoBehaviour
         mainMenuPanel.ProfileRequested += OnProfileRequested;
         mainMenuPanel.AchievementRequested += OnAchievementRequested;
         mainMenuPanel.SettingsRequested += OnSettingsRequested;
+        FindFirstObjectByType<LobbyNetworkCoordinator>()?.RestoreWaitingRoom(this);
     }
 
     private void OnDestroy()
@@ -213,11 +214,18 @@ public class LobbyController : MonoBehaviour
     // WebSocketClient 계약: ROOM_STATE payload를 역직렬화한 뒤 호출한다.
     public void ReceiveRoomState(RoomStateMessage room)
     {
+        uiManager.Close<MainMenuPanel>();
         uiManager.Close<LobbyPanel>();
         uiManager.Open<RoomPanel>();
         roomPanel.ShowRoom(room, localPlayerId);
         roomPanel.SetInteraction(true);
         roomPanel.ShowStatus("다른 플레이어를 기다리는 중입니다.");
+        LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
+        if (coordinator != null && !coordinator.CanReadyInCurrentRoom)
+        {
+            roomPanel.SetReadyInteractable(false);
+            roomPanel.ShowStatus("경기가 종료되었습니다. 재경기는 서버의 방 초기화 기능 연결 후 가능합니다.");
+        }
     }
 
     // WebSocketClient 계약: GAME_START payload를 역직렬화한 뒤 호출한다.
