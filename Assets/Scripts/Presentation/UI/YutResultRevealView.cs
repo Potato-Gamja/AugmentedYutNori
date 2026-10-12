@@ -38,6 +38,8 @@ public sealed class YutResultRevealView : MonoBehaviour
 
     public void Show(YutThrowOutcome outcome, bool grantedExtraThrow, int team)
     {
+        SoundManager.Play(SoundId.YutThrow);
+
         if (TryBindResultPanel())
         {
             ShowInResultPanel(outcome, grantedExtraThrow, team);

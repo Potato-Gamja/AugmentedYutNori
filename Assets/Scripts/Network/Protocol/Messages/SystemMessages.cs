@@ -37,6 +37,14 @@ public class PlayerReconnectedMessage
     public string playerId;
 }
 
+// S→C PLAYER_REMOVED
+public class PlayerRemovedMessage
+{
+    public string playerId;
+    public int team;
+    public GameEndReason reason;
+}
+
 // S→C GAME_SNAPSHOT  재접속·DESYNC 때 현재 게임 상태
 public class GameSnapshotMessage
 {

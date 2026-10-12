@@ -40,6 +40,8 @@ public class GameHudPanel : UIBase
     [SerializeField] private List<Sprite> augmentIcons = new();
     [SerializeField] private Sprite augmentActiveRing;
     [SerializeField] private TextAsset augmentDefinitions;
+    [Header("Player Profile Art")]
+    [SerializeField] private List<Sprite> profileIcons = new();
 
     private TurnHudView turnView;
     private PlayerStatusView playerView;
@@ -163,6 +165,11 @@ public class GameHudPanel : UIBase
     public void ConfigurePlayers(int teamCount, int piecesPerTeam)
     {
         playerView?.Configure(teamCount, piecesPerTeam, teamPieceSprites, teamPieceGlowSprites);
+    }
+
+    public void ConfigurePlayerProfiles(IReadOnlyList<PlayerDisplayInfo> profiles)
+    {
+        playerView?.SetPlayerProfiles(profiles, profileIcons);
     }
 
     public void SetPlayerState(

@@ -16,7 +16,7 @@ public enum MessageType
     THROW_REQUEST,      // C→S 윷 던지기 요청
     RETHROW_REQUEST,    // C→S 재던지기 증강 사용 요청
     THROW_RESULT,       // S→C 서버가 정한 윷 결과 (던지기·재던지기 공통)
-    MOVE,               // C→S 내가 둔 이동 + 이동 후 판단 정보(MoveReport)
+    MOVE,               // C→S 내가 둔 이동 (말 id, 윷 칸 수, 도착 칸). 결과는 서버가 계산
     MOVE_APPLIED,       // S→C 확정된 이동 (상대 기기는 이걸로 재계산)
     TURN_CHANGED,       // S→C 턴 변경
     GAME_ENDED,         // S→C 게임 종료
@@ -33,6 +33,7 @@ public enum MessageType
     ERROR,              // S→C 요청 거부·오류
     PLAYER_DISCONNECTED,// S→C 다른 플레이어 연결 끊김 (재접속 대기)
     PLAYER_RECONNECTED, // S→C 끊겼던 플레이어 재접속
+    PLAYER_REMOVED,     // S→C 플레이어 제거 (나가기·재접속 실패)
     GAME_SNAPSHOT,
     SYNC_REQUEST
 }

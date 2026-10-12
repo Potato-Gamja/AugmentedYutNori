@@ -136,6 +136,7 @@ public sealed class StoredResultView : MonoBehaviour
                 HideChoices();
                 onSelected?.Invoke(selectedIndex);
             });
+            SoundManager.BindButtonClick(button);
         }
     }
 

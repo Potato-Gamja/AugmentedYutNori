@@ -9,11 +9,12 @@ using UnityEngine.SceneManagement;
 public class LobbyController : MonoBehaviour
 {
     [SerializeField] private UIManager uiManager;
-    [SerializeField] private string gameSceneName = "LSU_Game_UI";
+    [SerializeField] private string gameSceneName = "Game";
 
     private LobbyPanel lobbyPanel;
     private MainMenuPanel mainMenuPanel;
     private RoomPanel roomPanel;
+    private ProfilePanel profilePanel;
     private string localPlayerId;
 
     // 네트워크 계약:
@@ -90,6 +91,8 @@ public class LobbyController : MonoBehaviour
             mainMenuPanel.AchievementRequested -= OnAchievementRequested;
             mainMenuPanel.SettingsRequested -= OnSettingsRequested;
         }
+        if (profilePanel != null)
+            profilePanel.NicknameChangeRequested -= OnNicknameChangeRequested;
     }
 
     private void OnSettingsRequested()
@@ -108,6 +111,8 @@ public class LobbyController : MonoBehaviour
         uiManager.Close<MainMenuPanel>();
         uiManager.Open<LobbyPanel>();
         lobbyPanel.ShowStatus(string.Empty);
+        LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
+        lobbyPanel.SetNickname(coordinator?.LocalNickname);
     }
 
     private void OnMainMenuRequested()
@@ -116,14 +121,48 @@ public class LobbyController : MonoBehaviour
         uiManager.Open<MainMenuPanel>();
     }
 
-    private void OnGachaRequested() => mainMenuPanel.ShowStatus("뽑기 기능은 준비 중입니다.");
+    private void OnGachaRequested() => uiManager?.Open<GachaPanel>();
     private void OnProfileRequested()
     {
-        ProfilePanel panel = uiManager?.Open<ProfilePanel>();
-        if (panel == null) return;
+        profilePanel = uiManager?.Open<ProfilePanel>();
+        if (profilePanel == null) return;
+
+        profilePanel.NicknameChangeRequested -= OnNicknameChangeRequested;
+        profilePanel.NicknameChangeRequested += OnNicknameChangeRequested;
 
         LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
-        panel.ShowProfile(coordinator?.LocalPlayerId, coordinator?.LocalNickname);
+        profilePanel.ShowProfile(coordinator?.LocalPlayerId, coordinator?.LocalNickname);
+    }
+    private async void OnNicknameChangeRequested(string nickname)
+    {
+        if (profilePanel == null) return;
+
+        LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
+        if (coordinator == null)
+        {
+            profilePanel.ShowStatus("로그인 정보를 찾을 수 없습니다.");
+            return;
+        }
+
+        profilePanel.SetNicknameBusy(true);
+        profilePanel.ShowStatus("닉네임을 변경하는 중입니다.");
+        try
+        {
+            string updatedNickname = await coordinator.ChangeNicknameAsync(nickname);
+            profilePanel.ApplyNickname(updatedNickname);
+            profilePanel.ShowStatus("닉네임이 변경되었습니다.");
+            lobbyPanel?.SetNickname(updatedNickname);
+        }
+        catch (Exception exception)
+        {
+            profilePanel.ShowStatus(exception is ApiException apiException
+                ? $"닉네임 변경에 실패했습니다. ({apiException.StatusCode})"
+                : exception.Message);
+        }
+        finally
+        {
+            profilePanel.SetNicknameBusy(false);
+        }
     }
     private void OnAchievementRequested() => mainMenuPanel.ShowStatus("업적 기능은 준비 중입니다.");
 
@@ -169,9 +208,10 @@ public class LobbyController : MonoBehaviour
     }
 
     // PlayerIdentity/ApiClient 계약: POST /players 응답의 playerId를 전달한다.
-    public void SetLocalPlayer(string playerId)
+    public void SetLocalPlayer(string playerId, string nickname = null)
     {
         localPlayerId = playerId;
+        if (!string.IsNullOrWhiteSpace(nickname)) lobbyPanel?.SetNickname(nickname);
     }
 
     // WebSocketClient 계약: ROOM_STATE payload를 역직렬화한 뒤 호출한다.

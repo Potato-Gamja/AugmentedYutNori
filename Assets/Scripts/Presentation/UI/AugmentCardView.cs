@@ -42,5 +42,6 @@ public class AugmentCardView : MonoBehaviour
             return;
         }
         selectButton.onClick.AddListener(() => onCardSelected(definition.id));
+        SoundManager.BindButtonClick(selectButton);
     }
 }

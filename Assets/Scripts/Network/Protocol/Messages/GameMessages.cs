@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 
 // 말 ID 규칙: 팀 * 100 + 순번 (GameSetup.PieceId). 서버도 같은 규칙을 쓴다.
 
@@ -18,49 +19,41 @@ public class ThrowResultMessage
     public bool isRethrow;      // true면 GameRules.ApplyRethrow, false면 GameRules.ApplyThrow
 }
 
-// C→S MOVE  내가 둔 이동 + 이동 후 판단 정보
-// 서버는 이 정보로 턴 종료·추가 던지기·승리를 판단
+// C→S MOVE  "어떤 말을, 어떤 윷 결과(칸 수)로, 어느 칸으로"만 보낸다.
+// 잡기·업기·완주 같은 결과는 서버가 판으로 계산해서 MOVE_APPLIED로 돌려준다.
 public class MoveMessage
 {
-    // MoveCommand
     public int pieceId;
-    public int moveCount;
-    public int destinationNodeId;
+    public int moveCount;           // 사용할 윷 결과의 칸 수 (증강 보정 전, 빽도 = -1)
+    public int destinationNodeId;   // 지름길·빽도 전환처럼 갈 길이 여러 개일 때 도착 칸
+    public string stateHash;        // 서버가 MOVE_APPLIED에 그대로 실어 보낸다. 이동 전에는 알 수 없어 비워 보낸다
 
-    // MoveReport
-    public int capturedCount;
-    public bool isFinished;
-    public bool hasExtraThrow;
-    public bool hasRemainingAction;
-    public string stateHash;    // StateHasher.HashHex
-
-    public static MoveMessage From(MoveCommand command, MoveReport report)
+    public static MoveMessage From(MoveCommand command)
     {
         return new MoveMessage
         {
             pieceId = command.PieceId,
             moveCount = command.MoveCount,
             destinationNodeId = command.DestinationNodeId,
-            capturedCount = report.CapturedCount,
-            isFinished = report.IsFinished,
-            hasExtraThrow = report.HasExtraThrow,
-            hasRemainingAction = report.HasRemainingAction,
-            stateHash = report.StateHash,
         };
     }
 
     public MoveCommand ToCommand() => new MoveCommand(pieceId, moveCount, destinationNodeId);
 }
 
-// S→C MOVE_APPLIED  서버가 확정한 이동. 양쪽 모두에게 보낸다
-// 상대 기기는 BoardState.TryApply(ToCommand())로 재계산하고 stateHash로 검증
+// S→C MOVE_APPLIED  서버가 판으로 계산해 확정한 이동. 방 전체(이동한 사람 포함)에게 보낸다.
+// 모든 기기가 이 메시지를 받은 뒤 Core에 적용하고, 결과가 서버 값과 같은지 확인한다
 public class MoveAppliedMessage
 {
     public int team;
     public int pieceId;
     public int moveCount;
     public int destinationNodeId;
-    public string stateHash;    // 보낸 쪽이 계산한 해시. 다르면 desync
+    public List<int> movedPieceIds;     // 같이 움직인 말 (업힌 말 포함)
+    public List<int> capturedPieceIds;  // 잡혀서 대기석으로 간 말
+    public bool isFinished;             // 움직인 말이 완주했는지
+    public string stateHash;            // MOVE에 실려 온 해시 (현재 클라는 비워 보냄)
+    public bool auto;                   // 끊긴 플레이어 자동 진행으로 서버가 대신 둔 이동인지
 
     public MoveCommand ToCommand() => new MoveCommand(pieceId, moveCount, destinationNodeId);
 }
@@ -71,6 +64,7 @@ public class TurnChangedMessage
     public int team;                // 이제 행동할 팀 → TurnManager.ApplyServerTurn
     public int remainingThrows;
     public int turnTimeLimitSec;
+    public int turnNumber;          // 새 턴마다 1씩 증가
 }
 
 // S→C GAME_ENDED
@@ -78,6 +72,17 @@ public class GameEndedMessage
 {
     public int winnerTeam;
     public GameEndReason reason;
+    public RankingEntry[] rankings = new RankingEntry[0]; // 이번 판 등수 목록 (서버가 비워 보낼 수 있음)
+}
+
+// GAME_ENDED 순위 한 줄 (플레이어 = 팀). rank는 1부터, 같은 등수 다음은 건너뜀
+// 기권·끊김으로 나간 플레이어는 꼴찌 등수 + rewardGold 0
+public class RankingEntry
+{
+    public string playerId;
+    public int team;
+    public int rank;
+    public int rewardGold;
 }
 
 public enum GameEndReason

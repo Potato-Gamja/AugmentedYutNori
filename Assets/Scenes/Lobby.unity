@@ -127,6 +127,18 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 828511336472889071, guid: e44c14272cc20f148b45da5696d1af57, type: 3}
+      propertyPath: prefabs.Array.size
+      value: 11
+      objectReference: {fileID: 0}
+    - target: {fileID: 828511336472889071, guid: e44c14272cc20f148b45da5696d1af57, type: 3}
+      propertyPath: 'prefabs.Array.data[9]'
+      value: 
+      objectReference: {fileID: 6818293103524836979, guid: 654c331969a51a2489199ab056f85737, type: 3}
+    - target: {fileID: 828511336472889071, guid: e44c14272cc20f148b45da5696d1af57, type: 3}
+      propertyPath: 'prefabs.Array.data[10]'
+      value: 
+      objectReference: {fileID: 2441797864669810265, guid: a134db81b8faf674d9027ea298abacbc, type: 3}
     - target: {fileID: 2638968591324394123, guid: e44c14272cc20f148b45da5696d1af57, type: 3}
       propertyPath: m_Name
       value: UIRoot
@@ -176,6 +188,17 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: e44c14272cc20f148b45da5696d1af57, type: 3}
+--- !u!114 &1182727055 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 828511336472889071, guid: e44c14272cc20f148b45da5696d1af57, type: 3}
+  m_PrefabInstance: {fileID: 584459168}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 589cddd145bd95d4da2f16686d2012f4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UIManager
 --- !u!1 &1204911397
 GameObject:
   m_ObjectHideFlags: 0
@@ -205,8 +228,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 589e7092a0e9a4b4f94b0f40094025bd, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LobbyController
-  uiManager: {fileID: 0}
-  gameSceneName: LSU_Game_UI
+  uiManager: {fileID: 1182727055}
+  gameSceneName: Game
 --- !u!4 &1204911399
 Transform:
   m_ObjectHideFlags: 0
@@ -394,9 +417,13 @@ MonoBehaviour:
   apiBaseUrl: http://localhost:8080
   webSocketUrl: ws://localhost:8080/ws
   playerPrefsKeyPrefix: 
-  loginSceneName: PJWScene_Login
+  createRoomIsPublic: 1
+  createRoomMaxPlayers: 4
+  createRoomTimeLimitSec: 30
+  loginSceneName: Login
   lobbySceneName: Lobby
-  allowGuestLogin: 1
+  allowGuestLogin: 0
+  authSettings: {fileID: 11400000, guid: d8ddffe073f3d63459a7170891b2570f, type: 2}
 --- !u!114 &2094785097
 MonoBehaviour:
   m_ObjectHideFlags: 0

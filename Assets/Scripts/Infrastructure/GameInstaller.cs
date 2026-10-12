@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 public enum GameSessionMode
@@ -17,6 +19,7 @@ public class GameInstaller : MonoBehaviour, IGameSessionFactory
     [SerializeField] private GameSetup localSetup = new GameSetup();
 
     private static GameStartMessage pendingGameStart;
+    private static List<PlayerDisplayInfo> pendingPlayerProfiles = new();
 
     // RemoteGameSession 계약:
     // Network 담당이 RemoteGameSession 구현을 끝내면 앱 시작 시 이 Factory를 등록한다.
@@ -30,6 +33,17 @@ public class GameInstaller : MonoBehaviour, IGameSessionFactory
     public static void PrepareOnlineGame(GameStartMessage message)
     {
         pendingGameStart = message ?? throw new ArgumentNullException(nameof(message));
+    }
+
+    public static void PreparePlayerProfiles(IEnumerable<PlayerDisplayInfo> profiles)
+    {
+        pendingPlayerProfiles = profiles?.Select(profile => new PlayerDisplayInfo
+        {
+            playerId = profile.playerId,
+            nickname = profile.nickname,
+            team = profile.team,
+            iconId = profile.iconId,
+        }).ToList() ?? new List<PlayerDisplayInfo>();
     }
 
     public static void RegisterRemoteSessionFactory(
@@ -71,6 +85,8 @@ public class GameInstaller : MonoBehaviour, IGameSessionFactory
         }
 
         gameFlowController.Configure(activeSetup, this);
+        gameFlowController.ConfigurePlayerProfiles(pendingPlayerProfiles);
+        pendingPlayerProfiles.Clear();
     }
 
     public IGameSession Create(

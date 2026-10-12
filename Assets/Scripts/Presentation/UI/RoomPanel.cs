@@ -1,5 +1,6 @@
 using System;
-using System.Text;
+using System.Linq;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -11,12 +12,26 @@ public class RoomPanel : UIBase
 {
     [SerializeField] private TMP_Text roomCodeText;
     [SerializeField] private TMP_Text playersText;
+    [SerializeField] private GameObject[] playerSlots;
+    [SerializeField] private TMP_Text[] playerNameTexts;
+    [SerializeField] private TMP_Text[] playerStatusTexts;
+    [SerializeField] private Image[] playerSlotBackgrounds;
+    [SerializeField] private Image[] playerProfileIcons;
+    [SerializeField] private List<Sprite> profileIcons = new();
     [SerializeField] private TMP_Text statusText;
     [SerializeField] private Button readyButton;
     [SerializeField] private TMP_Text readyButtonText;
     [SerializeField] private Button leaveButton;
 
     private bool localReady;
+
+    private static readonly Color[] TeamColors =
+    {
+        new(0.87f, 0.22f, 0.22f, 0.16f),
+        new(0.18f, 0.43f, 0.86f, 0.16f),
+        new(0.12f, 0.58f, 0.36f, 0.16f),
+        new(0.91f, 0.57f, 0.12f, 0.16f),
+    };
 
     public event Action<bool> ReadyRequested;
     public event Action LeaveRequested;
@@ -36,19 +51,48 @@ public class RoomPanel : UIBase
     public void ShowRoom(RoomStateMessage room, string localPlayerId)
     {
         if (room == null) return;
-        if (roomCodeText != null) roomCodeText.text = room.roomCode ?? string.Empty;
+        int maxPlayers = room.maxPlayers > 0 ? room.maxPlayers : 4;
+        if (roomCodeText != null)
+            roomCodeText.text = $"방 코드  {room.roomCode}    {room.members.Count}/{maxPlayers}";
 
-        var builder = new StringBuilder();
         localReady = false;
-        foreach (RoomPlayer player in room.players)
+        RoomPlayer[] members = room.members.OrderBy(player => player.team).ToArray();
+        for (int i = 0; i < playerSlots.Length; i++)
         {
-            if (builder.Length > 0) builder.AppendLine();
-            builder.Append($"Team {player.team + 1} · {player.nickname}");
-            builder.Append(player.ready ? " · 준비" : " · 대기");
-            if (player.playerId == localPlayerId) localReady = player.ready;
+            bool occupied = i < members.Length;
+            RoomPlayer player = occupied ? members[i] : null;
+            playerSlots[i]?.SetActive(true);
+
+            if (playerNameTexts != null && i < playerNameTexts.Length && playerNameTexts[i] != null)
+                playerNameTexts[i].text = occupied
+                    ? $"{player.nickname}{(player.playerId == localPlayerId ? "  (나)" : string.Empty)}"
+                    : "참가 대기";
+
+            if (playerProfileIcons != null && i < playerProfileIcons.Length && playerProfileIcons[i] != null)
+            {
+                Image icon = playerProfileIcons[i];
+                icon.sprite = occupied ? PlayerProfileIconResolver.Resolve(profileIcons, player.iconId, player.team) : null;
+                icon.enabled = icon.sprite != null;
+                icon.preserveAspect = true;
+            }
+
+            if (playerStatusTexts != null && i < playerStatusTexts.Length && playerStatusTexts[i] != null)
+            {
+                playerStatusTexts[i].text = occupied ? (player.ready ? "준비 완료" : "대기 중") : "빈 자리";
+                playerStatusTexts[i].color = occupied && player.ready
+                    ? new Color32(31, 145, 87, 255)
+                    : new Color32(135, 120, 100, 255);
+            }
+
+            if (playerSlotBackgrounds != null && i < playerSlotBackgrounds.Length && playerSlotBackgrounds[i] != null)
+                playerSlotBackgrounds[i].color = occupied
+                    ? TeamColors[Mathf.Clamp(player.team, 0, TeamColors.Length - 1)]
+                    : new Color32(235, 228, 211, 120);
+
+            if (occupied && player.playerId == localPlayerId) localReady = player.ready;
         }
 
-        if (playersText != null) playersText.text = builder.ToString();
+        if (playersText != null) playersText.gameObject.SetActive(false);
         RefreshReadyLabel();
     }
 

@@ -58,6 +58,22 @@ public class BoardState
 
     public Piece GetPiece(int id) => pieces.TryGetValue(id, out Piece piece) ? piece : null;
 
+    // 게임에서 나간 팀(PLAYER_REMOVED)의 말을 판에서 뺀다. 서버 BoardState.removeTeam과 같은 규칙
+    // 빠진 말은 잡히거나 업히지 않고 상태 해시에도 들어가지 않는다. 화면에서 숨도록 대기석 상태로 돌려 둔다
+    public List<Piece> RemoveTeam(int team)
+    {
+        var removed = new List<Piece>();
+        foreach (Piece piece in pieces.Values)
+            if (piece.Team == team) removed.Add(piece);
+
+        foreach (Piece piece in removed)
+        {
+            pieces.Remove(piece.Id);
+            piece.ReturnToStart();
+        }
+        return removed;
+    }
+
     // 판 위 해당 칸에 있는 말들 (대기/골인 말 제외)
     public List<Piece> GetPiecesAt(BoardNode node)
     {

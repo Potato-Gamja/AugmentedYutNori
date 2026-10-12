@@ -9,7 +9,8 @@ using System.Collections.Generic;
 /// - 방 전체 broadcast는 seq를 1씩 증가시킨다. PONG/개인 ERROR처럼 seq=0인 메시지는 순서 검사에서 제외한다.
 /// - GAME_START의 teamCount는 2~4, localTeam은 0~teamCount-1로 보낸다.
 /// - THROW_RESULT/MOVE_APPLIED/AUGMENT_SELECTED에는 행동한 team을 반드시 포함한다.
-/// - MOVE는 현재 클라이언트 선적용 결과(MoveReport)를 전송하고, 서버의 MOVE_APPLIED를 최종 확정으로 취급한다.
+/// - MOVE는 말 id·칸 수·도착 칸만 보낸다. 내 이동도 먼저 적용하지 않고, 서버의 MOVE_APPLIED를 받은 뒤 모든 기기가 같은 순서로 적용한다.
+/// - MOVE_APPLIED의 movedPieceIds/capturedPieceIds/isFinished와 Core 적용 결과가 다르면 서버와 판이 어긋난 것으로 알린다.
 /// - MOVE 거절 또는 seq 누락 뒤 완전 복구는 향후 snapshot/RECONNECT 메시지 계약이 필요하다.
 /// </summary>
 public sealed class RemoteGameSession : IGameSession, IDisposable
@@ -26,11 +27,11 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
     private bool commandPending;
     private bool hasReceivedSequence;
     private long lastSequence;
-    private MoveResult pendingLocalMove;
-    private int pendingMovePieceId = -1;
-    private int pendingMoveDestinationId = -1;
 
     public bool IsCommandPending => commandPending;
+
+    // 마지막 GAME_ENDED의 순위·보상 목록 (결과 화면용). 게임이 끝나기 전엔 빈 배열
+    public IReadOnlyList<RankingEntry> Rankings { get; private set; } = Array.Empty<RankingEntry>();
 
     public event Action<YutThrowOutcome> Thrown;
     public event Action<MoveResult> Moved;
@@ -105,6 +106,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
     {
         if (!CanSendCommand()) return;
 
+        // 보내기 전에 로컬 규칙으로 갈 수 있는 이동인지만 확인한다. 실제 적용은 MOVE_APPLIED를 받은 뒤에 한다
         MoveOption? selected = FindMoveOption(pieceId, resultIndex, destinationNodeId);
         if (!selected.HasValue)
         {
@@ -112,40 +114,14 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
             return;
         }
 
-        MoveResult result = null;
-        void CaptureMove(MoveResult moved) => result = moved;
-
-        gameEvents.PieceMoved += CaptureMove;
-        bool moved;
-        try
-        {
-            // 현재 서버 계약의 MOVE에는 이동 후 MoveReport가 포함된다.
-            // 따라서 요청 측 Core에 먼저 적용해 보고 보고서를 만든 뒤 전송한다.
-            // 서버 거절 뒤 상태 복구는 RECONNECT/snapshot 계약이 추가될 때 이 경계에서 처리한다.
-            moved = rules.MovePiece(pieceId, resultIndex, destinationNodeId);
-        }
-        finally
-        {
-            gameEvents.PieceMoved -= CaptureMove;
-        }
-
-        if (!moved || result == null)
-        {
-            Reject("선택한 말을 이동할 수 없습니다.");
-            return;
-        }
-
-        MoveReport report = rules.BuildMoveReport(result);
-        MoveMessage message = MoveMessage.From(result.ToCommand(), report);
+        int moveCount = gameState.StoredResults[resultIndex].Steps();
+        MoveMessage message = MoveMessage.From(new MoveCommand(pieceId, moveCount, destinationNodeId));
         if (!socket.Send(MessageType.MOVE, message))
         {
-            Reject("이동 요청을 서버에 보내지 못했습니다. 상태를 다시 동기화해 주세요.");
+            Reject("이동 요청을 서버에 보내지 못했습니다.");
             return;
         }
 
-        pendingLocalMove = result;
-        pendingMovePieceId = pieceId;
-        pendingMoveDestinationId = destinationNodeId;
         commandPending = true;
     }
 
@@ -180,6 +156,9 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
                     break;
                 case MessageType.PLAYER_RECONNECTED:
                     ApplyPlayerReconnected(MessageSerializer.ReadPayload<PlayerReconnectedMessage>(envelope));
+                    break;
+                case MessageType.PLAYER_REMOVED:
+                    ApplyPlayerRemoved(MessageSerializer.ReadPayload<PlayerRemovedMessage>(envelope));
                     break;
                 case MessageType.ERROR:
                     ErrorMessage error = MessageSerializer.ReadPayload<ErrorMessage>(envelope);
@@ -217,45 +196,66 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
         Thrown?.Invoke(outcome);
     }
 
+    // 서버가 확정한 이동을 내 이동·상대 이동 구분 없이 같은 방법으로 적용한다
     private void ApplyMove(MoveAppliedMessage message, long sequence)
     {
         if (message == null) throw new InvalidOperationException("MOVE_APPLIED 내용이 없습니다.");
 
-        MoveResult result;
-        bool isPendingLocalMove = pendingLocalMove != null &&
-                                  message.team == setup.localTeam &&
-                                  message.pieceId == pendingMovePieceId &&
-                                  message.destinationNodeId == pendingMoveDestinationId;
+        int resultIndex = FindStoredResultIndex(message.moveCount);
+        if (resultIndex < 0)
+            throw new InvalidOperationException($"{message.moveCount}칸 이동에 사용할 저장 결과가 없습니다.");
 
-        if (isPendingLocalMove)
+        MoveResult result = null;
+        void CaptureMove(MoveResult moved) => result = moved;
+        gameEvents.PieceMoved += CaptureMove;
+        try
         {
-            result = pendingLocalMove;
-            ClearPendingMove();
-            commandPending = false;
+            if (!rules.MovePiece(message.pieceId, resultIndex, message.destinationNodeId) || result == null)
+                throw new InvalidOperationException("서버가 확정한 이동을 Core에서 재현할 수 없습니다.");
         }
-        else
+        finally
         {
-            int resultIndex = FindStoredResultIndex(message.moveCount);
-            if (resultIndex < 0)
-                throw new InvalidOperationException($"{message.moveCount}칸 이동에 사용할 저장 결과가 없습니다.");
-
-            result = null;
-            void CaptureMove(MoveResult moved) => result = moved;
-            gameEvents.PieceMoved += CaptureMove;
-            try
-            {
-                if (!rules.MovePiece(message.pieceId, resultIndex, message.destinationNodeId))
-                    throw new InvalidOperationException("서버가 확정한 이동을 Core에서 재현할 수 없습니다.");
-            }
-            finally
-            {
-                gameEvents.PieceMoved -= CaptureMove;
-            }
+            gameEvents.PieceMoved -= CaptureMove;
         }
 
-        if (message.team != setup.localTeam) AutomatedMoveApplied?.Invoke(message.team);
+        if (message.team == setup.localTeam) commandPending = false;
+        if (message.auto) AutomatedMoveApplied?.Invoke(message.team);
+
         Moved?.Invoke(result);
+
+        // 연출은 Core 결과로 하지만, 서버가 계산한 결과(잡힌 말·같이 움직인 말·완주)와 같은지 확인한다
+        string mismatch = FindResultMismatch(message, result);
+        if (mismatch != null) Reject($"이동 결과가 서버와 다릅니다 ({mismatch}). 상태를 다시 동기화해 주세요.");
+
         ReportStateHash(sequence, message.stateHash);
+    }
+
+    // 서버 MOVE_APPLIED와 Core 이동 결과 비교. 같으면 null
+    private static string FindResultMismatch(MoveAppliedMessage message, MoveResult result)
+    {
+        if (message.isFinished != result.Path.IsFinished)
+            return $"완주 서버={message.isFinished}, 로컬={result.Path.IsFinished}";
+        if (message.movedPieceIds != null && !SameIds(message.movedPieceIds, result.MovedPieces))
+            return $"같이 움직인 말 서버=[{string.Join(",", message.movedPieceIds)}], 로컬=[{JoinIds(result.MovedPieces)}]";
+        if (message.capturedPieceIds != null && !SameIds(message.capturedPieceIds, result.CapturedPieces))
+            return $"잡힌 말 서버=[{string.Join(",", message.capturedPieceIds)}], 로컬=[{JoinIds(result.CapturedPieces)}]";
+        return null;
+    }
+
+    private static bool SameIds(List<int> serverIds, IReadOnlyList<Piece> pieces)
+    {
+        if (serverIds.Count != pieces.Count) return false;
+        var remaining = new HashSet<int>(serverIds);
+        foreach (Piece piece in pieces)
+            if (!remaining.Remove(piece.Id)) return false;
+        return true;
+    }
+
+    private static string JoinIds(IReadOnlyList<Piece> pieces)
+    {
+        var ids = new List<int>(pieces.Count);
+        foreach (Piece piece in pieces) ids.Add(piece.Id);
+        return string.Join(",", ids);
     }
 
     private void ApplyTurn(TurnChangedMessage message)
@@ -263,7 +263,6 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
         if (message == null) throw new InvalidOperationException("TURN_CHANGED 내용이 없습니다.");
         turnManager.ApplyServerTurn(message.team, message.remainingThrows);
         commandPending = false;
-        ClearPendingMove();
         TurnChanged?.Invoke(message.team);
     }
 
@@ -286,6 +285,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
     {
         if (message == null) throw new InvalidOperationException("GAME_ENDED 내용이 없습니다.");
         gameState.WinnerTeam = message.winnerTeam;
+        Rankings = message.rankings ?? Array.Empty<RankingEntry>();
         commandPending = false;
         GameEnded?.Invoke(message.winnerTeam);
     }
@@ -302,6 +302,17 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
         if (message == null || string.IsNullOrEmpty(message.playerId))
             throw new InvalidOperationException("PLAYER_RECONNECTED 내용이 없습니다.");
         PlayerReconnected?.Invoke(message.playerId);
+    }
+
+    // 나가기·재접속 실패로 빠진 플레이어: 그 팀 말을 판에서 지운다
+    // 턴은 서버가 TURN_CHANGED로 넘겨주고, 1명만 남으면 이어서 GAME_ENDED가 온다
+    private void ApplyPlayerRemoved(PlayerRemovedMessage message)
+    {
+        if (message == null || message.team < 0 || message.team >= setup.teamCount)
+            throw new InvalidOperationException("PLAYER_REMOVED 내용이 없습니다.");
+
+        gameState.Board.RemoveTeam(message.team);
+        PlayerRemoved?.Invoke(message.playerId, message.team);
     }
 
     private void ReportStateHash(long sequence, string serverHash)
@@ -417,16 +428,8 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
     private void OnDisconnected(bool byUser)
     {
         commandPending = false;
-        ClearPendingMove();
         ConnectionAvailabilityChanged?.Invoke(false);
         if (!byUser) Reject("서버 연결이 끊어졌습니다.");
-    }
-
-    private void ClearPendingMove()
-    {
-        pendingLocalMove = null;
-        pendingMovePieceId = -1;
-        pendingMoveDestinationId = -1;
     }
 
     private void Reject(string message) => RequestRejected?.Invoke(message);
