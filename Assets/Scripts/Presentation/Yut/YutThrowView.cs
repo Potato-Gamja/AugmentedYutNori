@@ -22,6 +22,7 @@ public class YutThrowView : MonoBehaviour
         });
     }
 
+    // 윷가락 결과를 보여준다. 현재 게임 HUD의 효과음은 YutResultRevealView에서 재생한다.
     public void ShowSticks(bool[] sticks)
     {
         for (int i = 0; i < stickImages.Length; i++)

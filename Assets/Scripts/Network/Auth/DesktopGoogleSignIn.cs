@@ -87,6 +87,7 @@ public class DesktopGoogleSignIn : IGoogleSignIn
                 return new FirebaseSignInResult
                 {
                     IdToken = result.idToken,
+                    RefreshToken = result.refreshToken,
                     Uid = result.uid,
                     Email = result.email,
                     DisplayName = result.displayName,
@@ -162,7 +163,7 @@ public class DesktopGoogleSignIn : IGoogleSignIn
         return user.getIdToken().then(function (idToken) {{
           return fetch('result', {{
             method: 'POST',
-            body: JSON.stringify({{ idToken: idToken, uid: user.uid, email: user.email, displayName: user.displayName }})
+            body: JSON.stringify({{ idToken: idToken, refreshToken: user.refreshToken, uid: user.uid, email: user.email, displayName: user.displayName }})
           }});
         }});
       }})
@@ -218,6 +219,7 @@ public class DesktopGoogleSignIn : IGoogleSignIn
     private class PageResult
     {
         public string idToken;
+        public string refreshToken;
         public string uid;
         public string email;
         public string displayName;

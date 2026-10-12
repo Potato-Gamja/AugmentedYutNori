@@ -28,22 +28,32 @@ public sealed class PlayerStatusView : MonoBehaviour
     private readonly Dictionary<string, Sprite> augmentIconById = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AugmentDefinition> augmentDefinitionById = new(StringComparer.Ordinal);
     private Sprite augmentActiveRing;
+    private IReadOnlyList<PlayerDisplayInfo> playerProfiles = Array.Empty<PlayerDisplayInfo>();
+    private IReadOnlyList<Sprite> profileIcons = Array.Empty<Sprite>();
     private RectTransform augmentTooltip;
     private Image augmentTooltipIcon;
     private TMP_Text augmentTooltipName;
     private TMP_Text augmentTooltipDescription;
     private readonly Dictionary<int, float> reconnectDeadlines = new();
+    private readonly Dictionary<int, ReconnectOverlayView> reconnectOverlays = new();
+
+    private sealed class ReconnectOverlayView
+    {
+        public GameObject Root;
+        public Image Background;
+        public TMP_Text StatusText;
+        public TMP_Text TimerText;
+    }
 
     private void Update()
     {
         if (reconnectDeadlines.Count == 0) return;
         foreach (KeyValuePair<int, float> pair in reconnectDeadlines)
         {
-            TMP_Text label = GetConnectionLabel(pair.Key);
-            if (label == null) continue;
+            ReconnectOverlayView overlay = GetReconnectOverlay(pair.Key);
+            if (overlay == null) continue;
             int seconds = Mathf.Max(0, Mathf.CeilToInt(pair.Value - Time.unscaledTime));
-            if (seconds > 0) label.SetText("재접속 대기 {0}초", seconds);
-            else label.text = "재접속 처리 중";
+            overlay.TimerText.SetText("{0}초 남음", seconds);
         }
     }
 
@@ -63,6 +73,13 @@ public sealed class PlayerStatusView : MonoBehaviour
             ConfigureSeat(team, team < activeTeamCount);
 
         if (waitingPieceClicked != null) BindWaitingPieceClicks(waitingPieceClicked);
+    }
+
+    public void SetPlayerProfiles(IReadOnlyList<PlayerDisplayInfo> profiles, IReadOnlyList<Sprite> icons)
+    {
+        playerProfiles = profiles ?? Array.Empty<PlayerDisplayInfo>();
+        profileIcons = icons ?? Array.Empty<Sprite>();
+        for (int team = 0; team < MaxTeamCount; team++) ApplyPlayerProfile(team);
     }
 
     public void BindWaitingPieceClicks(Action<int, int> onClicked)
@@ -91,6 +108,7 @@ public sealed class PlayerStatusView : MonoBehaviour
                 button.onClick.RemoveAllListeners();
                 button.interactable = capturedTeam < activeTeamCount && capturedSlot < pieceSlotCount;
                 button.onClick.AddListener(() => waitingPieceClicked?.Invoke(capturedTeam, capturedSlot));
+                SoundManager.BindButtonClick(button);
             }
         }
     }
@@ -324,63 +342,103 @@ public sealed class PlayerStatusView : MonoBehaviour
 
     public void SetConnectionState(int team, ConnectionState state, int graceSec = 0)
     {
-        TMP_Text label = GetConnectionLabel(team);
-        if (label == null) return;
+        ReconnectOverlayView overlay = GetReconnectOverlay(team);
+        if (overlay == null) return;
 
         reconnectDeadlines.Remove(team);
         switch (state)
         {
             case ConnectionState.Connected:
-                label.gameObject.SetActive(false);
+                overlay.Root.SetActive(false);
                 break;
             case ConnectionState.Reconnecting:
                 reconnectDeadlines[team] = Time.unscaledTime + Mathf.Max(0, graceSec);
-                label.text = $"재접속 대기 {Mathf.Max(0, graceSec)}초";
-                label.color = new Color32(181, 94, 18, 255);
-                label.gameObject.SetActive(true);
+                overlay.Background.color = new Color32(255, 249, 236, 225);
+                overlay.StatusText.text = "재접속 중...";
+                overlay.StatusText.color = new Color32(92, 62, 42, 255);
+                overlay.TimerText.SetText("{0}초 남음", Mathf.Max(0, graceSec));
+                overlay.TimerText.gameObject.SetActive(true);
+                overlay.Root.SetActive(true);
+                overlay.Root.transform.SetAsLastSibling();
                 break;
             case ConnectionState.Removed:
-                label.text = "탈주";
-                label.color = new Color32(150, 140, 125, 255);
-                label.gameObject.SetActive(true);
-                SetTeamPiecesVisible(team, false);
+                overlay.Background.color = new Color32(232, 226, 216, 235);
+                overlay.StatusText.text = "탈주";
+                overlay.StatusText.color = new Color32(120, 110, 96, 255);
+                overlay.TimerText.gameObject.SetActive(false);
+                overlay.Root.SetActive(true);
+                overlay.Root.transform.SetAsLastSibling();
                 break;
         }
     }
 
-    private TMP_Text GetConnectionLabel(int team)
+    private ReconnectOverlayView GetReconnectOverlay(int team)
     {
+        if (reconnectOverlays.TryGetValue(team, out ReconnectOverlayView cached) && cached.Root != null)
+            return cached;
+
         Transform panel = FindPanel(team);
         if (panel == null) return null;
-        TMP_Text existing = panel.Find("ConnectionStatus")?.GetComponent<TMP_Text>();
-        if (existing != null) return existing;
+        Transform oldStatus = panel.Find("ConnectionStatus");
+        if (oldStatus != null) oldStatus.gameObject.SetActive(false);
 
-        GameObject labelObject = new("ConnectionStatus", typeof(RectTransform), typeof(TextMeshProUGUI));
-        labelObject.transform.SetParent(panel, false);
-        RectTransform rect = labelObject.GetComponent<RectTransform>();
-        rect.anchorMin = rect.anchorMax = new Vector2(1f, 1f);
-        rect.pivot = new Vector2(1f, 1f);
-        rect.anchoredPosition = new Vector2(-18f, -58f);
-        rect.sizeDelta = new Vector2(170f, 30f);
-        TMP_Text label = labelObject.GetComponent<TMP_Text>();
-        label.alignment = TextAlignmentOptions.Right;
-        label.fontSize = 18f;
-        label.fontStyle = FontStyles.Normal;
-        label.raycastTarget = false;
-        return label;
+        Transform existing = panel.Find("ReconnectOverlay");
+        GameObject root = existing != null
+            ? existing.gameObject
+            : new GameObject("ReconnectOverlay", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        if (existing == null) root.transform.SetParent(panel, false);
+
+        RectTransform rootRect = root.GetComponent<RectTransform>();
+        rootRect.anchorMin = Vector2.zero;
+        rootRect.anchorMax = Vector2.one;
+        rootRect.offsetMin = new Vector2(6f, 6f);
+        rootRect.offsetMax = new Vector2(-6f, -6f);
+
+        Image background = root.GetComponent<Image>();
+        background.raycastTarget = false;
+
+        TMP_Text statusText = GetOrCreateOverlayText(root.transform, "ReconnectText");
+        RectTransform statusRect = statusText.rectTransform;
+        statusRect.anchorMin = statusRect.anchorMax = new Vector2(0.5f, 0.5f);
+        statusRect.pivot = new Vector2(0.5f, 0.5f);
+        statusRect.anchoredPosition = new Vector2(0f, 14f);
+        statusRect.sizeDelta = new Vector2(190f, 34f);
+        statusText.fontSize = 22f;
+
+        TMP_Text timerText = GetOrCreateOverlayText(root.transform, "ReconnectTimerText");
+        RectTransform timerRect = timerText.rectTransform;
+        timerRect.anchorMin = timerRect.anchorMax = new Vector2(0.5f, 0.5f);
+        timerRect.pivot = new Vector2(0.5f, 0.5f);
+        timerRect.anchoredPosition = new Vector2(0f, -18f);
+        timerRect.sizeDelta = new Vector2(190f, 30f);
+        timerText.fontSize = 18f;
+        timerText.color = new Color32(181, 94, 18, 255);
+
+        if (existing == null) root.SetActive(false);
+        var overlay = new ReconnectOverlayView
+        {
+            Root = root,
+            Background = background,
+            StatusText = statusText,
+            TimerText = timerText
+        };
+        reconnectOverlays[team] = overlay;
+        return overlay;
     }
 
-    private void SetTeamPiecesVisible(int team, bool visible)
+    private static TMP_Text GetOrCreateOverlayText(Transform parent, string name)
     {
-        Transform panel = FindPanel(team);
-        if (panel == null) return;
-        for (int slot = 0; slot < MaxPieceSlotCount; slot++)
-        {
-            Transform waiting = panel.Find($"PieceSlot_{slot}");
-            Transform finished = panel.Find($"FinishSlot_{slot}");
-            if (waiting != null) waiting.gameObject.SetActive(visible && slot < pieceSlotCount);
-            if (finished != null) finished.gameObject.SetActive(visible && slot < pieceSlotCount);
-        }
+        TMP_Text text = parent.Find(name)?.GetComponent<TMP_Text>();
+        if (text != null) return text;
+
+        GameObject textObject = new(name, typeof(RectTransform), typeof(TextMeshProUGUI));
+        textObject.transform.SetParent(parent, false);
+        text = textObject.GetComponent<TMP_Text>();
+        text.alignment = TextAlignmentOptions.Center;
+        text.fontStyle = FontStyles.Normal;
+        text.raycastTarget = false;
+        text.textWrappingMode = TextWrappingModes.NoWrap;
+        return text;
     }
 
     private Transform FindPanel(int team)
@@ -429,7 +487,7 @@ public sealed class PlayerStatusView : MonoBehaviour
         TMP_Text headerLabel = panel.Find("Header")?.GetComponentInChildren<TMP_Text>(true);
         if (headerLabel != null)
         {
-            headerLabel.text = occupied ? $"플레이어 {team + 1}  /  {TeamName(team)} 팀" : "빈 자리";
+            headerLabel.text = occupied ? DisplayName(team) : "빈 자리";
             headerLabel.color = !occupied
                 ? new Color32(150, 140, 125, 255)
                 : team == currentActiveTeam ? Color.white : TurnHudView.GetTeamColor(team);
@@ -452,6 +510,37 @@ public sealed class PlayerStatusView : MonoBehaviour
             Transform finishSlot = panel.Find($"FinishSlot_{slot}");
             if (finishSlot != null) finishSlot.gameObject.SetActive(occupied && slot < pieceSlotCount);
         }
+        ApplyPlayerProfile(team);
+    }
+
+    private void ApplyPlayerProfile(int team)
+    {
+        Transform panel = FindPanel(team);
+        if (panel == null) return;
+
+        PlayerDisplayInfo profile = FindProfile(team);
+        TMP_Text headerLabel = panel.Find("Header")?.GetComponentInChildren<TMP_Text>(true);
+        if (headerLabel != null && team < activeTeamCount)
+            headerLabel.text = DisplayName(team);
+
+        Image icon = panel.Find("ProfileIcon")?.GetComponent<Image>();
+        if (icon == null) return;
+        icon.sprite = PlayerProfileIconResolver.Resolve(profileIcons, profile?.iconId, team);
+        icon.enabled = team < activeTeamCount && icon.sprite != null;
+        icon.preserveAspect = true;
+    }
+
+    private PlayerDisplayInfo FindProfile(int team)
+    {
+        foreach (PlayerDisplayInfo profile in playerProfiles)
+            if (profile != null && profile.team == team) return profile;
+        return null;
+    }
+
+    private string DisplayName(int team)
+    {
+        PlayerDisplayInfo profile = FindProfile(team);
+        return !string.IsNullOrWhiteSpace(profile?.nickname) ? profile.nickname : $"{TeamName(team)} 팀";
     }
 
     private static void PlacePanel(Transform panel, bool right, bool top)

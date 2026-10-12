@@ -83,6 +83,7 @@ public class WebGLGoogleSignIn : MonoBehaviour, IGoogleSignIn
         tcs?.TrySetResult(new FirebaseSignInResult
         {
             IdToken = user.idToken,
+            RefreshToken = user.refreshToken,
             Uid = user.uid,
             Email = user.email,
             DisplayName = user.displayName,
@@ -119,6 +120,7 @@ public class WebGLGoogleSignIn : MonoBehaviour, IGoogleSignIn
     private class WebSignInResult
     {
         public string idToken;
+        public string refreshToken;
         public string uid;
         public string email;
         public string displayName;

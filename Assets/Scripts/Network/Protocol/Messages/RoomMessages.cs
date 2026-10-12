@@ -4,7 +4,9 @@ using System.Collections.Generic;
 // C→S CREATE_ROOM
 public class CreateRoomRequest
 {
-    public string nickname;
+    public bool isPublic;
+    public int maxPlayers;
+    public int timeLimit;
 }
 
 // C→S JOIN_ROOM
@@ -26,13 +28,17 @@ public class ReadyRequest
 public class RoomStateMessage
 {
     public string roomCode;
-    public List<RoomPlayer> players = new List<RoomPlayer>();
+    public string status;
+    public int currentPlayers;
+    public int maxPlayers;
+    public List<RoomPlayer> members = new List<RoomPlayer>();
 }
 
 public class RoomPlayer
 {
     public string playerId;
     public string nickname;
+    public string iconId;     // 서버가 아직 보내지 않으면 팀별 기본 아이콘을 사용한다
     public int team;        // 0, 1 (아직 배정 전이면 -1)
     public bool ready;
 }

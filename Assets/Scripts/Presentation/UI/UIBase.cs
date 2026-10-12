@@ -22,6 +22,8 @@ public class UIBase : MonoBehaviour
         gameObject.SetActive(true);
         transform.SetAsLastSibling();
         OnOpen();
+        foreach (var button in GetComponentsInChildren<UnityEngine.UI.Button>(true))
+            SoundManager.BindButtonClick(button);
     }
 
     public void Close()

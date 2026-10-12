@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -15,25 +16,37 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     [SerializeField] private string webSocketUrl = "ws://localhost:8080/ws/rooms/{roomCode}";
     [SerializeField] private string playerPrefsKeyPrefix = "";
 
+    [Header("방 생성")]
+    [SerializeField] private bool createRoomIsPublic = true;
+    [SerializeField, Range(2, 4)] private int createRoomMaxPlayers = 4;
+    [SerializeField, Min(1)] private int createRoomTimeLimitSec = 30;
+
     [Header("로그인")]
-    [SerializeField] private string loginSceneName = "PJWScene_Login";
+    [SerializeField] private string loginSceneName = "Login";
     [SerializeField] private string lobbySceneName = "Lobby";
     // 서버 로그인 연동 전·에디터 테스트에서는 게스트 생성을 유지한다.
     // 끄면 토큰이 없는 사용자를 로그인 씬으로 보낸다.
     [SerializeField] private bool allowGuestLogin = true;
+    [SerializeField] private FirebaseAuthSettings authSettings;
 
     private static LobbyNetworkCoordinator instance;
 
     private ApiClient apiClient;
     private AuthApi authApi;
+    private GachaApi gachaApi;
     private PlayerIdentity playerIdentity;
     private string pendingRoomCode;
     private string pendingNickname;
     private bool leaveRequested;
+    // GAME_ENDED가 재전송돼도 보상을 한 번만 더하도록 (GAME_START마다 초기화)
+    private bool rewardAppliedThisGame;
+    private Task silentLoginTask = Task.CompletedTask;
     private readonly Dictionary<string, int> playerTeams = new();
+    private readonly List<PlayerDisplayInfo> playerProfiles = new();
 
     public string LocalPlayerId => playerIdentity?.PlayerId ?? string.Empty;
     public string LocalNickname => playerIdentity?.Nickname ?? string.Empty;
+    public int LocalGold => playerIdentity?.Gold ?? 0;
 
     private void Awake()
     {
@@ -56,6 +69,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
         apiClient = new ApiClient(apiBaseUrl);
         authApi = new AuthApi(apiClient);
+        gachaApi = new GachaApi(apiClient);
         playerIdentity = new PlayerIdentity(playerPrefsKeyPrefix);
         apiClient.Token = playerIdentity.Token;
         apiClient.Unauthorized += OnUnauthorized;
@@ -117,10 +131,65 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         lobbyController.ReadyRequested += OnReadyRequested;
         lobbyController.LeaveRoomRequested += OnLeaveRoomRequested;
 
-        if (playerIdentity.HasToken)
-            lobbyController.SetLocalPlayer(playerIdentity.PlayerId);
-        else if (!allowGuestLogin)
+        if (!IsLoggedIn())
+        {
+            if (!allowGuestLogin) GoToLogin();
+        }
+        else
+        {
+            lobbyController.SetLocalPlayer(playerIdentity.PlayerId, playerIdentity.Nickname);
+            if (silentLoginTask.IsCompleted && !PlayerIdentity.IsVerifiedThisRun(playerIdentity.Token))
+                silentLoginTask = SilentLoginAsync();
+        }
+    }
+
+    // Lobby 직접 실행 시 저장된 Firebase 갱신 토큰으로 서버 토큰을 새로 받는다.
+    private async Task SilentLoginAsync()
+    {
+        if (!playerIdentity.IsGoogleLogin || string.IsNullOrEmpty(playerIdentity.FirebaseRefreshToken)) return;
+        if (authSettings == null)
+        {
+            Debug.LogWarning("[LobbyNetwork] FirebaseAuthSettings가 없어 자동 재로그인을 건너뜁니다.", this);
+            return;
+        }
+
+        try
+        {
+            FirebaseSignInResult firebaseUser = await new FirebaseTokenRefresher(authSettings)
+                .RefreshAsync(playerIdentity.FirebaseRefreshToken);
+            FirebaseLoginResponse login = await authApi.LoginWithFirebaseAsync(firebaseUser.IdToken);
+            if (string.IsNullOrWhiteSpace(login.nickname) && login.playerId == playerIdentity.PlayerId)
+                login.nickname = playerIdentity.Nickname;
+            if (string.IsNullOrWhiteSpace(login.nickname))
+            {
+                GoToLogin();
+                return;
+            }
+
+            playerIdentity.ApplyLogin(login, firebaseUser.RefreshToken);
+            apiClient.Token = playerIdentity.Token;
+            lobbyController?.SetLocalPlayer(playerIdentity.PlayerId, playerIdentity.Nickname);
+        }
+        catch (RefreshFailedException exception) when (exception.Expired)
+        {
+            playerIdentity.Clear();
+            apiClient.Token = null;
             GoToLogin();
+        }
+        catch (Exception exception)
+        {
+            Debug.LogWarning($"[LobbyNetwork] 자동 재로그인 실패, 저장된 로그인으로 계속합니다: {exception.Message}");
+        }
+    }
+
+    public Task WaitForLoginAsync() => silentLoginTask;
+
+    public async Task<GachaResultResponse> DrawGachaAsync()
+    {
+        await EnsurePlayer(LocalNickname);
+        GachaResultResponse response = await gachaApi.DrawAsync();
+        playerIdentity.ApplyGold(response.gold);
+        return response;
     }
 
     private void UnbindLobbyController()
@@ -143,12 +212,17 @@ public class LobbyNetworkCoordinator : MonoBehaviour
             // 현재는 설계표의 REST 방식인 POST /rooms를 사용한다.
             // 서버가 CREATE_ROOM WebSocket 방식으로 확정되면 이 호출만 메시지 전송으로 교체한다.
             CreateRoomRestResponse response = await apiClient.Post<CreateRoomRequest, CreateRoomRestResponse>(
-                "/rooms", new CreateRoomRequest { nickname = nickname });
+                "/rooms", new CreateRoomRequest
+                {
+                    isPublic = createRoomIsPublic,
+                    maxPlayers = createRoomMaxPlayers,
+                    timeLimit = createRoomTimeLimitSec,
+                });
 
-            if (response == null || string.IsNullOrWhiteSpace(response.roomCode))
+            if (response == null || string.IsNullOrWhiteSpace(response.code))
                 throw new InvalidOperationException("방 생성 응답에 roomCode가 없습니다.");
 
-            ConnectAndJoin(response.roomCode, nickname);
+            ConnectAndJoin(response.code, nickname);
         }
         catch (Exception exception)
         {
@@ -172,7 +246,8 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     // 로그인(또는 게스트 가입)된 플레이어가 있는지 확인한다
     private async System.Threading.Tasks.Task EnsurePlayer(string nickname)
     {
-        if (!playerIdentity.HasToken)
+        await silentLoginTask;
+        if (!IsLoggedIn())
         {
             if (!allowGuestLogin)
             {
@@ -184,7 +259,30 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         }
 
         apiClient.Token = playerIdentity.Token;
-        lobbyController?.SetLocalPlayer(playerIdentity.PlayerId);
+        lobbyController?.SetLocalPlayer(playerIdentity.PlayerId, playerIdentity.Nickname);
+    }
+
+    public async Task<string> ChangeNicknameAsync(string nickname)
+    {
+        await silentLoginTask;
+        if (!IsLoggedIn()) throw new InvalidOperationException("로그인이 필요합니다.");
+
+        string requestedNickname = nickname?.Trim() ?? string.Empty;
+        apiClient.Token = playerIdentity.Token;
+        ChangeNicknameResponse response = await authApi.ChangeNicknameAsync(requestedNickname);
+        string updatedNickname = string.IsNullOrWhiteSpace(response?.nickname)
+            ? requestedNickname
+            : response.nickname.Trim();
+
+        playerIdentity.ApplyNickname(updatedNickname);
+        lobbyController?.SetLocalPlayer(playerIdentity.PlayerId, updatedNickname);
+        return updatedNickname;
+    }
+
+    // 게스트를 허용하지 않으면 구글 로그인 토큰만 로그인으로 친다 (예전에 만든 게스트 토큰이 남아 있어도 로그인 씬으로 보낸다)
+    private bool IsLoggedIn()
+    {
+        return playerIdentity.HasToken && (allowGuestLogin || playerIdentity.IsGoogleLogin);
     }
 
     private void OnUnauthorized()
@@ -274,11 +372,12 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         if (leaveRequested) return;
 
         leaveRequested = true;
-        // 명시적인 LEAVE_ROOM을 보내지 않는다. 서버는 일반 연결 끊김으로 받아
-        // 재접속 유예시간을 시작하고, 만료된 뒤 기존 탈주 처리를 수행한다.
+        if (webSocketClient.IsConnected)
+            webSocketClient.Send(MessageType.LEAVE_ROOM);
         await webSocketClient.CloseAndWait();
 
         playerTeams.Clear();
+        playerProfiles.Clear();
         pendingRoomCode = null;
         pendingNickname = null;
         leaveRequested = false;
@@ -298,8 +397,19 @@ public class LobbyNetworkCoordinator : MonoBehaviour
                     break;
 
                 case MessageType.GAME_START:
+                    rewardAppliedThisGame = false;
+                    GameInstaller.PreparePlayerProfiles(playerProfiles);
                     lobbyController?.ReceiveGameStart(
                         MessageSerializer.ReadPayload<GameStartMessage>(envelope));
+                    break;
+
+                case MessageType.GAME_ENDED:
+                    // 게임 화면 처리는 RemoteGameSession이 하고, 여기서는 내 보상만 보유 골드 캐시에 더한다
+                    if (rewardAppliedThisGame) break;
+                    GameEndedMessage ended = MessageSerializer.ReadPayload<GameEndedMessage>(envelope);
+                    int reward = playerIdentity.ApplyGameReward(ended?.rankings);
+                    rewardAppliedThisGame = true;
+                    if (reward > 0) Debug.Log($"[LobbyNetwork] 게임 보상 {reward}골드, 보유 {playerIdentity.Gold}골드");
                     break;
 
                 case MessageType.ERROR:
@@ -337,12 +447,20 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     private void CachePlayerTeams(RoomStateMessage room)
     {
         playerTeams.Clear();
-        if (room?.players == null) return;
+        playerProfiles.Clear();
+        if (room?.members == null) return;
 
-        foreach (RoomPlayer player in room.players)
+        foreach (RoomPlayer player in room.members)
         {
             if (player == null || string.IsNullOrEmpty(player.playerId) || player.team < 0) continue;
             playerTeams[player.playerId] = player.team;
+            playerProfiles.Add(new PlayerDisplayInfo
+            {
+                playerId = player.playerId,
+                nickname = player.nickname,
+                team = player.team,
+                iconId = player.iconId,
+            });
         }
     }
 
@@ -372,5 +490,5 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 // POST /rooms 응답이 중첩 객체이거나 필드명이 다르면 이 DTO만 서버 명세와 맞춘다.
 public class CreateRoomRestResponse
 {
-    public string roomCode;
+    public string code;
 }
