@@ -455,6 +455,10 @@ public class GameFlowController : MonoBehaviour
         foreach (PieceView view in pieceViews)
             if (view != null && view.Team == team) view.SetWorldVisible(false);
 
+        // RemoteGameSession이 그 팀 말을 판(Core)에서 뺐으므로, 같은 칸에 있던 다른 말의 겹침·업힘 수와 패널을 다시 그린다
+        if (!isMoving) RefreshPieceLayout();
+        hudPresenter?.RefreshPlayerPanels();
+
         hud?.SetInstruction($"플레이어 {team + 1}이 게임에서 나갔습니다.");
     }
 
