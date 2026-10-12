@@ -53,6 +53,7 @@ public class MoveAppliedMessage
     public List<int> capturedPieceIds;  // 잡혀서 대기석으로 간 말
     public bool isFinished;             // 움직인 말이 완주했는지
     public string stateHash;            // MOVE에 실려 온 해시 (현재 클라는 비워 보냄)
+    public bool auto;                   // 끊긴 플레이어 자동 진행으로 서버가 대신 둔 이동인지
 
     public MoveCommand ToCommand() => new MoveCommand(pieceId, moveCount, destinationNodeId);
 }
