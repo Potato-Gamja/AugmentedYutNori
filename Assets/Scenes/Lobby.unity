@@ -229,7 +229,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LobbyController
   uiManager: {fileID: 1182727055}
-  gameSceneName: LSU_Game_UI
+  gameSceneName: Game
 --- !u!4 &1204911399
 Transform:
   m_ObjectHideFlags: 0
