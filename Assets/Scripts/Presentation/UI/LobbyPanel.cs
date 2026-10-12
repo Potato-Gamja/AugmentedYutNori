@@ -68,6 +68,12 @@ public class LobbyPanel : UIBase
         if (statusText != null) statusText.text = message ?? string.Empty;
     }
 
+    public void SetNickname(string nickname)
+    {
+        if (nicknameInput != null)
+            nicknameInput.SetTextWithoutNotify(nickname ?? string.Empty);
+    }
+
     private void OnCreateRoomClicked()
     {
         string nickname = nicknameInput != null ? nicknameInput.text.Trim() : string.Empty;

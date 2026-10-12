@@ -29,7 +29,7 @@ public class GameFlowController : MonoBehaviour
     private GameState gameState;
     private TurnManager turnManager;
     private GameEvents gameEvents;
-    private GameSoundBinder soundBinder;   // 게임 이벤트 → 효과음
+    private GameSoundBinder soundBinder;
     private GameRules gameRules;
     // Flow는 규칙 구현을 직접 실행하지 않고 세션에 명령을 보낸 뒤 확정 이벤트만 화면에 반영한다.
     private IGameSession gameSession;
@@ -48,6 +48,7 @@ public class GameFlowController : MonoBehaviour
     private int? pendingWinnerTeam;
     private string lastStateHash;
     private readonly Dictionary<string, int> playerTeams = new();
+    private IReadOnlyList<PlayerDisplayInfo> playerProfiles = Array.Empty<PlayerDisplayInfo>();
 
     public GameFlowState CurrentState => currentState;
     public int CurrentTeam => turnManager != null ? turnManager.CurrentTeam : 0;
@@ -132,6 +133,12 @@ public class GameFlowController : MonoBehaviour
         sessionFactory = factory ?? throw new ArgumentNullException(nameof(factory));
     }
 
+    public void ConfigurePlayerProfiles(IReadOnlyList<PlayerDisplayInfo> profiles)
+    {
+        if (gameState != null) throw new InvalidOperationException("게임이 시작된 뒤에는 플레이어 표시 정보를 바꿀 수 없습니다.");
+        playerProfiles = profiles ?? Array.Empty<PlayerDisplayInfo>();
+    }
+
     private bool ValidateSetup()
     {
         setup ??= GameSetup.CreateLocalDefault();
@@ -173,6 +180,7 @@ public class GameFlowController : MonoBehaviour
         hud.WaitingPieceClicked += OnWaitingPieceClicked;
         hud.SettingsClicked += OnSettingsClicked;
         hud.ConfigurePlayers(setup.teamCount, setup.piecesPerTeam);
+        hud.ConfigurePlayerProfiles(playerProfiles);
         hud.SetRethrowVisible(false);
     }
 
@@ -441,6 +449,35 @@ public class GameFlowController : MonoBehaviour
         hud?.SetInstruction("연결이 끊긴 플레이어를 기다리는 중입니다.");
     }
 
+#if UNITY_EDITOR
+    [ContextMenu("테스트/플레이어 4 연결 끊김")]
+    private void TestPlayer4Disconnected()
+    {
+        if (!Application.isPlaying || hud == null)
+        {
+            Debug.LogWarning("[GameFlow] 플레이 모드에서만 연결 끊김 UI를 테스트할 수 있습니다.", this);
+            return;
+        }
+
+        if (teamCount < 4)
+        {
+            Debug.LogWarning("[GameFlow] 플레이어 4 연결 끊김 테스트는 4인 게임에서만 표시됩니다.", this);
+            return;
+        }
+
+        hud.SetPlayerConnectionState(3, PlayerStatusView.ConnectionState.Reconnecting, 30);
+        hud.SetInstruction("연결이 끊긴 플레이어를 기다리는 중입니다.");
+    }
+
+    [ContextMenu("테스트/플레이어 4 재접속")]
+    private void TestPlayer4Reconnected()
+    {
+        if (!Application.isPlaying || hud == null) return;
+        hud.SetPlayerConnectionState(3, PlayerStatusView.ConnectionState.Connected);
+        hud.SetInstruction("플레이어가 재접속했습니다.");
+    }
+#endif
+
     private void OnRemotePlayerReconnected(string playerId)
     {
         if (playerTeams.TryGetValue(playerId, out int team))
@@ -455,16 +492,15 @@ public class GameFlowController : MonoBehaviour
         foreach (PieceView view in pieceViews)
             if (view != null && view.Team == team) view.SetWorldVisible(false);
 
-        // RemoteGameSession이 그 팀 말을 판(Core)에서 뺐으므로, 같은 칸에 있던 다른 말의 겹침·업힘 수와 패널을 다시 그린다
         if (!isMoving) RefreshPieceLayout();
         hudPresenter?.RefreshPlayerPanels();
 
-        hud?.SetInstruction($"플레이어 {team + 1}이 게임에서 나갔습니다.");
+        hud?.SetInstruction($"{PlayerName(team)}님이 게임에서 나갔습니다.");
     }
 
     private void OnAutomatedMoveApplied(int team)
     {
-        hud?.SetInstruction($"플레이어 {team + 1} 자동 진행 중");
+        hud?.SetInstruction($"{PlayerName(team)} 자동 진행 중");
     }
 
     private void OnConnectionAvailabilityChanged(bool connected)
@@ -544,7 +580,7 @@ public class GameFlowController : MonoBehaviour
             case GameFlowState.Throw:
                 PrepareInteractiveState(false);
                 hud?.SetInteractionState(setup.CanControl(CurrentTeam), false);
-                hud?.SetTurn($"플레이어 {CurrentTeam + 1} 차례", CurrentTeam);
+                hud?.SetTurn($"{PlayerName(CurrentTeam)} 차례", CurrentTeam);
                 hud?.SetInstruction(gameState.StoredResults.Count > 0 ? "추가 윷을 던지세요." : "윷을 던지세요.");
                 hud?.SetThrowInteractable(gameState.RemainingThrows > 0);
                 hud?.SetRethrowVisible(false);
@@ -554,7 +590,7 @@ public class GameFlowController : MonoBehaviour
             case GameFlowState.Move:
                 PrepareInteractiveState(true);
                 hud?.SetInteractionState(setup.CanControl(CurrentTeam), false);
-                hud?.SetTurn($"플레이어 {CurrentTeam + 1} 차례", CurrentTeam);
+                hud?.SetTurn($"{PlayerName(CurrentTeam)} 차례", CurrentTeam);
                 hud?.SetInstruction("이동할 말을 선택하세요.");
                 hud?.SetThrowInteractable(false);
                 hud?.SetRethrowVisible(hudPresenter.CanUseRethrow(CurrentTeam));
@@ -567,13 +603,15 @@ public class GameFlowController : MonoBehaviour
                 hudPresenter.RefreshPlayerPanels();
                 hud?.SetInteractionState(false, false);
                 int winner = pendingWinnerTeam ?? gameState.WinnerTeam ?? CurrentTeam;
-                hud?.SetInstruction($"플레이어 {winner + 1} 승리!");
+                hud?.SetInstruction($"{PlayerName(winner)} 승리!");
                 hud?.SetThrowInteractable(false);
                 hud?.SetRethrowVisible(false);
                 hud?.SetTimerRunning(false);
-                uiManager?.Open<ResultPopup>()?.SetWinner(
-                    $"플레이어 {winner + 1}",
+                ResultPopup resultPopup = uiManager?.Open<ResultPopup>()?.SetWinner(
+                    PlayerName(winner),
                     GameHudPanel.GetTeamColor(winner));
+                if (resultPopup != null && gameSession is RemoteGameSession remoteSession)
+                    resultPopup.SetRankings(remoteSession.Rankings, playerProfiles);
                 break;
 
             case GameFlowState.AugmentSelect:
@@ -608,12 +646,29 @@ public class GameFlowController : MonoBehaviour
     private void PrepareAugmentSelection()
     {
         selectionController.Clear();
-        hud?.SetTurn($"플레이어 {augmentSelectionTeam + 1} 증강 선택", augmentSelectionTeam);
+        hud?.SetTurn($"{PlayerName(augmentSelectionTeam)} 증강 선택", augmentSelectionTeam);
         hud?.SetThrowInteractable(false);
         hud?.SetRethrowVisible(false);
         hud?.SetTimerRunning(false);
         hud?.SetInteractionState(setup.CanControl(augmentSelectionTeam), gameSession?.IsCommandPending ?? false);
         hud?.SetInstruction("증강 선택지를 기다리는 중입니다.");
+    }
+
+    private string PlayerName(int team)
+    {
+        foreach (PlayerDisplayInfo profile in playerProfiles)
+        {
+            if (profile != null && profile.team == team && !string.IsNullOrWhiteSpace(profile.nickname))
+                return profile.nickname;
+        }
+
+        return team switch
+        {
+            0 => "빨강 팀",
+            1 => "파랑 팀",
+            2 => "초록 팀",
+            _ => "노랑 팀",
+        };
     }
 
     private void OpenAugmentSelection(IReadOnlyList<string> ids)

@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 // BGM·SFX 재생 담당. 씬이 바뀌어도 유지된다 (DontDestroyOnLoad)
 //
@@ -43,6 +44,16 @@ public class SoundManager : MonoBehaviour
 
     // ── 어디서든 부르는 짧은 함수 ──
     public static void Play(SoundId id) => Instance?.PlaySfx(id);
+
+    // 패널을 다시 열거나 버튼을 재사용해도 클릭마다 한 번만 재생한다.
+    public static void BindButtonClick(Button button)
+    {
+        if (button == null) return;
+        button.onClick.RemoveListener(PlayButtonClick);
+        button.onClick.AddListener(PlayButtonClick);
+    }
+
+    private static void PlayButtonClick() => Play(SoundId.ButtonClick);
 
     private void Awake()
     {

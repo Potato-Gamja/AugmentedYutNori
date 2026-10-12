@@ -37,14 +37,20 @@ public sealed class GachaPanel : UIBase
         drawButton?.onClick.RemoveListener(OnDrawClicked);
     }
 
-    protected override void OnOpen()
+    protected override async void OnOpen()
     {
         catalog ??= LoadCatalog();
         coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
 
         ShowGold(coordinator != null ? coordinator.LocalGold : 0);
         ShowStatus(coordinator != null ? string.Empty : "서버 연결 정보가 없습니다. Lobby 씬에서 열어 주세요.");
-        SetBusy(false);
+        SetBusy(busy);
+        if (coordinator != null)
+        {
+            await coordinator.WaitForLoginAsync();
+            if (this != null && IsOpen && coordinator != null)
+                ShowGold(coordinator.LocalGold);
+        }
     }
 
     private ProfileIconCatalog LoadCatalog()

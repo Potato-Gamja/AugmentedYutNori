@@ -86,7 +86,8 @@ public sealed class GameFlowSelectionController
     public void Clear()
     {
         hud?.HideMoveOptionChoices();
-        if (SelectedPiece != null) SelectedPiece.SetSelected(false);
+        foreach (PieceView view in pieceViews)
+            if (view != null) view.SetSelected(false);
         SelectedPiece = null;
         hud?.SetSelectedWaitingPiece(-1, -1);
 
@@ -123,7 +124,11 @@ public sealed class GameFlowSelectionController
         SelectedPiece = piece;
         if (piece == null) return;
 
-        piece.SetSelected(true);
+        // 업힌 말들은 숫자 배지도 겹쳐 있으므로 묶음 전체를 같은 비율로 확대한다.
+        List<Piece> stack = boardState.GetStack(piece.Piece);
+        foreach (PieceView view in pieceViews)
+            if (view != null && view.Piece != null && stack.Contains(view.Piece))
+                view.SetSelected(true);
         if (piece.Piece.IsWaiting)
             hud?.SetSelectedWaitingPiece(piece.Team, GetWaitingSlotIndex(piece));
 

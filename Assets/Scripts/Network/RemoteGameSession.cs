@@ -219,7 +219,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
         }
 
         if (message.team == setup.localTeam) commandPending = false;
-        else AutomatedMoveApplied?.Invoke(message.team);
+        if (message.auto) AutomatedMoveApplied?.Invoke(message.team);
 
         Moved?.Invoke(result);
 

@@ -32,7 +32,7 @@ public class PlayerIdentity
     public static bool IsVerifiedThisRun(string token) =>
         !string.IsNullOrEmpty(token) && token == verifiedTokenThisRun;
 
-    // 도메인 리로드를 끈 에디터에서도 Play할 때마다 비운다 (서버가 재시작됐을 수 있음)
+    // 도메인 리로드를 끈 에디터에서도 새 Play 시 서버 토큰을 다시 확인한다.
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetVerifiedToken() => verifiedTokenThisRun = null;
 
@@ -134,6 +134,7 @@ public class PlayerIdentity
     // 토큰이 만료됐거나(401) 다른 플레이어로 시작하고 싶을 때
     public void Clear()
     {
+        verifiedTokenThisRun = null;
         PlayerPrefs.DeleteKey(Key("playerId"));
         PlayerPrefs.DeleteKey(Key("token"));
         PlayerPrefs.DeleteKey(Key("nickname"));
