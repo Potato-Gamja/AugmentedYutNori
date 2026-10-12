@@ -434,6 +434,15 @@ public class GameRules
     }
 
 
+    // AUGMENT_SELECTED는 서버가 후보를 검증한 확정 결과다.
+    public IAugment ApplyConfirmedAugment(int team, string id)
+    {
+        IAugment augment = augmentPool.PickConfirmed(team, id);
+        state.Board.AddAugment(augment);
+        gameEvents.RaiseAugmentSelected(augment);
+        return augment;
+    }
+
     // 재던지기 증강
     public bool TryRethrow(
         RethrowAugment augment,

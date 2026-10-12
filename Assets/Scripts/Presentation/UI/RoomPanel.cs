@@ -4,6 +4,9 @@ using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+#if UNITY_WEBGL && !UNITY_EDITOR
+using System.Runtime.InteropServices;
+#endif
 
 /// <summary>
 /// 서버가 보낸 ROOM_STATE를 표시하고 준비·퇴장 입력을 LobbyController에 전달한다.
@@ -22,8 +25,15 @@ public class RoomPanel : UIBase
     [SerializeField] private Button readyButton;
     [SerializeField] private TMP_Text readyButtonText;
     [SerializeField] private Button leaveButton;
+    [SerializeField] private Button copyRoomCodeButton;
 
     private bool localReady;
+    private string currentRoomCode;
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+    [DllImport("__Internal")]
+    private static extern void Yut_CopyRoomCode(string code, string receiverName);
+#endif
 
     private static readonly Color[] TeamColors =
     {
@@ -40,17 +50,23 @@ public class RoomPanel : UIBase
     {
         readyButton?.onClick.AddListener(OnReadyClicked);
         leaveButton?.onClick.AddListener(OnLeaveClicked);
+        copyRoomCodeButton?.onClick.AddListener(OnCopyRoomCodeClicked);
+        if (copyRoomCodeButton != null) copyRoomCodeButton.interactable = false;
     }
 
     private void OnDestroy()
     {
         readyButton?.onClick.RemoveListener(OnReadyClicked);
         leaveButton?.onClick.RemoveListener(OnLeaveClicked);
+        copyRoomCodeButton?.onClick.RemoveListener(OnCopyRoomCodeClicked);
     }
 
     public void ShowRoom(RoomStateMessage room, string localPlayerId)
     {
         if (room == null) return;
+        currentRoomCode = room.roomCode;
+        if (copyRoomCodeButton != null)
+            copyRoomCodeButton.interactable = !string.IsNullOrWhiteSpace(currentRoomCode);
         int maxPlayers = room.maxPlayers > 0 ? room.maxPlayers : 4;
         if (roomCodeText != null)
             roomCodeText.text = $"방 코드  {room.roomCode}    {room.members.Count}/{maxPlayers}";
@@ -102,6 +118,11 @@ public class RoomPanel : UIBase
         if (leaveButton != null) leaveButton.interactable = interactable;
     }
 
+    public void SetReadyInteractable(bool interactable)
+    {
+        if (readyButton != null) readyButton.interactable = interactable;
+    }
+
     public void ShowStatus(string message)
     {
         if (statusText != null) statusText.text = message ?? string.Empty;
@@ -112,6 +133,20 @@ public class RoomPanel : UIBase
         // 화면은 서버 ROOM_STATE가 돌아온 뒤 갱신한다. 클릭 즉시 localReady를 바꾸지 않는다.
         ReadyRequested?.Invoke(!localReady);
     }
+
+    private void OnCopyRoomCodeClicked()
+    {
+        if (string.IsNullOrWhiteSpace(currentRoomCode)) return;
+#if UNITY_WEBGL && !UNITY_EDITOR
+        Yut_CopyRoomCode(currentRoomCode, gameObject.name);
+#else
+        GUIUtility.systemCopyBuffer = currentRoomCode;
+        OnRoomCodeCopySucceeded();
+#endif
+    }
+
+    public void OnRoomCodeCopySucceeded() => ShowStatus("방 코드를 복사했습니다.");
+    public void OnRoomCodeCopyFailed() => ShowStatus("복사하지 못했습니다. 표시된 방 코드를 직접 입력해 주세요.");
 
     private void OnLeaveClicked() => LeaveRequested?.Invoke();
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 
 /// <summary>
@@ -17,6 +18,7 @@ public sealed class GameFlowSelectionController
     private readonly Func<int> getCurrentTeam;
     private readonly Action<MoveOption> moveUsingOption;
     private readonly GameFlowHudPresenter presenter;
+    private readonly GameObject destinationLabelPrefab;
 
     private readonly Dictionary<NodeView, List<MoveOption>> targets = new();
     private readonly HashSet<NodeView> highlighted = new();
@@ -44,6 +46,7 @@ public sealed class GameFlowSelectionController
         this.getCurrentTeam = getCurrentTeam;
         this.moveUsingOption = moveUsingOption;
         this.presenter = presenter;
+        destinationLabelPrefab = Resources.Load<GameObject>("UI/DestinationResultLabel");
     }
 
     public void HandleClick(Vector3 world)
@@ -235,17 +238,18 @@ public sealed class GameFlowSelectionController
 
     private void CreateLabel(NodeView destination, IReadOnlyList<MoveOption> options)
     {
-        var labelObject = new GameObject("MoveResultLabel");
-        labelObject.transform.SetParent(destination.transform, false);
-        labelObject.transform.localPosition = new Vector3(0f, 0.72f, 0f);
+        if (destinationLabelPrefab == null)
+        {
+            Debug.LogError("[GameFlow] Resources/UI/DestinationResultLabel 프리팹이 없습니다.");
+            return;
+        }
+        GameObject labelObject = UnityEngine.Object.Instantiate(destinationLabelPrefab, destination.transform, false);
+        labelObject.name = "MoveResultLabel";
 
         SpriteRenderer source = destination.GetComponentInChildren<SpriteRenderer>();
         if (source != null)
         {
-            var badgeObject = new GameObject("ResultBadge");
-            badgeObject.transform.SetParent(labelObject.transform, false);
-            badgeObject.transform.localScale = new Vector3(1f, 1f, 1f);
-            SpriteRenderer badge = badgeObject.AddComponent<SpriteRenderer>();
+            SpriteRenderer badge = labelObject.GetComponentInChildren<SpriteRenderer>();
             badge.sprite = destination.GetResultBadgeSprite(getCurrentTeam());
             if (badge.sprite == null) badge.sprite = source.sprite;
             badge.color = Color.white;
@@ -253,20 +257,14 @@ public sealed class GameFlowSelectionController
             badge.sortingOrder = 34;
         }
 
-        TextMesh text = labelObject.AddComponent<TextMesh>();
-        text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        text.fontSize = 60;
-        text.characterSize = 0.065f;
-        text.anchor = TextAnchor.MiddleCenter;
-        text.alignment = TextAlignment.Center;
-        text.fontStyle = FontStyle.Normal;
+        TextMeshPro text = labelObject.GetComponentInChildren<TextMeshPro>();
 
         text.text = options.Count > 1
             ? "선택"
             : GameFlowHudPresenter.ResultLabel(options[0].Result);
         text.color = Color.white;
-        MeshRenderer renderer = labelObject.GetComponent<MeshRenderer>();
-        renderer.sharedMaterial = text.font.material;
+        MeshRenderer renderer = text.GetComponent<MeshRenderer>();
+        if (source != null) renderer.sortingLayerID = source.sortingLayerID;
         renderer.sortingOrder = 35;
         labels.Add(labelObject);
     }

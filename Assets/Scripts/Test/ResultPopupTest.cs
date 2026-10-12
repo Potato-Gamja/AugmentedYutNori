@@ -7,7 +7,7 @@ using UnityEngine.EventSystems;
 /// - 1~4: 해당 플레이어 승리로 팝업 열기
 /// - H: 팝업 닫기
 /// - A: 모든 UI 닫기 (CloseAll)
-/// - C: Controller 연결 켜기/끄기 (RestartClicked 구독 여부)
+/// - C: Controller 연결 켜기/끄기 (MainMenuClicked 구독 여부)
 ///      켜짐 → 다시 하기 누르면 로그만 출력
 ///      꺼짐 → 다시 하기 누르면 씬 다시 로드 (MVP 기본 동작)
 /// </summary>
@@ -43,7 +43,7 @@ public class ResultPopupTester : MonoBehaviour
     {
         if (_popup == null) return;
         _popup.Closed -= OnPopupClosed;
-        _popup.RestartClicked -= OnRestart;
+        _popup.MainMenuClicked -= OnMainMenu;
     }
 
     private void Update()
@@ -78,22 +78,22 @@ public class ResultPopupTester : MonoBehaviour
         Debug.Log($"[PopupTester] {Names[index]} 승리 표시 / 같은 인스턴스: {popup == _popup} / IsOpen: {popup.IsOpen}");
     }
 
-    /// <summary>Controller가 RestartClicked를 구독한 상황을 흉내낸다.</summary>
+    /// <summary>Controller가 MainMenuClicked를 구독한 상황을 흉내낸다.</summary>
     private void ToggleController()
     {
         _controllerConnected = !_controllerConnected;
 
-        if (_controllerConnected) _popup.RestartClicked += OnRestart;
-        else _popup.RestartClicked -= OnRestart;
+        if (_controllerConnected) _popup.MainMenuClicked += OnMainMenu;
+        else _popup.MainMenuClicked -= OnMainMenu;
 
         Debug.Log(_controllerConnected
             ? "[PopupTester] Controller 연결: 켜짐 → 다시 하기 누르면 로그만 출력"
             : "[PopupTester] Controller 연결: 꺼짐 → 다시 하기 누르면 씬 재로드");
     }
 
-    private void OnRestart()
+    private void OnMainMenu()
     {
-        Debug.Log("[PopupTester] RestartClicked 받음 (Controller라면 여기서 게임 재시작)");
+        Debug.Log("[PopupTester] MainMenuClicked 받음 (Controller라면 여기서 메인메뉴 이동)");
     }
 
     private void OnPopupClosed(UIBase ui)

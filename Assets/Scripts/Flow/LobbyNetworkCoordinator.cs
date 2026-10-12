@@ -41,6 +41,12 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     // GAME_ENDED가 재전송돼도 보상을 한 번만 더하도록 (GAME_START마다 초기화)
     private bool rewardAppliedThisGame;
     private Task silentLoginTask = Task.CompletedTask;
+    private bool waitingForGameSession;
+    private bool logoutRequested;
+    private bool returnToRoomRequested;
+    private bool gameEnded;
+    private RoomStateMessage lastRoomState;
+    private readonly List<WsEnvelope> pendingGameMessages = new();
     private readonly Dictionary<string, int> playerTeams = new();
     private readonly List<PlayerDisplayInfo> playerProfiles = new();
 
@@ -77,7 +83,12 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
         // 게임 씬의 GameInstaller가 같은 WebSocket 연결로 RemoteGameSession을 만들 수 있게 등록한다.
         GameInstaller.RegisterRemoteSessionFactory((rules, events, state, turn, setup) =>
-            new RemoteGameSession(webSocketClient, rules, events, state, turn, setup));
+        {
+            var session = new RemoteGameSession(webSocketClient, rules, events, state, turn, setup, pendingGameMessages);
+            pendingGameMessages.Clear();
+            waitingForGameSession = false;
+            return session;
+        });
 
         webSocketClient.Connected += OnConnected;
         webSocketClient.Disconnected += OnDisconnected;
@@ -285,6 +296,34 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         return playerIdentity.HasToken && (allowGuestLogin || playerIdentity.IsGoogleLogin);
     }
 
+    public async Task LogoutAsync()
+    {
+        if (logoutRequested) return;
+        logoutRequested = true;
+        try
+        {
+            // 진행 중인 자동 로그인이 로그아웃 후 토큰을 다시 저장하지 않도록 완료를 기다린다.
+            await silentLoginTask;
+            if (webSocketClient.IsConnected) webSocketClient.Send(MessageType.LEAVE_ROOM);
+            await webSocketClient.CloseAndWait();
+            playerIdentity.Clear();
+            apiClient.Token = null;
+            pendingRoomCode = null;
+            pendingNickname = null;
+            playerTeams.Clear();
+            playerProfiles.Clear();
+            pendingGameMessages.Clear();
+            waitingForGameSession = false;
+            SceneManager.LoadScene(loginSceneName);
+            Destroy(gameObject);
+        }
+        catch
+        {
+            logoutRequested = false;
+            throw;
+        }
+    }
+
     private void OnUnauthorized()
     {
         playerIdentity.Clear();
@@ -353,6 +392,11 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     private void OnReadyRequested(bool ready)
     {
+        if (!CanReadyInCurrentRoom)
+        {
+            lobbyController?.ReceiveError("재경기는 서버의 방 초기화 기능 연결 후 가능합니다.");
+            return;
+        }
         if (!webSocketClient.IsConnected ||
             !webSocketClient.Send(MessageType.READY, new ReadyRequest { ready = ready }))
         {
@@ -366,6 +410,28 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         if (webSocketClient.IsConnected) webSocketClient.Send(MessageType.LEAVE_ROOM);
         webSocketClient.Close();
     }
+
+    public void ReturnToWaitingRoom()
+    {
+        if (!webSocketClient.IsConnected || lastRoomState == null)
+        {
+            LeaveGameToMainMenu();
+            return;
+        }
+        returnToRoomRequested = true;
+        SceneManager.LoadScene(lobbySceneName);
+    }
+
+    // LobbyController.Start에서 패널 생성과 이벤트 연결이 끝난 뒤 호출한다.
+    public void RestoreWaitingRoom(LobbyController controller)
+    {
+        if (!returnToRoomRequested || controller == null || lastRoomState == null) return;
+        returnToRoomRequested = false;
+        controller.SetLocalPlayer(LocalPlayerId, LocalNickname);
+        controller.ReceiveRoomState(lastRoomState);
+    }
+
+    public bool CanReadyInCurrentRoom => !gameEnded;
 
     public async void LeaveGameToMainMenu()
     {
@@ -381,17 +447,25 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         pendingRoomCode = null;
         pendingNickname = null;
         leaveRequested = false;
+        returnToRoomRequested = false;
+        lastRoomState = null;
         SceneManager.LoadScene(lobbySceneName);
     }
 
     private void OnMessageReceived(WsEnvelope envelope)
     {
+        // GAME_START 직후의 개인 선택지·확정 메시지가 씬 로딩 중 사라지지 않도록 보관한다.
+        if (waitingForGameSession && envelope.type != MessageType.GAME_START &&
+            envelope.type != MessageType.ROOM_STATE && envelope.type != MessageType.PONG)
+            pendingGameMessages.Add(envelope);
         try
         {
             switch (envelope.type)
             {
                 case MessageType.ROOM_STATE:
                     RoomStateMessage room = MessageSerializer.ReadPayload<RoomStateMessage>(envelope);
+                    lastRoomState = room;
+                    if (gameEnded && room?.status == "WAITING") gameEnded = false;
                     CachePlayerTeams(room);
                     lobbyController?.ReceiveRoomState(room);
                     break;
@@ -406,12 +480,16 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
                     // 서버 공통 GameSetup에는 localTeam이 없으므로 최신 ROOM_STATE의 배정을 사용한다.
                     started.localTeam = localTeam;
+                    gameEnded = false;
+                    pendingGameMessages.Clear();
+                    waitingForGameSession = true;
                     rewardAppliedThisGame = false;
                     GameInstaller.PreparePlayerProfiles(playerProfiles);
                     lobbyController?.ReceiveGameStart(started);
                     break;
 
                 case MessageType.GAME_ENDED:
+                    gameEnded = true;
                     // 게임 화면 처리는 RemoteGameSession이 하고, 여기서는 내 보상만 보유 골드 캐시에 더한다
                     if (rewardAppliedThisGame) break;
                     GameEndedMessage ended = MessageSerializer.ReadPayload<GameEndedMessage>(envelope);
@@ -441,6 +519,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     {
         pendingRoomCode = null;
         pendingNickname = null;
+        if (logoutRequested) return;
 
         if (leaveRequested || byUser)
         {
