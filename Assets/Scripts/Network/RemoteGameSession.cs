@@ -30,6 +30,9 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
 
     public bool IsCommandPending => commandPending;
 
+    // 마지막 GAME_ENDED의 순위·보상 목록 (결과 화면용). 게임이 끝나기 전엔 빈 배열
+    public IReadOnlyList<RankingEntry> Rankings { get; private set; } = Array.Empty<RankingEntry>();
+
     public event Action<YutThrowOutcome> Thrown;
     public event Action<MoveResult> Moved;
     public event Action<int> TurnChanged;
@@ -153,6 +156,9 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
                     break;
                 case MessageType.PLAYER_RECONNECTED:
                     ApplyPlayerReconnected(MessageSerializer.ReadPayload<PlayerReconnectedMessage>(envelope));
+                    break;
+                case MessageType.PLAYER_REMOVED:
+                    ApplyPlayerRemoved(MessageSerializer.ReadPayload<PlayerRemovedMessage>(envelope));
                     break;
                 case MessageType.ERROR:
                     ErrorMessage error = MessageSerializer.ReadPayload<ErrorMessage>(envelope);
@@ -279,6 +285,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
     {
         if (message == null) throw new InvalidOperationException("GAME_ENDED 내용이 없습니다.");
         gameState.WinnerTeam = message.winnerTeam;
+        Rankings = message.rankings ?? Array.Empty<RankingEntry>();
         commandPending = false;
         GameEnded?.Invoke(message.winnerTeam);
     }
@@ -295,6 +302,17 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
         if (message == null || string.IsNullOrEmpty(message.playerId))
             throw new InvalidOperationException("PLAYER_RECONNECTED 내용이 없습니다.");
         PlayerReconnected?.Invoke(message.playerId);
+    }
+
+    // 나가기·재접속 실패로 빠진 플레이어: 그 팀 말을 판에서 지운다
+    // 턴은 서버가 TURN_CHANGED로 넘겨주고, 1명만 남으면 이어서 GAME_ENDED가 온다
+    private void ApplyPlayerRemoved(PlayerRemovedMessage message)
+    {
+        if (message == null || message.team < 0 || message.team >= setup.teamCount)
+            throw new InvalidOperationException("PLAYER_REMOVED 내용이 없습니다.");
+
+        gameState.Board.RemoveTeam(message.team);
+        PlayerRemoved?.Invoke(message.playerId, message.team);
     }
 
     private void ReportStateHash(long sequence, string serverHash)
