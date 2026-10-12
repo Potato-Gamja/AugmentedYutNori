@@ -22,8 +22,11 @@ public class YutThrowView : MonoBehaviour
         });
     }
 
+    // 윷가락 결과를 보여준다. 이 연출 시점에 던지기 효과음을 재생한다
     public void ShowSticks(bool[] sticks)
     {
+        SoundManager.Play(SoundId.YutThrow);
+
         for (int i = 0; i < stickImages.Length; i++)
         {
             bool hasStick = i < sticks.Length; //윷 개수 변경되면 유동적으로 체크하도록 변경
