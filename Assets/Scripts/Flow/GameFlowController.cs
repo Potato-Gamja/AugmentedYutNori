@@ -691,7 +691,11 @@ public class GameFlowController : MonoBehaviour
                     resultPopup.ReturnToRoomClicked += OnReturnToRoomRequested;
                 }
                 if (resultPopup != null && gameSession is RemoteGameSession remoteSession)
-                    resultPopup.SetRankings(remoteSession.Rankings, playerProfiles);
+                    resultPopup.SetRankings(
+                    remoteSession.Rankings,
+                    playerProfiles,
+                    (iconId, team) => hud?.ResolveProfileIcon(iconId, team),
+                    setup.localTeam);
                 break;
 
             case GameFlowState.AugmentSelect:
