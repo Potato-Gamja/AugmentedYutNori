@@ -21,6 +21,7 @@ public class RoomPanel : UIBase
     [SerializeField] private TMP_Text[] playerStatusTexts;
     [SerializeField] private Image[] playerSlotBackgrounds;
     [SerializeField] private Image[] playerProfileIcons;
+    [SerializeField] private GameObject[] emptyProfileIconIndicators;
     [SerializeField] private List<Sprite> profileIcons = new();
     [SerializeField] private TMP_Text statusText;
     [SerializeField] private Button readyButton;
@@ -93,6 +94,9 @@ public class RoomPanel : UIBase
                 icon.enabled = icon.sprite != null;
                 icon.preserveAspect = true;
             }
+
+            if (emptyProfileIconIndicators != null && i < emptyProfileIconIndicators.Length)
+                emptyProfileIconIndicators[i]?.SetActive(!occupied);
 
             if (playerStatusTexts != null && i < playerStatusTexts.Length && playerStatusTexts[i] != null)
             {

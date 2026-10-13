@@ -1,11 +1,27 @@
 {
   "version": 1,
   "icons": [
-    { "id": "icon_001", "name": "아이콘 1" },
-    { "id": "icon_002", "name": "아이콘 2" },
-    { "id": "icon_003", "name": "아이콘 3" },
-    { "id": "icon_004", "name": "아이콘 4" },
-    { "id": "icon_005", "name": "아이콘 5" },
-    { "id": "icon_006", "name": "아이콘 6" }
+    { "id": "icon_001", "name": "윷가락" },
+    { "id": "icon_002", "name": "도" },
+    { "id": "icon_003", "name": "개" },
+    { "id": "icon_004", "name": "걸" },
+    { "id": "icon_005", "name": "윷" },
+    { "id": "icon_006", "name": "모" },
+    { "id": "icon_007", "name": "도령" },
+    { "id": "icon_008", "name": "아씨" },
+    { "id": "icon_009", "name": "할머니" },
+    { "id": "icon_010", "name": "할아버지" },
+    { "id": "icon_011", "name": "색동 꼬마" },
+    { "id": "icon_012", "name": "암살자" },
+    { "id": "icon_013", "name": "사냥꾼" },
+    { "id": "icon_014", "name": "마라토너" },
+    { "id": "icon_015", "name": "수행자" },
+    { "id": "icon_016", "name": "스프린터" },
+    { "id": "icon_017", "name": "외톨이" },
+    { "id": "icon_018", "name": "평화주의자" },
+    { "id": "icon_019", "name": "프렌드쉴드" },
+    { "id": "icon_020", "name": "도박사" },
+    { "id": "icon_021", "name": "야바위꾼" },
+    { "id": "icon_022", "name": "청개구리" }
   ]
 }
