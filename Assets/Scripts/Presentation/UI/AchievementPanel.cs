@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -7,7 +8,7 @@ using UnityEngine.UI;
 /// <summary>
 /// 업적 화면. 열 때마다 서버에서 내 업적 목록을 받아 AchievementItemView로 그리고, 달성한 업적은 받기 버튼으로 골드를 받는다.
 /// 업적 이름·설명·기준은 서버 achievements.json에서 오므로 클라에 따로 목록이 없다.
-/// 서버 호출은 LobbyNetworkCoordinator (메인 메뉴의 업적 버튼 → LobbyController가 연다)
+/// 서버 호출은 LobbyNetworkCoordinator. 도감 업적 탭과 메인 메뉴 업적 버튼에서 같은 화면을 사용한다.
 /// </summary>
 public sealed class AchievementPanel : UIBase
 {
@@ -16,6 +17,7 @@ public sealed class AchievementPanel : UIBase
     [SerializeField] private Transform itemContainer;
     [SerializeField] private TMP_Text goldText;
     [SerializeField] private TMP_Text statusText;
+    [SerializeField] private ScrollRect scrollRect;
 
     private readonly List<AchievementItemView> items = new();
     private LobbyNetworkCoordinator coordinator;
@@ -33,6 +35,7 @@ public sealed class AchievementPanel : UIBase
 
     protected override void OnOpen()
     {
+        if (scrollRect != null) scrollRect.verticalNormalizedPosition = 1f;
         coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
         ShowGold(coordinator != null ? coordinator.LocalGold : 0);
         Refresh();
@@ -78,8 +81,7 @@ public sealed class AchievementPanel : UIBase
     // 받을 수 있는 것 → 진행 중 → 받음 순으로, 같은 묶음 안에서는 서버 순서 그대로
     private void Build(List<AchievementEntry> entries)
     {
-        var sorted = new List<AchievementEntry>(entries);
-        sorted.Sort((a, b) => Order(a).CompareTo(Order(b)));
+        var sorted = entries.OrderBy(Order).ToList();
 
         for (int i = 0; i < sorted.Count; i++)
         {
@@ -118,6 +120,7 @@ public sealed class AchievementPanel : UIBase
             if (this == null) return;
 
             item.MarkClaimed();
+            Build(items.Where(view => view.gameObject.activeSelf).Select(view => view.Entry).ToList());
             ShowGold(result.gold);
             ShowStatus($"{result.rewardGold:N0} 골드를 받았어요!");
         }
@@ -150,6 +153,7 @@ public sealed class AchievementPanel : UIBase
         {
             0 => "서버에 연결할 수 없어요.",
             401 => "로그인이 만료됐어요. 다시 로그인해 주세요.",
+            404 => "서버의 업적 기능이 아직 반영되지 않았습니다.",
             409 when body.Contains("ACHIEVEMENT_ALREADY_CLAIMED") => "이미 받은 보상이에요.",
             409 when body.Contains("ACHIEVEMENT_NOT_ACHIEVED") => "아직 달성하지 않은 업적이에요.",
             _ => $"요청에 실패했어요. ({api.StatusCode})",

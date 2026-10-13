@@ -73,6 +73,14 @@ public sealed class TurnHudView : MonoBehaviour
         ApplyTurnVisuals();
     }
 
+    public void SetTimerRemaining(float seconds)
+    {
+        timerRemaining = Mathf.Max(0f, seconds);
+        RefreshTimer();
+    }
+
+    public void ResetTimer() => SetTimerRemaining(visualTurnSeconds);
+
     public void SetInstruction(string value)
     {
         if (instructionText != null) instructionText.text = value;

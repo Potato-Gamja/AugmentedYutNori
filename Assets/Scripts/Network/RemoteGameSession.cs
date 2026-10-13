@@ -11,7 +11,7 @@ using System.Collections.Generic;
 /// - THROW_RESULT/MOVE_APPLIED/AUGMENT_SELECTED에는 행동한 team을 반드시 포함한다.
 /// - MOVE는 말 id·칸 수·도착 칸만 보낸다. 내 이동도 먼저 적용하지 않고, 서버의 MOVE_APPLIED를 받은 뒤 모든 기기가 같은 순서로 적용한다.
 /// - MOVE_APPLIED의 movedPieceIds/capturedPieceIds/isFinished와 Core 적용 결과가 다르면 서버와 판이 어긋난 것으로 알린다.
-/// - GAME_SNAPSHOT 전체 상태 복원은 별도의 클라이언트 적용 작업이 필요하다.
+/// - GAME_SNAPSHOT으로 말·증강·턴·저장 결과와 메시지 순서를 복원한다.
 /// </summary>
 public sealed class RemoteGameSession : IGameSession, IDisposable
 {
@@ -30,13 +30,15 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
     private readonly Queue<WsEnvelope> pendingMessages;
     private bool receivingLiveMessages;
 
-    public bool IsCommandPending => commandPending;
+    public bool IsCommandPending => commandPending || awaitingSnapshot;
     private bool syncRequested;   // SYNC_REQUEST를 보냈고 아직 스냅샷을 못 받음 (중복 요청 방지)
     private bool awaitingSnapshot;
     private bool hasTurnNumber;
     private int lastTurnNumber;   // 마지막으로 적용한 서버 턴 번호 (같은 턴 재전송 구분용)
 
     // 마지막 GAME_ENDED의 순위·보상 목록 (결과 화면용). 게임이 끝나기 전엔 빈 배열
+    internal int AugmentSelectionTimeLimitSec { get; private set; }
+
     public IReadOnlyList<RankingEntry> Rankings { get; private set; } = Array.Empty<RankingEntry>();
 
     public event Action<YutThrowOutcome> Thrown;
@@ -327,6 +329,8 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
     private void ApplyAugmentChoices(AugmentChoicesMessage message)
     {
         if (message == null) throw new InvalidOperationException("AUGMENT_CHOICES 내용이 없습니다.");
+        if (message.team == setup.localTeam)
+            AugmentSelectionTimeLimitSec = Math.Max(0, message.timeLimitSec);
         rules.SetAugmentChoices(message.team, message.augmentIds);
         AugmentChoices?.Invoke(message.team, message.augmentIds);
     }
@@ -464,7 +468,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
 
     private bool CanSendCommand(bool requireCurrentTurn = true)
     {
-        if (commandPending)
+        if (IsCommandPending)
         {
             Reject("이전 요청의 서버 응답을 기다리고 있습니다.");
             return false;
@@ -544,7 +548,19 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
     // 서버 말 상태로 맞추고, 서버 판에 없는 팀(나간 팀)은 판에서 지운다
     private void RestorePieces(List<PieceSnapshot> pieces)
     {
-        if (pieces == null || pieces.Count == 0) return;   // 서버 판이 없으면 그대로 둔다
+        if (pieces == null) throw new InvalidOperationException("스냅샷의 말 목록이 없습니다.");
+
+        var validatedIds = new HashSet<int>();
+        foreach (PieceSnapshot p in pieces)
+        {
+            Piece piece = p == null ? null : gameState.Board.GetPiece(p.pieceId);
+            if (piece == null || piece.Team != p.team || !validatedIds.Add(p.pieceId))
+                throw new InvalidOperationException("스냅샷의 말 번호 또는 팀 정보가 올바르지 않습니다.");
+            PieceState state = ParsePieceState(p.state);
+            if ((state == PieceState.OnBoard && gameState.Board.Graph.GetNode(p.nodeId) == null) ||
+                (p.cameFromNodeId.HasValue && gameState.Board.Graph.GetNode(p.cameFromNodeId.Value) == null))
+                throw new InvalidOperationException($"말 {p.pieceId}의 복원 칸이 판에 없습니다.");
+        }
 
         var listed = new HashSet<int>();
         foreach (PieceSnapshot p in pieces)
@@ -574,6 +590,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
             {
                 if (have.Contains(id)) continue;
                 rules.ApplyConfirmedAugment(pair.Key, id);
+                have.Add(id);
             }
         }
     }
@@ -593,6 +610,11 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
     public void RequestSync()
     {
         if (syncRequested || !socket.IsConnected) return;
-        if (socket.Send(MessageType.SYNC_REQUEST)) syncRequested = true;
+        if (socket.Send(MessageType.SYNC_REQUEST))
+        {
+            syncRequested = true;
+            awaitingSnapshot = true;
+            commandPending = false;
+        }
     }
 }

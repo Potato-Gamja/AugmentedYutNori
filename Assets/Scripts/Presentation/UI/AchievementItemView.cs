@@ -18,6 +18,7 @@ public class AchievementItemView : MonoBehaviour
     public event Action<AchievementItemView> ClaimClicked;
 
     public AchievementEntry Entry { get; private set; }
+    private bool busy;
 
     private void Awake()
     {
@@ -33,6 +34,7 @@ public class AchievementItemView : MonoBehaviour
     {
         Entry = entry;
         if (entry == null) return;
+        SoundManager.BindButtonClick(claimButton);
 
         int goal = Mathf.Max(1, entry.goal);
         int progress = Mathf.Clamp(entry.progress, 0, goal);
@@ -49,12 +51,20 @@ public class AchievementItemView : MonoBehaviour
     // 받는 중에는 버튼을 막는다
     public void SetBusy(bool busy)
     {
+        this.busy = busy;
         if (Entry == null) return;
 
         bool canClaim = Entry.achieved && !Entry.claimed;
         if (claimButton != null) claimButton.interactable = canClaim && !busy;
         if (claimButtonLabel != null)
+        {
             claimButtonLabel.text = Entry.claimed ? "받음" : canClaim ? (busy ? "받는 중" : "받기") : "진행 중";
+            claimButtonLabel.color = canClaim ? Color.white : new Color(0.35f, 0.28f, 0.18f);
+        }
+        if (claimButton?.targetGraphic != null)
+            claimButton.targetGraphic.color = canClaim
+                ? new Color(0.12f, 0.58f, 0.36f)
+                : Entry.claimed ? new Color(0.88f, 0.75f, 0.5f) : new Color(0.9f, 0.86f, 0.76f);
     }
 
     // 받기 성공 후 상태만 바꿔 다시 그린다
@@ -67,6 +77,6 @@ public class AchievementItemView : MonoBehaviour
 
     private void OnClaimClicked()
     {
-        if (Entry != null && Entry.achieved && !Entry.claimed) ClaimClicked?.Invoke(this);
+        if (!busy && Entry != null && Entry.achieved && !Entry.claimed) ClaimClicked?.Invoke(this);
     }
 }

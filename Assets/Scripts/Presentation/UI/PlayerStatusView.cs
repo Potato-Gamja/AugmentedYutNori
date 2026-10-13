@@ -523,7 +523,7 @@ public sealed class PlayerStatusView : MonoBehaviour
         if (headerLabel != null && team < activeTeamCount)
             headerLabel.text = DisplayName(team);
 
-        Image icon = panel.Find("ProfileIcon")?.GetComponent<Image>();
+        Image icon = (panel.Find("Header/ProfileIcon") ?? panel.Find("ProfileIcon"))?.GetComponent<Image>();
         if (icon == null) return;
         icon.sprite = PlayerProfileIconResolver.Resolve(profileIcons, profile?.iconId, team);
         icon.enabled = team < activeTeamCount && icon.sprite != null;

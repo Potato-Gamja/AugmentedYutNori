@@ -140,7 +140,14 @@ public class GameFlowController : MonoBehaviour
     public void ConfigurePlayerProfiles(IReadOnlyList<PlayerDisplayInfo> profiles)
     {
         if (gameState != null) throw new InvalidOperationException("게임이 시작된 뒤에는 플레이어 표시 정보를 바꿀 수 없습니다.");
-        playerProfiles = profiles ?? Array.Empty<PlayerDisplayInfo>();
+        // GameInstaller가 전달 후 임시 목록을 비워도 표시 정보는 유지한다.
+        playerProfiles = profiles?.Select(profile => profile == null ? null : new PlayerDisplayInfo
+        {
+            playerId = profile.playerId,
+            nickname = profile.nickname,
+            team = profile.team,
+            iconId = profile.iconId,
+        }).ToArray() ?? Array.Empty<PlayerDisplayInfo>();
     }
 
     private bool ValidateSetup()
@@ -279,33 +286,51 @@ public class GameFlowController : MonoBehaviour
         }
     }
 
-    // 재접속·재동기화: 서버 상태로 덮어쓴 Core를 기준으로 화면 전체를 다시 그린다
     private void OnSnapshotApplied(GameSnapshotMessage snapshot)
     {
-        Debug.Log($"[Snapshot] 적용 phase={snapshot.phase} team={snapshot.currentTeam} throws={snapshot.remainingThrows} results={snapshot.storedResults.Count} pieces={snapshot.pieces.Count} lastSeq={snapshot.lastSeq}");
-        isMoving = false;   // 진행 중이던 이동 연출은 버리고 서버 상태 기준으로
-
+        isMoving = false;
+        pendingTurnTeam = null;
+        pendingWinnerTeam = null;
         foreach (PieceView view in pieceViews)
-            if (view.Piece != null && !view.Piece.IsOnBoard) view.ReturnHome();
-
-        OnBoardLayoutReloaded();               // 말 배치·업힌 수·플레이어 패널·하이라이트
-        hudPresenter.RefreshStoredResults();
-
-        switch (snapshot.phase)
         {
-            case "ENDED":
-                OnGameEnded(snapshot.winnerTeam ?? -1);
-                break;
-            case "AUGMENT_SELECT":
-                if (snapshot.offeredAugments != null && snapshot.offeredAugments.Count > 0)
-                    OnAugmentChoices(snapshot.myTeam, snapshot.offeredAugments);
-                else
-                    ChangeState(GameFlowState.AugmentSelect);   // 나는 이미 골랐고 다른 팀 대기
-                break;
-            default:
-                bool canThrow = gameState.RemainingThrows > 0 || gameState.StoredResults.Count == 0;
-                ChangeState(canThrow ? GameFlowState.Throw : GameFlowState.Move);
-                break;
+            view.StopAllCoroutines();
+            if (view.Piece != null && view.Piece.IsOnBoard) view.gameObject.SetActive(true);
+            if (view.Piece != null && !view.Piece.IsOnBoard) view.ReturnHome();
+        }
+        for (int team = 0; team < teamCount; team++)
+            if (!boardState.Pieces.Any(piece => piece.Team == team))
+                hud?.SetPlayerConnectionState(team, PlayerStatusView.ConnectionState.Removed);
+        OnBoardLayoutReloaded();
+        hudPresenter.RefreshStoredResults();
+        lastStateHash = StateHasher.HashHex(gameState, turnManager);
+
+        if (snapshot.phase == "ENDED")
+        {
+            OnGameEnded(snapshot.winnerTeam ?? -1);
+        }
+        else if (snapshot.phase == "AUGMENT_SELECT")
+        {
+            augmentSelectionTeam = setup.localTeam;
+            localAugmentConfirmed = snapshot.offeredAugments == null || snapshot.offeredAugments.Count == 0;
+            currentAugmentChoices = snapshot.offeredAugments ?? new List<string>();
+            ChangeState(GameFlowState.AugmentSelect);
+            if (!localAugmentConfirmed) OnAugmentChoices(setup.localTeam, currentAugmentChoices);
+            else
+            {
+                uiManager?.Close<AugmentSelectPanel>();
+                hud?.SetInstruction("선택 완료! 다른 플레이어의 선택을 기다리는 중입니다.");
+            }
+        }
+        else
+        {
+            uiManager?.Close<AugmentSelectPanel>();
+            bool canThrow = gameState.RemainingThrows > 0 || gameState.StoredResults.Count == 0;
+            ChangeState(canThrow ? GameFlowState.Throw : GameFlowState.Move);
+        }
+        if (!string.IsNullOrEmpty(snapshot.timerType) && snapshot.phase != "ENDED")
+        {
+            hud?.SetTimerRemaining(snapshot.timerRemainingSec);
+            hud?.SetTimerRunning(true);
         }
     }
 
@@ -328,6 +353,7 @@ public class GameFlowController : MonoBehaviour
             remote.PlayerRemoved += OnRemotePlayerRemoved;
             remote.AutomatedMoveApplied += OnAutomatedMoveApplied;
             remote.ConnectionAvailabilityChanged += OnConnectionAvailabilityChanged;
+            remote.SnapshotApplied += OnSnapshotApplied;
         }
     }
 
@@ -357,7 +383,7 @@ public class GameFlowController : MonoBehaviour
                 remote.PlayerRemoved -= OnRemotePlayerRemoved;
                 remote.AutomatedMoveApplied -= OnAutomatedMoveApplied;
                 remote.ConnectionAvailabilityChanged -= OnConnectionAvailabilityChanged;
-                remote.SnapshotApplied += OnSnapshotApplied;
+                remote.SnapshotApplied -= OnSnapshotApplied;
             }
             gameSession.Thrown -= OnThrown;
             gameSession.Moved -= OnMoved;
@@ -573,7 +599,9 @@ public class GameFlowController : MonoBehaviour
             return;
         }
 
-        hud?.SetTimerRunning(currentState == GameFlowState.Throw || currentState == GameFlowState.Move);
+        hud?.SetTimerRunning(currentState == GameFlowState.Throw || currentState == GameFlowState.Move ||
+            (currentState == GameFlowState.AugmentSelect && gameSession is RemoteGameSession remote &&
+             remote.AugmentSelectionTimeLimitSec > 0));
         hud?.SetInstruction("서버에 다시 연결되었습니다.");
         RefreshSessionInteraction();
     }
@@ -586,6 +614,11 @@ public class GameFlowController : MonoBehaviour
         augmentSelectionTeam = team;
         if (currentState != GameFlowState.AugmentSelect) ChangeState(GameFlowState.AugmentSelect);
         OpenAugmentSelection(ids);
+        if (gameSession is RemoteGameSession remote && remote.AugmentSelectionTimeLimitSec > 0)
+        {
+            hud?.SetTimerRemaining(remote.AugmentSelectionTimeLimitSec);
+            hud?.SetTimerRunning(true);
+        }
     }
 
     private void OnRequestRejected(string reason)
@@ -605,6 +638,7 @@ public class GameFlowController : MonoBehaviour
 
     private void OnTurnChanged(int team)
     {
+        hud?.ResetTimer();
         hudPresenter.RefreshStoredResults();
         hudPresenter.RefreshPlayerPanels();
         if (isMoving)
@@ -682,7 +716,7 @@ public class GameFlowController : MonoBehaviour
                 resultPopup = uiManager?.Open<ResultPopup>()?.SetWinner(
                     PlayerName(winner),
                     GameHudPanel.GetTeamColor(winner),
-                    hud?.ResolveProfileIcon(playerProfiles.FirstOrDefault(profile => profile.team == winner)?.iconId, winner));
+                    hud?.ResolveProfileIcon(playerProfiles.FirstOrDefault(profile => profile != null && profile.team == winner)?.iconId, winner));
                 if (resultPopup != null)
                 {
                     resultPopup.MainMenuClicked -= OnExitGameRequested;
@@ -691,11 +725,8 @@ public class GameFlowController : MonoBehaviour
                     resultPopup.ReturnToRoomClicked += OnReturnToRoomRequested;
                 }
                 if (resultPopup != null && gameSession is RemoteGameSession remoteSession)
-                    resultPopup.SetRankings(
-                    remoteSession.Rankings,
-                    playerProfiles,
-                    (iconId, team) => hud?.ResolveProfileIcon(iconId, team),
-                    setup.localTeam);
+                    resultPopup.SetRankings(remoteSession.Rankings, playerProfiles,
+                        (iconId, team) => hud?.ResolveProfileIcon(iconId, team), setup.localTeam);
                 break;
 
             case GameFlowState.AugmentSelect:
@@ -733,7 +764,8 @@ public class GameFlowController : MonoBehaviour
         hud?.SetTurn($"{PlayerName(augmentSelectionTeam)} 증강 선택", augmentSelectionTeam);
         hud?.SetThrowInteractable(false);
         hud?.SetRethrowVisible(false);
-        hud?.SetTimerRunning(false);
+        // 시간 초과 선택은 서버가 처리하고 클라이언트는 전달받은 시간만 표시한다.
+        hud?.SetTimerRunning(gameSession is RemoteGameSession remote && remote.AugmentSelectionTimeLimitSec > 0);
         hud?.SetInteractionState(setup.CanControl(augmentSelectionTeam), gameSession?.IsCommandPending ?? false);
         hud?.SetInstruction("증강 선택지를 기다리는 중입니다.");
     }
@@ -849,7 +881,8 @@ public class GameFlowController : MonoBehaviour
         if (pendingTurnTeam.HasValue)
         {
             pendingTurnTeam = null;
-            ChangeState(GameFlowState.Throw);
+            bool canThrow = gameState.RemainingThrows > 0 || gameState.StoredResults.Count == 0;
+            ChangeState(canThrow ? GameFlowState.Throw : GameFlowState.Move);
             return;
         }
         if (gameState.RemainingThrows > 0)

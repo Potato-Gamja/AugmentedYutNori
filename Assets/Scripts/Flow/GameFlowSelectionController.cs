@@ -225,15 +225,28 @@ public sealed class GameFlowSelectionController
             if (view == null) continue;
 
             SpriteRenderer sprite = view.GetComponentInChildren<SpriteRenderer>();
-            float radius = sprite != null ? sprite.bounds.extents.x : 0.5f;
             float distance = Vector2.Distance(world, view.Position);
-            if (distance <= radius && distance < bestDistance)
+            if (ContainsNode(view, sprite, world) && distance < bestDistance)
             {
                 best = view;
                 bestDistance = distance;
             }
         }
         return best;
+    }
+
+    private static bool ContainsNode(NodeView view, SpriteRenderer sprite, Vector3 world)
+    {
+        // 출발·도착 표시는 사각형이므로 보이는 영역의 모서리도 선택할 수 있다.
+        if (sprite != null && (view.Type == BoardNodeType.Start || view.Type == BoardNodeType.End))
+        {
+            Bounds bounds = sprite.bounds;
+            return world.x >= bounds.min.x && world.x <= bounds.max.x &&
+                   world.y >= bounds.min.y && world.y <= bounds.max.y;
+        }
+
+        float radius = sprite != null ? sprite.bounds.extents.x : 0.5f;
+        return Vector2.Distance(world, view.Position) <= radius;
     }
 
     private void CreateLabel(NodeView destination, IReadOnlyList<MoveOption> options)
