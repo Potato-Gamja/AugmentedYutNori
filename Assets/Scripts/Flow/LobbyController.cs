@@ -132,10 +132,7 @@ public class LobbyController : MonoBehaviour
 
         profilePanel.LogoutRequested -= OnLogoutRequested;
         profilePanel.LogoutRequested += OnLogoutRequested;
-        profilePanel.SetLogoutBusy(false);
 
-        LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
-        profilePanel.ShowProfile(coordinator?.LocalPlayerId, coordinator?.LocalNickname);
     }
     private async void OnLogoutRequested()
     {
