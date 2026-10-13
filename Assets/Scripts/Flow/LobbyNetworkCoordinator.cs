@@ -37,6 +37,11 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     private IconApi iconApi;
     private AchievementApi achievementApi;
     private PlayerIdentity playerIdentity;
+    private GameReconnectCache reconnectCache;
+    private bool reconnecting;
+    private bool reconnectCanceled;
+    private TaskCompletionSource<WsEnvelope> reconnectSnapshot;
+    private GameReconnectData reconnectData;
     private string pendingRoomCode;
     private string pendingNickname;
     private bool leaveRequested;
@@ -82,6 +87,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         iconApi = new IconApi(apiClient);
         achievementApi = new AchievementApi(apiClient);
         playerIdentity = new PlayerIdentity(playerPrefsKeyPrefix);
+        reconnectCache = new GameReconnectCache(playerIdentity.ReconnectCacheKey);
         apiClient.Token = playerIdentity.Token;
         apiClient.Unauthorized += OnUnauthorized;
         webSocketClient.Url = webSocketUrl;
@@ -111,6 +117,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     {
         if (instance != this) return;
 
+        CancelReconnect();
         UnbindLobbyController();
         if (apiClient != null) apiClient.Unauthorized -= OnUnauthorized;
         if (webSocketClient != null)
@@ -196,6 +203,75 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         catch (Exception exception)
         {
             Debug.LogWarning($"[LobbyNetwork] 자동 재로그인 실패, 저장된 로그인으로 계속합니다: {exception.Message}");
+        }
+    }
+
+    public async void OfferReconnect(LobbyController controller)
+    {
+        await silentLoginTask;
+        if (this == null || controller == null || controller != lobbyController || !IsLoggedIn() || lastRoomState != null) return;
+        GameReconnectData saved = reconnectCache.Load(LocalPlayerId, apiBaseUrl);
+        if (saved != null) controller.ShowReconnect(saved.setup.roomCode);
+    }
+
+    public void CancelReconnect()
+    {
+        if (!reconnecting) return;
+        reconnectCanceled = true;
+        reconnectSnapshot?.TrySetCanceled();
+    }
+
+    public async Task ReconnectSavedGameAsync()
+    {
+        if (reconnecting) throw new InvalidOperationException("이미 재접속을 시도하고 있습니다.");
+        reconnecting = true;
+        reconnectCanceled = false;
+        reconnectSnapshot = new TaskCompletionSource<WsEnvelope>();
+        try
+        {
+            await EnsurePlayer(LocalNickname);
+            if (reconnectCanceled) throw new OperationCanceledException();
+            reconnectData = reconnectCache.Load(LocalPlayerId, apiBaseUrl);
+            if (reconnectData == null) throw new InvalidOperationException("이 기기에 복귀할 경기 정보가 없습니다.");
+            await webSocketClient.CloseAndWait();
+            if (reconnectCanceled) throw new OperationCanceledException();
+            pendingRoomCode = reconnectData.setup.roomCode;
+            leaveRequested = false;
+            webSocketClient.Url = BuildRoomWebSocketUrl(pendingRoomCode);
+            webSocketClient.Connect(playerIdentity.Token);
+            Task completed = await Task.WhenAny(reconnectSnapshot.Task, Task.Delay(10000));
+            if (completed != reconnectSnapshot.Task)
+                throw new TimeoutException("서버 응답이 없습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.");
+            await reconnectSnapshot.Task;
+            if (this == null || lobbyController == null || reconnectCanceled) throw new OperationCanceledException();
+
+            playerProfiles.Clear();
+            playerProfiles.AddRange(reconnectData.profiles);
+            playerTeams.Clear();
+            foreach (PlayerDisplayInfo profile in playerProfiles)
+                if (profile != null) playerTeams[profile.playerId] = profile.team;
+            gameEnded = false;
+            rewardAppliedThisGame = false;
+            GameInstaller.PreparePlayerProfiles(playerProfiles);
+            lobbyController.ReceiveGameStart(reconnectData.setup);
+        }
+        catch
+        {
+            if (this != null)
+            {
+                await webSocketClient.CloseAndWait();
+                pendingRoomCode = null;
+                waitingForGameSession = false;
+                pendingGameMessages.Clear();
+            }
+            throw;
+        }
+        finally
+        {
+            reconnecting = false;
+            reconnectCanceled = false;
+            reconnectSnapshot = null;
+            reconnectData = null;
         }
     }
 
@@ -379,6 +455,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
             await silentLoginTask;
             if (webSocketClient.IsConnected) webSocketClient.Send(MessageType.LEAVE_ROOM);
             await webSocketClient.CloseAndWait();
+            reconnectCache?.Clear();
             playerIdentity.Clear();
             apiClient.Token = null;
             pendingRoomCode = null;
@@ -447,6 +524,13 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     private void OnConnected()
     {
+        // 재접속은 새 방 참가가 아니다. 진행 중인 방에 JOIN_ROOM을 보내지 않는다.
+        if (reconnecting)
+        {
+            if (!webSocketClient.Send(MessageType.SYNC_REQUEST))
+                reconnectSnapshot?.TrySetException(new InvalidOperationException("게임 상태를 요청하지 못했습니다."));
+            return;
+        }
         SendJoinRoom();
     }
 
@@ -481,6 +565,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     {
         if (leaveRequested) return;
         leaveRequested = true;
+        reconnectCache?.Clear();
         if (webSocketClient.IsConnected) webSocketClient.Send(MessageType.LEAVE_ROOM);
         // 이전 방 소켓이 닫힌 뒤 새 방 입장을 허용한다.
         await webSocketClient.CloseAndWait();
@@ -521,6 +606,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         if (leaveRequested) return;
 
         leaveRequested = true;
+        reconnectCache?.Clear();
         if (webSocketClient.IsConnected)
             webSocketClient.Send(MessageType.LEAVE_ROOM);
         await webSocketClient.CloseAndWait();
@@ -562,6 +648,15 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
                     // 서버 공통 GameSetup에는 localTeam이 없으므로 최신 ROOM_STATE의 배정을 사용한다.
                     started.localTeam = localTeam;
+                    if (string.IsNullOrWhiteSpace(started.roomCode))
+                        started.roomCode = pendingRoomCode ?? lastRoomState?.roomCode;
+                    reconnectCache.Save(new GameReconnectData
+                    {
+                        playerId = LocalPlayerId,
+                        serverUrl = apiBaseUrl,
+                        setup = started,
+                        profiles = new List<PlayerDisplayInfo>(playerProfiles),
+                    });
                     gameEnded = false;
                     pendingGameMessages.Clear();
                     waitingForGameSession = true;
@@ -570,7 +665,36 @@ public class LobbyNetworkCoordinator : MonoBehaviour
                     lobbyController?.ReceiveGameStart(started);
                     break;
 
+                case MessageType.GAME_SNAPSHOT:
+                    if (!reconnecting) break;
+                    GameSnapshotMessage snapshot = MessageSerializer.ReadPayload<GameSnapshotMessage>(envelope);
+                    if (!reconnectData.CanRestore(snapshot))
+                    {
+                        reconnectCache.Clear();
+                        reconnectSnapshot.TrySetException(new InvalidOperationException("경기가 종료되었거나 이미 퇴장 처리되어 복귀할 수 없습니다."));
+                        break;
+                    }
+                    if (!waitingForGameSession)
+                    {
+                        pendingGameMessages.Clear();
+                        pendingGameMessages.Add(envelope);
+                        waitingForGameSession = true;
+                    }
+                    reconnectSnapshot.TrySetResult(envelope);
+                    break;
+
+                case MessageType.PLAYER_REMOVED:
+                    PlayerRemovedMessage removed = MessageSerializer.ReadPayload<PlayerRemovedMessage>(envelope);
+                    if (removed?.playerId == LocalPlayerId) reconnectCache?.Clear();
+                    break;
+
                 case MessageType.GAME_ENDED:
+                    reconnectCache?.Clear();
+                    if (reconnecting && !waitingForGameSession)
+                    {
+                        reconnectSnapshot?.TrySetException(new InvalidOperationException("경기가 종료되어 복귀할 수 없습니다."));
+                        break;
+                    }
                     gameEnded = true;
                     // 게임 화면 처리는 RemoteGameSession이 하고, 여기서는 내 보상만 보유 골드 캐시에 더한다
                     if (rewardAppliedThisGame) break;
@@ -582,13 +706,20 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
                 case MessageType.ERROR:
                     ErrorMessage error = MessageSerializer.ReadPayload<ErrorMessage>(envelope);
+                    if (reconnecting)
+                    {
+                        if (error?.code == "GAME_NOT_FOUND" || error?.code == "PLAYER_NOT_IN_GAME") reconnectCache.Clear();
+                        reconnectSnapshot?.TrySetException(new InvalidOperationException(error?.message ?? "재접속 요청이 거절됐습니다."));
+                        break;
+                    }
                     lobbyController?.ReceiveError(error?.message ?? "서버 요청이 거절됐습니다.");
                     break;
             }
         }
         catch (Exception exception)
         {
-            lobbyController?.ReceiveError($"서버 메시지를 처리하지 못했습니다: {exception.Message}");
+            if (reconnecting) reconnectSnapshot?.TrySetException(exception);
+            else lobbyController?.ReceiveError($"서버 메시지를 처리하지 못했습니다: {exception.Message}");
         }
     }
 
@@ -613,11 +744,21 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     private void OnSocketError(string message)
     {
+        if (reconnecting)
+        {
+            reconnectSnapshot?.TrySetException(new InvalidOperationException("서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요."));
+            return;
+        }
         lobbyController?.ReceiveError($"서버 연결 오류: {message}");
     }
 
     private void OnDisconnected(bool byUser)
     {
+        if (reconnecting)
+        {
+            if (!byUser) reconnectSnapshot?.TrySetException(new InvalidOperationException("재접속 중 연결이 끊어졌습니다."));
+            return;
+        }
         pendingRoomCode = null;
         pendingNickname = null;
         if (logoutRequested) return;
