@@ -17,6 +17,8 @@ public class LobbyController : MonoBehaviour
     private ProfilePanel profilePanel;
     private string localPlayerId;
 
+    public bool IsPublicRoom => lobbyPanel == null || lobbyPanel.IsPublicRoom;
+
     // 네트워크 계약:
     // CreateRoomRequested -> ApiClient에서 POST /players 후 POST /rooms 호출.
     // JoinRoomRequested   -> POST /players 후 WebSocketClient.Connect(roomCode, guestToken), JOIN_ROOM 전송.
@@ -226,6 +228,12 @@ public class LobbyController : MonoBehaviour
             roomPanel.SetReadyInteractable(false);
             roomPanel.ShowStatus("경기가 종료되었습니다. 재경기는 서버의 방 초기화 기능 연결 후 가능합니다.");
         }
+    }
+
+    public void ReceiveRoomVisibility(string roomCode, bool? isPublic)
+    {
+        if (isPublic.HasValue) roomPanel?.ShowRoomVisibility(roomCode, isPublic);
+        else roomPanel?.ShowRoomVisibilityUnavailable(roomCode);
     }
 
     // WebSocketClient 계약: GAME_START payload를 역직렬화한 뒤 호출한다.

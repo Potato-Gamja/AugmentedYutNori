@@ -14,6 +14,7 @@ using System.Runtime.InteropServices;
 public class RoomPanel : UIBase
 {
     [SerializeField] private TMP_Text roomCodeText;
+    [SerializeField] private TMP_Text roomVisibilityText;
     [SerializeField] private TMP_Text playersText;
     [SerializeField] private GameObject[] playerSlots;
     [SerializeField] private TMP_Text[] playerNameTexts;
@@ -64,12 +65,13 @@ public class RoomPanel : UIBase
     public void ShowRoom(RoomStateMessage room, string localPlayerId)
     {
         if (room == null) return;
+        bool roomChanged = currentRoomCode != room.roomCode;
         currentRoomCode = room.roomCode;
+        if (roomChanged) ShowRoomVisibility(currentRoomCode, null);
         if (copyRoomCodeButton != null)
             copyRoomCodeButton.interactable = !string.IsNullOrWhiteSpace(currentRoomCode);
-        int maxPlayers = room.maxPlayers > 0 ? room.maxPlayers : 4;
         if (roomCodeText != null)
-            roomCodeText.text = $"방 코드  {room.roomCode}    {room.members.Count}/{maxPlayers}";
+            roomCodeText.text = $"방 코드  {room.roomCode}";
 
         localReady = false;
         RoomPlayer[] members = room.members.OrderBy(player => player.team).ToArray();
@@ -110,6 +112,23 @@ public class RoomPanel : UIBase
 
         if (playersText != null) playersText.gameObject.SetActive(false);
         RefreshReadyLabel();
+    }
+
+    public void ShowRoomVisibility(string roomCode, bool? isPublic)
+    {
+        if (roomCode != currentRoomCode || roomVisibilityText == null) return;
+        roomVisibilityText.text = !isPublic.HasValue
+            ? "공개 여부 확인 중..."
+            : isPublic.Value ? "공개방 · 빠른 참가 가능" : "비공개방 · 코드로만 참가 가능";
+        roomVisibilityText.color = isPublic == true
+            ? new Color32(31, 145, 87, 255)
+            : new Color32(135, 100, 60, 255);
+    }
+
+    public void ShowRoomVisibilityUnavailable(string roomCode)
+    {
+        if (roomCode != currentRoomCode || roomVisibilityText == null) return;
+        roomVisibilityText.text = "공개 여부를 확인하지 못했습니다.";
     }
 
     public void SetInteraction(bool interactable)
