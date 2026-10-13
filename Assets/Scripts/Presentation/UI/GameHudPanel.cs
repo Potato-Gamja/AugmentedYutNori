@@ -161,6 +161,8 @@ public class GameHudPanel : UIBase
         RefreshActionAvailability();
     }
     public void SetTimerRunning(bool value) => turnView?.SetTimerRunning(value);
+    public void SetTimerRemaining(float seconds) => turnView?.SetTimerRemaining(seconds);
+    public void ResetTimer() => turnView?.ResetTimer();
 
     public void ConfigurePlayers(int teamCount, int piecesPerTeam)
     {

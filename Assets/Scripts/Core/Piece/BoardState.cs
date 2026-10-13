@@ -95,6 +95,20 @@ public class BoardState
         return stack;
     }
 
+    // 서버 스냅샷의 말 하나를 그대로 적용한다. 없는 말이거나 판 위 말의 칸이 없으면 false
+    public bool RestorePiece(int pieceId, PieceState state, int nodeId, int? cameFromNodeId)
+    {
+        Piece piece = GetPiece(pieceId);
+        if (piece == null) return false;
+
+        BoardNode node = Graph.GetNode(nodeId);
+        if (state == PieceState.OnBoard && node == null) return false;
+
+        BoardNode cameFrom = cameFromNodeId.HasValue ? Graph.GetNode(cameFromNodeId.Value) : null;
+        piece.Restore(state, node, cameFrom);
+        return true;
+    }
+
     // ---------- 증강 ----------
 
     // Priority 순으로 끼워 넣는다 (같으면 등록 순서). 모든 기기에서 호출 순서가 같아야 결과가 같다

@@ -20,6 +20,12 @@ public class ResultPopup : UIBase
     [SerializeField] private Button returnToRoomButton;
     [SerializeField] private Image winnerProfileIcon;
 
+    [Header("순위 목록 (행 프리팹이 있으면 행으로, 없으면 rankingsText로 표시)")]
+    [SerializeField] private Transform rankRowContainer;       // VerticalLayoutGroup이 붙은 부모
+    [SerializeField] private ResultRankRowView rankRowPrefab;
+
+    private readonly List<ResultRankRowView> rankRows = new();
+
     public event Action MainMenuClicked;
     public event Action ReturnToRoomClicked;
 
@@ -33,6 +39,7 @@ public class ResultPopup : UIBase
     {
         mainMenuButton?.onClick.RemoveListener(HandleMainMenu);
         returnToRoomButton?.onClick.RemoveListener(HandleReturnToRoom);
+        ClearRankRows();
     }
 
     protected override void OnOpen()
@@ -55,31 +62,75 @@ public class ResultPopup : UIBase
         return this;
     }
 
+    // 순위 목록 표시 (등수 → 팀 순)
+    //  iconResolver: (iconId, team) → 프로필 아이콘 스프라이트 (HUD의 ResolveProfileIcon 사용)
+    //  localTeam: 내 팀 (내 줄 강조용, -1이면 강조 안 함)
+    // 나간 플레이어: 보상 0 (서버 규칙상 1~4등은 모두 골드를 받으므로 0이면 나간 것)
     public ResultPopup SetRankings(
         IReadOnlyList<RankingEntry> rankings,
-        IReadOnlyList<PlayerDisplayInfo> profiles)
+        IReadOnlyList<PlayerDisplayInfo> profiles,
+        Func<string, int, Sprite> iconResolver = null,
+        int localTeam = -1)
     {
-        if (rankingsText == null) return this;
-        if (rankings == null || rankings.Count == 0)
+        ClearRankRows();
+        if (rankingsText != null) rankingsText.text = string.Empty;
+        if (rankings == null || rankings.Count == 0) return this;
+
+        var ordered = rankings.OrderBy(value => value.rank).ThenBy(value => value.team).ToList();
+
+        // 행 프리팹이 없으면 기존처럼 텍스트로
+        if (rankRowPrefab == null || rankRowContainer == null)
         {
-            rankingsText.text = string.Empty;
+            SetRankingsText(ordered, profiles);
             return this;
         }
 
-        var builder = new StringBuilder();
-        foreach (RankingEntry entry in rankings.OrderBy(value => value.rank).ThenBy(value => value.team))
+        foreach (RankingEntry entry in ordered)
         {
-            PlayerDisplayInfo profile = profiles?.FirstOrDefault(value =>
-                value != null && (value.playerId == entry.playerId || value.team == entry.team));
-            string name = !string.IsNullOrWhiteSpace(profile?.nickname)
-                ? profile.nickname
-                : $"팀 {entry.team + 1}";
+            PlayerDisplayInfo profile = FindProfile(profiles, entry);
+            string name = DisplayName(profile, entry);
+            Sprite icon = iconResolver?.Invoke(profile?.iconId, entry.team);
+            bool left = entry.rewardGold <= 0;
+
+            ResultRankRowView row = Instantiate(rankRowPrefab, rankRowContainer);
+            row.Init();
+            row.Bind(entry.rank, name, entry.rewardGold, icon,
+                    GameHudPanel.GetTeamColor(entry.team), entry.team == localTeam, left)
+               .Open();
+            rankRows.Add(row);
+        }
+        return this;
+    }
+
+    private void SetRankingsText(List<RankingEntry> ordered, IReadOnlyList<PlayerDisplayInfo> profiles)
+    {
+        if (rankingsText == null) return;
+        var builder = new StringBuilder();
+        foreach (RankingEntry entry in ordered)
+        {
+            string name = DisplayName(FindProfile(profiles, entry), entry);
             if (builder.Length > 0) builder.AppendLine();
             builder.Append($"{entry.rank}위  {name}  +{entry.rewardGold} 골드");
         }
-
         rankingsText.text = builder.ToString();
-        return this;
+    }
+
+    private static PlayerDisplayInfo FindProfile(IReadOnlyList<PlayerDisplayInfo> profiles, RankingEntry entry) =>
+        profiles?.FirstOrDefault(value =>
+            value != null && (value.playerId == entry.playerId || value.team == entry.team));
+
+    private static string DisplayName(PlayerDisplayInfo profile, RankingEntry entry) =>
+        !string.IsNullOrWhiteSpace(profile?.nickname) ? profile.nickname : $"팀 {entry.team + 1}";
+
+    private void ClearRankRows()
+    {
+        foreach (ResultRankRowView row in rankRows)
+        {
+            if (row == null) continue;
+            row.Close();
+            Destroy(row.gameObject);
+        }
+        rankRows.Clear();
     }
 
     private void HandleMainMenu()

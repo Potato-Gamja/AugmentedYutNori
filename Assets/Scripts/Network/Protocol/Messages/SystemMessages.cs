@@ -2,6 +2,7 @@
 // Ping/Pong은 UnityEngine.Ping과 이름이 겹치지 않도록 Message를 붙인다
 
 // C→S PING
+using System;
 using System.Collections.Generic;
 
 public class PingMessage
@@ -54,9 +55,20 @@ public class GameSnapshotMessage
     public int remainingThrows;
     public int turnNumber;
     public List<YutResult> storedResults = new List<YutResult>();
+    public List<PieceSnapshot> pieces = new List<PieceSnapshot>();
     public Dictionary<int, List<string>> ownedAugments = new Dictionary<int, List<string>>();
     public List<string> offeredAugments = new List<string>();   // 증강 선택 중일 때 내 후보
     public int? winnerTeam;
     public string timerType;        // "TURN", "AUGMENT_SELECT", 없으면 null
     public int timerRemainingSec;
+}
+
+[Serializable]
+public class PieceSnapshot
+{
+    public int pieceId;
+    public int team;
+    public string state;          // "WAITING" / "ON_BOARD" / "FINISHED"
+    public int nodeId;
+    public int? cameFromNodeId;   // 대기 말은 null
 }

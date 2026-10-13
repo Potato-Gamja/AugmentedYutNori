@@ -35,6 +35,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     private AuthApi authApi;
     private GachaApi gachaApi;
     private IconApi iconApi;
+    private AchievementApi achievementApi;
     private PlayerIdentity playerIdentity;
     private string pendingRoomCode;
     private string pendingNickname;
@@ -79,6 +80,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         authApi = new AuthApi(apiClient);
         gachaApi = new GachaApi(apiClient);
         iconApi = new IconApi(apiClient);
+        achievementApi = new AchievementApi(apiClient);
         playerIdentity = new PlayerIdentity(playerPrefsKeyPrefix);
         apiClient.Token = playerIdentity.Token;
         apiClient.Unauthorized += OnUnauthorized;
@@ -211,6 +213,21 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     {
         await EnsurePlayer(LocalNickname);
         return await iconApi.GetOwnedAsync();
+    }
+
+    public async Task<AchievementListResponse> GetAchievementsAsync()
+    {
+        await EnsurePlayer(LocalNickname);
+        return await achievementApi.GetAsync();
+    }
+
+    // 업적 보상 받기. 받은 뒤 보유 골드를 저장한다
+    public async Task<ClaimAchievementResponse> ClaimAchievementAsync(string achievementId)
+    {
+        await EnsurePlayer(LocalNickname);
+        ClaimAchievementResponse response = await achievementApi.ClaimAsync(achievementId);
+        playerIdentity.ApplyGold(response.gold);
+        return response;
     }
 
     public async Task<PlayerProfileResponse> GetProfileAsync()
@@ -460,11 +477,20 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         }
     }
 
-    private void OnLeaveRoomRequested()
+    private async void OnLeaveRoomRequested()
     {
+        if (leaveRequested) return;
         leaveRequested = true;
         if (webSocketClient.IsConnected) webSocketClient.Send(MessageType.LEAVE_ROOM);
-        webSocketClient.Close();
+        // 이전 방 소켓이 닫힌 뒤 새 방 입장을 허용한다.
+        await webSocketClient.CloseAndWait();
+        // 이미 끊긴 소켓은 Disconnected를 발생시키지 않을 수 있다.
+        if (leaveRequested)
+        {
+            ClearRoomSessionState();
+            leaveRequested = false;
+            lobbyController?.ReturnToLobby();
+        }
     }
 
     public void ReturnToWaitingRoom()
@@ -499,13 +525,8 @@ public class LobbyNetworkCoordinator : MonoBehaviour
             webSocketClient.Send(MessageType.LEAVE_ROOM);
         await webSocketClient.CloseAndWait();
 
-        playerTeams.Clear();
-        playerProfiles.Clear();
-        pendingRoomCode = null;
-        pendingNickname = null;
+        ClearRoomSessionState();
         leaveRequested = false;
-        returnToRoomRequested = false;
-        lastRoomState = null;
         SceneManager.LoadScene(lobbySceneName);
     }
 
@@ -520,6 +541,8 @@ public class LobbyNetworkCoordinator : MonoBehaviour
             switch (envelope.type)
             {
                 case MessageType.ROOM_STATE:
+                    // LEAVE_ROOM 방송은 나간 본인에게도 올 수 있다. 대기실을 다시 열지 않는다.
+                    if (leaveRequested) break;
                     RoomStateMessage room = MessageSerializer.ReadPayload<RoomStateMessage>(envelope);
                     lastRoomState = room;
                     if (gameEnded && room?.status == "WAITING") gameEnded = false;
@@ -601,12 +624,28 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
         if (leaveRequested || byUser)
         {
+            ClearRoomSessionState();
             leaveRequested = false;
             lobbyController?.ReturnToLobby();
             return;
         }
 
         lobbyController?.ReceiveError("서버 연결이 끊어졌습니다.");
+    }
+
+    private void ClearRoomSessionState()
+    {
+        pendingRoomCode = null;
+        pendingNickname = null;
+        lastRoomState = null;
+        gameEnded = false;
+        returnToRoomRequested = false;
+        waitingForGameSession = false;
+        rewardAppliedThisGame = false;
+        pendingGameMessages.Clear();
+        playerTeams.Clear();
+        playerProfiles.Clear();
+        roomVisibilityRequestVersion++;
     }
 
     private void CachePlayerTeams(RoomStateMessage room)
