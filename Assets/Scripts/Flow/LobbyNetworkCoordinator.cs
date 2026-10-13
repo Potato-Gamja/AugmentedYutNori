@@ -34,6 +34,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     private ApiClient apiClient;
     private AuthApi authApi;
     private GachaApi gachaApi;
+    private IconApi iconApi;
     private PlayerIdentity playerIdentity;
     private string pendingRoomCode;
     private string pendingNickname;
@@ -77,6 +78,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         apiClient = new ApiClient(apiBaseUrl);
         authApi = new AuthApi(apiClient);
         gachaApi = new GachaApi(apiClient);
+        iconApi = new IconApi(apiClient);
         playerIdentity = new PlayerIdentity(playerPrefsKeyPrefix);
         apiClient.Token = playerIdentity.Token;
         apiClient.Unauthorized += OnUnauthorized;
@@ -203,6 +205,12 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         GachaResultResponse response = await gachaApi.DrawAsync();
         playerIdentity.ApplyGold(response.gold);
         return response;
+    }
+
+    public async Task<OwnedIconsResponse> GetOwnedIconsAsync()
+    {
+        await EnsurePlayer(LocalNickname);
+        return await iconApi.GetOwnedAsync();
     }
 
     private void UnbindLobbyController()

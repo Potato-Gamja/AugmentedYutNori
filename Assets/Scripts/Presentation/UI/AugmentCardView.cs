@@ -19,7 +19,7 @@ public class AugmentCardView : MonoBehaviour
 
     private Button selectButton;
 
-    public void Init(AugmentDefinition definition, Action<string> onCardSelected)
+    public void Init(AugmentDefinition definition, Action<string> onCardSelected = null)
     {
         if (augmentIcon != null)
         {
