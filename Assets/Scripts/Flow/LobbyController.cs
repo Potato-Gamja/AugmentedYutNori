@@ -17,6 +17,8 @@ public class LobbyController : MonoBehaviour
     private ProfilePanel profilePanel;
     private string localPlayerId;
 
+    public bool IsPublicRoom => lobbyPanel == null || lobbyPanel.IsPublicRoom;
+
     // 네트워크 계약:
     // CreateRoomRequested -> ApiClient에서 POST /players 후 POST /rooms 호출.
     // JoinRoomRequested   -> POST /players 후 WebSocketClient.Connect(roomCode, guestToken), JOIN_ROOM 전송.
@@ -64,6 +66,7 @@ public class LobbyController : MonoBehaviour
         mainMenuPanel.ProfileRequested += OnProfileRequested;
         mainMenuPanel.AchievementRequested += OnAchievementRequested;
         mainMenuPanel.SettingsRequested += OnSettingsRequested;
+        FindFirstObjectByType<LobbyNetworkCoordinator>()?.RestoreWaitingRoom(this);
     }
 
     private void OnDestroy()
@@ -92,7 +95,7 @@ public class LobbyController : MonoBehaviour
             mainMenuPanel.SettingsRequested -= OnSettingsRequested;
         }
         if (profilePanel != null)
-            profilePanel.NicknameChangeRequested -= OnNicknameChangeRequested;
+            profilePanel.LogoutRequested -= OnLogoutRequested;
     }
 
     private void OnSettingsRequested()
@@ -127,13 +130,11 @@ public class LobbyController : MonoBehaviour
         profilePanel = uiManager?.Open<ProfilePanel>();
         if (profilePanel == null) return;
 
-        profilePanel.NicknameChangeRequested -= OnNicknameChangeRequested;
-        profilePanel.NicknameChangeRequested += OnNicknameChangeRequested;
+        profilePanel.LogoutRequested -= OnLogoutRequested;
+        profilePanel.LogoutRequested += OnLogoutRequested;
 
-        LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
-        profilePanel.ShowProfile(coordinator?.LocalPlayerId, coordinator?.LocalNickname);
     }
-    private async void OnNicknameChangeRequested(string nickname)
+    private async void OnLogoutRequested()
     {
         if (profilePanel == null) return;
 
@@ -144,24 +145,19 @@ public class LobbyController : MonoBehaviour
             return;
         }
 
-        profilePanel.SetNicknameBusy(true);
-        profilePanel.ShowStatus("닉네임을 변경하는 중입니다.");
+        profilePanel.SetLogoutBusy(true);
+        profilePanel.ShowStatus("로그아웃 중입니다.");
         try
         {
-            string updatedNickname = await coordinator.ChangeNicknameAsync(nickname);
-            profilePanel.ApplyNickname(updatedNickname);
-            profilePanel.ShowStatus("닉네임이 변경되었습니다.");
-            lobbyPanel?.SetNickname(updatedNickname);
+            await coordinator.LogoutAsync();
         }
         catch (Exception exception)
         {
-            profilePanel.ShowStatus(exception is ApiException apiException
-                ? $"닉네임 변경에 실패했습니다. ({apiException.StatusCode})"
-                : exception.Message);
+            if (profilePanel != null) profilePanel.ShowStatus($"로그아웃하지 못했습니다: {exception.Message}");
         }
         finally
         {
-            profilePanel.SetNicknameBusy(false);
+            if (profilePanel != null) profilePanel.SetLogoutBusy(false);
         }
     }
     private void OnAchievementRequested() => mainMenuPanel.ShowStatus("업적 기능은 준비 중입니다.");
@@ -217,11 +213,24 @@ public class LobbyController : MonoBehaviour
     // WebSocketClient 계약: ROOM_STATE payload를 역직렬화한 뒤 호출한다.
     public void ReceiveRoomState(RoomStateMessage room)
     {
+        uiManager.Close<MainMenuPanel>();
         uiManager.Close<LobbyPanel>();
         uiManager.Open<RoomPanel>();
         roomPanel.ShowRoom(room, localPlayerId);
         roomPanel.SetInteraction(true);
         roomPanel.ShowStatus("다른 플레이어를 기다리는 중입니다.");
+        LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
+        if (coordinator != null && !coordinator.CanReadyInCurrentRoom)
+        {
+            roomPanel.SetReadyInteractable(false);
+            roomPanel.ShowStatus("경기가 종료되었습니다. 재경기는 서버의 방 초기화 기능 연결 후 가능합니다.");
+        }
+    }
+
+    public void ReceiveRoomVisibility(string roomCode, bool? isPublic)
+    {
+        if (isPublic.HasValue) roomPanel?.ShowRoomVisibility(roomCode, isPublic);
+        else roomPanel?.ShowRoomVisibilityUnavailable(roomCode);
     }
 
     // WebSocketClient 계약: GAME_START payload를 역직렬화한 뒤 호출한다.

@@ -38,12 +38,15 @@ public class GameFlowController : MonoBehaviour
     private GameFlowHudPresenter hudPresenter;
     private GameFlowSelectionController selectionController;
     private SettingsPanel settingsPanel;
+    private ResultPopup resultPopup;
     private Camera mainCamera;
     private AugmentCatalog augmentCatalog;
     private GameFlowState currentState;
     private bool isMoving;
     private int teamCount;
     private int augmentSelectionTeam;
+    private IReadOnlyList<string> currentAugmentChoices = Array.Empty<string>();
+    private bool localAugmentConfirmed;
     private int? pendingTurnTeam;
     private int? pendingWinnerTeam;
     private string lastStateHash;
@@ -112,6 +115,7 @@ public class GameFlowController : MonoBehaviour
         RefreshPieceLayout();
         hudPresenter.RefreshPlayerPanels();
         ChangeState(GameFlowState.GameStart);
+        if (gameSession is RemoteGameSession remoteSession) remoteSession.ReplayPendingMessages();
     }
 
     /// <summary>
@@ -308,6 +312,11 @@ public class GameFlowController : MonoBehaviour
             hud.SettingsClicked -= OnSettingsClicked;
         }
         if (settingsPanel != null) settingsPanel.ExitGameRequested -= OnExitGameRequested;
+        if (resultPopup != null)
+        {
+            resultPopup.MainMenuClicked -= OnExitGameRequested;
+            resultPopup.ReturnToRoomClicked -= OnReturnToRoomRequested;
+        }
 
         if (gameSession != null)
         {
@@ -394,6 +403,17 @@ public class GameFlowController : MonoBehaviour
     private void OnAugmentSelectedEvent(int team, IAugment augment)
     {
         hudPresenter.RefreshPlayerPanels();
+        if (gameSession is RemoteGameSession)
+        {
+            // 다른 팀의 확정 결과는 HUD만 갱신하고 내 선택 창을 유지한다.
+            if (team == setup.localTeam && currentState == GameFlowState.AugmentSelect)
+            {
+                localAugmentConfirmed = true;
+                uiManager?.Close<AugmentSelectPanel>();
+                hud?.SetInstruction("선택 완료! 다른 플레이어의 선택을 기다리는 중입니다.");
+            }
+            return; // PLAYING 진입은 서버 TURN_CHANGED로 확정한다.
+        }
         uiManager?.Close<AugmentSelectPanel>();
 
         if (team >= teamCount - 1)
@@ -419,6 +439,13 @@ public class GameFlowController : MonoBehaviour
         if (settingsPanel == null) return;
         settingsPanel.SetExitGameVisible(true);
         settingsPanel.ExitGameRequested += OnExitGameRequested;
+    }
+
+    private void OnReturnToRoomRequested()
+    {
+        LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
+        if (coordinator != null) coordinator.ReturnToWaitingRoom();
+        else SceneManager.LoadScene(mainMenuSceneName);
     }
 
     private void OnExitGameRequested()
@@ -521,6 +548,9 @@ public class GameFlowController : MonoBehaviour
 
     private void OnAugmentChoices(int team, IReadOnlyList<string> ids)
     {
+        if (gameSession is RemoteGameSession && team != setup.localTeam) return;
+        currentAugmentChoices = ids;
+        localAugmentConfirmed = false;
         augmentSelectionTeam = team;
         if (currentState != GameFlowState.AugmentSelect) ChangeState(GameFlowState.AugmentSelect);
         OpenAugmentSelection(ids);
@@ -535,6 +565,9 @@ public class GameFlowController : MonoBehaviour
         hudPresenter?.RefreshStoredResults();
         hudPresenter?.RefreshPlayerPanels();
         RefreshSessionInteraction();
+        if (gameSession is RemoteGameSession && currentState == GameFlowState.AugmentSelect &&
+            !localAugmentConfirmed && currentAugmentChoices.Count > 0)
+            OpenAugmentSelection(currentAugmentChoices);
         hud?.SetInstruction(reason);
     }
 
@@ -565,6 +598,12 @@ public class GameFlowController : MonoBehaviour
         {
             case GameFlowState.GameStart:
                 augmentSelectionTeam = 0;
+                if (gameSession is RemoteGameSession)
+                {
+                    augmentSelectionTeam = setup.localTeam;
+                    ChangeState(GameFlowState.AugmentSelect);
+                    break;
+                }
                 if (skipAugmentSelection)
                 {
                     ChangeState(GameFlowState.Throw);
@@ -603,13 +642,21 @@ public class GameFlowController : MonoBehaviour
                 hudPresenter.RefreshPlayerPanels();
                 hud?.SetInteractionState(false, false);
                 int winner = pendingWinnerTeam ?? gameState.WinnerTeam ?? CurrentTeam;
-                hud?.SetInstruction($"{PlayerName(winner)} 승리!");
+                hud?.SetInstruction($"{PlayerName(winner)} win");
                 hud?.SetThrowInteractable(false);
                 hud?.SetRethrowVisible(false);
                 hud?.SetTimerRunning(false);
-                ResultPopup resultPopup = uiManager?.Open<ResultPopup>()?.SetWinner(
+                resultPopup = uiManager?.Open<ResultPopup>()?.SetWinner(
                     PlayerName(winner),
-                    GameHudPanel.GetTeamColor(winner));
+                    GameHudPanel.GetTeamColor(winner),
+                    hud?.ResolveProfileIcon(playerProfiles.FirstOrDefault(profile => profile.team == winner)?.iconId, winner));
+                if (resultPopup != null)
+                {
+                    resultPopup.MainMenuClicked -= OnExitGameRequested;
+                    resultPopup.MainMenuClicked += OnExitGameRequested;
+                    resultPopup.ReturnToRoomClicked -= OnReturnToRoomRequested;
+                    resultPopup.ReturnToRoomClicked += OnReturnToRoomRequested;
+                }
                 if (resultPopup != null && gameSession is RemoteGameSession remoteSession)
                     resultPopup.SetRankings(remoteSession.Rankings, playerProfiles);
                 break;

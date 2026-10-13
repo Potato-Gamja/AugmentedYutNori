@@ -12,6 +12,13 @@ public class LobbyPanel : UIBase
     [SerializeField] private TMP_InputField nicknameInput;
     [SerializeField] private TMP_InputField roomCodeInput;
 
+    [Header("방 공개 여부")]
+    [SerializeField] private Button publicRoomButton;
+    [SerializeField] private Button privateRoomButton;
+    [SerializeField] private TMP_Text roomVisibilityText;
+
+    public bool IsPublicRoom { get; private set; } = true;
+
     [Header("버튼")]
     [SerializeField] private Button createRoomButton;
     [SerializeField] private Button joinRoomButton;
@@ -32,6 +39,9 @@ public class LobbyPanel : UIBase
 
     public override void Init()
     {
+        publicRoomButton?.onClick.AddListener(OnPublicRoomClicked);
+        privateRoomButton?.onClick.AddListener(OnPrivateRoomClicked);
+        RefreshRoomVisibility();
         createRoomButton?.onClick.AddListener(OnCreateRoomClicked);
         joinRoomButton?.onClick.AddListener(OnJoinRoomClicked);
         quickJoinButton?.onClick.AddListener(OnQuickJoinClicked);
@@ -42,6 +52,8 @@ public class LobbyPanel : UIBase
 
     private void OnDestroy()
     {
+        publicRoomButton?.onClick.RemoveListener(OnPublicRoomClicked);
+        privateRoomButton?.onClick.RemoveListener(OnPrivateRoomClicked);
         createRoomButton?.onClick.RemoveListener(OnCreateRoomClicked);
         joinRoomButton?.onClick.RemoveListener(OnJoinRoomClicked);
         quickJoinButton?.onClick.RemoveListener(OnQuickJoinClicked);
@@ -56,6 +68,8 @@ public class LobbyPanel : UIBase
 
     public void SetBusy(bool busy)
     {
+        if (publicRoomButton != null) publicRoomButton.interactable = !busy;
+        if (privateRoomButton != null) privateRoomButton.interactable = !busy;
         if (createRoomButton != null) createRoomButton.interactable = !busy;
         if (joinRoomButton != null) joinRoomButton.interactable = !busy;
         if (quickJoinButton != null) quickJoinButton.interactable = !busy;
@@ -72,6 +86,37 @@ public class LobbyPanel : UIBase
     {
         if (nicknameInput != null)
             nicknameInput.SetTextWithoutNotify(nickname ?? string.Empty);
+    }
+
+    private void OnPublicRoomClicked()
+    {
+        IsPublicRoom = true;
+        RefreshRoomVisibility();
+    }
+
+    private void OnPrivateRoomClicked()
+    {
+        IsPublicRoom = false;
+        RefreshRoomVisibility();
+    }
+
+    private void RefreshRoomVisibility()
+    {
+        SetVisibilityButton(publicRoomButton, IsPublicRoom);
+        SetVisibilityButton(privateRoomButton, !IsPublicRoom);
+        if (roomVisibilityText != null)
+            roomVisibilityText.text = IsPublicRoom
+                ? "공개방은 빠른 참가로 입장할 수 있어요."
+                : "방 코드를 아는 사람만 입장할 수 있어요.";
+    }
+
+    private static void SetVisibilityButton(Button button, bool selected)
+    {
+        if (button == null) return;
+        if (button.targetGraphic != null)
+            button.targetGraphic.color = selected
+                ? new Color(0.88f, 0.58f, 0.16f)
+                : new Color(0.93f, 0.87f, 0.75f);
     }
 
     private void OnCreateRoomClicked()

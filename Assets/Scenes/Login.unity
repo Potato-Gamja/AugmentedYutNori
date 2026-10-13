@@ -322,7 +322,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::LoginController
   uiManager: {fileID: 797010472}
   authSettings: {fileID: 11400000, guid: d8ddffe073f3d63459a7170891b2570f, type: 2}
-  apiBaseUrl: http://localhost:8080
+  apiBaseUrl: https://augmented-yutnori.duckdns.org
   playerPrefsKeyPrefix: 
   nextSceneName: Lobby
 --- !u!4 &1442802685

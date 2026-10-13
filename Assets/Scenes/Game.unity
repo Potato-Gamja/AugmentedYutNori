@@ -1301,7 +1301,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: abf885972fa995243abd2183411b70e4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GameInstaller
-  gameFlowController: {fileID: 0}
+  gameFlowController: {fileID: 498729573}
   defaultMode: 0
   localSetup:
     teamCount: 4

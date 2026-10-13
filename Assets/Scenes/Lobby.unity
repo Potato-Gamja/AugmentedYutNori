@@ -414,8 +414,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::LobbyNetworkCoordinator
   lobbyController: {fileID: 0}
   webSocketClient: {fileID: 0}
-  apiBaseUrl: http://localhost:8080
-  webSocketUrl: ws://localhost:8080/ws
+  apiBaseUrl: https://augmented-yutnori.duckdns.org
+  webSocketUrl: wss://augmented-yutnori.duckdns.org/ws
   playerPrefsKeyPrefix: 
   createRoomIsPublic: 1
   createRoomMaxPlayers: 4
@@ -436,7 +436,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 80ccfb8295da8c447bbc1a4902f50b60, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::WebSocketClient
-  url: ws://localhost:8080/ws
+  url: wss://augmented-yutnori.duckdns.org/ws
   pingInterval: 20
 --- !u!4 &2094785098
 Transform:

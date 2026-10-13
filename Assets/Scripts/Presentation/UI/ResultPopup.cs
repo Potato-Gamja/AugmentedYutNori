@@ -5,6 +5,7 @@ using System.Text;
 using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 
 
@@ -14,24 +15,43 @@ public class ResultPopup : UIBase
     [SerializeField] private TextMeshProUGUI winnerText;
     [SerializeField] private Image winnerColorImage;
     [SerializeField] private TextMeshProUGUI rankingsText;
-    [SerializeField] private Button restartButton;
+    [FormerlySerializedAs("restartButton")]
+    [SerializeField] private Button mainMenuButton;
+    [SerializeField] private Button returnToRoomButton;
+    [SerializeField] private Image winnerProfileIcon;
 
-    public event Action RestartClicked;
+    public event Action MainMenuClicked;
+    public event Action ReturnToRoomClicked;
 
     public override void Init()
     {
-        restartButton.onClick.AddListener(HandleRestart);
+        mainMenuButton?.onClick.AddListener(HandleMainMenu);
+        returnToRoomButton?.onClick.AddListener(HandleReturnToRoom);
+    }
+
+    private void OnDestroy()
+    {
+        mainMenuButton?.onClick.RemoveListener(HandleMainMenu);
+        returnToRoomButton?.onClick.RemoveListener(HandleReturnToRoom);
     }
 
     protected override void OnOpen()
     {
+        if (mainMenuButton != null) mainMenuButton.interactable = true;
+        if (returnToRoomButton != null) returnToRoomButton.interactable = true;
         SoundManager.Play(SoundId.ResultPopup);
     }
 
-    public ResultPopup SetWinner(string winnername, Color winnerColor)
+    public ResultPopup SetWinner(string winnername, Color winnerColor, Sprite profileIcon = null)
     {
         if (winnerText != null) winnerText.text = string.Format("{0} win", winnername);
         if (winnerColorImage != null) winnerColorImage.color = winnerColor;
+        if (winnerProfileIcon != null)
+        {
+            winnerProfileIcon.sprite = profileIcon;
+            winnerProfileIcon.enabled = profileIcon != null;
+            winnerProfileIcon.preserveAspect = true;
+        }
         return this;
     }
 
@@ -62,12 +82,37 @@ public class ResultPopup : UIBase
         return this;
     }
 
-    private void HandleRestart()
+    private void HandleMainMenu()
     {
+        DisableReturnButtons();
         Close();
 
-        if (RestartClicked != null) RestartClicked.Invoke();
-        else SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+        if (MainMenuClicked != null) MainMenuClicked.Invoke();
+        else
+        {
+            LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
+            if (coordinator != null) coordinator.LeaveGameToMainMenu();
+            else SceneManager.LoadScene("Lobby");
+        }
+    }
+
+    private void HandleReturnToRoom()
+    {
+        DisableReturnButtons();
+        Close();
+        if (ReturnToRoomClicked != null) ReturnToRoomClicked.Invoke();
+        else
+        {
+            LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
+            if (coordinator != null) coordinator.ReturnToWaitingRoom();
+            else SceneManager.LoadScene("Lobby");
+        }
+    }
+
+    private void DisableReturnButtons()
+    {
+        if (mainMenuButton != null) mainMenuButton.interactable = false;
+        if (returnToRoomButton != null) returnToRoomButton.interactable = false;
     }
 
 }

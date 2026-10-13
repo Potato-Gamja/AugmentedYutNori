@@ -172,6 +172,14 @@ public class GameHudPanel : UIBase
         playerView?.SetPlayerProfiles(profiles, profileIcons);
     }
 
+    public Sprite ResolveProfileIcon(string iconId, int team)
+    {
+        Sprite icon = !string.IsNullOrWhiteSpace(iconId)
+            ? Resources.Load<Sprite>(ProfileIconCatalog.SpritePath(iconId))
+            : null;
+        return icon != null ? icon : PlayerProfileIconResolver.Resolve(profileIcons, iconId, team);
+    }
+
     public void SetPlayerState(
         int team,
         int waiting,
