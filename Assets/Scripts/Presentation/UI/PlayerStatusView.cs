@@ -352,12 +352,12 @@ public sealed class PlayerStatusView : MonoBehaviour
                 overlay.Root.SetActive(false);
                 break;
             case ConnectionState.Reconnecting:
-                reconnectDeadlines[team] = Time.unscaledTime + Mathf.Max(0, graceSec);
+                if (graceSec > 0) reconnectDeadlines[team] = Time.unscaledTime + graceSec;
                 overlay.Background.color = new Color32(255, 249, 236, 225);
-                overlay.StatusText.text = "재접속 중...";
+                overlay.StatusText.text = graceSec > 0 ? "재접속 중..." : "재연결 대기 중...";
                 overlay.StatusText.color = new Color32(92, 62, 42, 255);
                 overlay.TimerText.SetText("{0}초 남음", Mathf.Max(0, graceSec));
-                overlay.TimerText.gameObject.SetActive(true);
+                overlay.TimerText.gameObject.SetActive(graceSec > 0);
                 overlay.Root.SetActive(true);
                 overlay.Root.transform.SetAsLastSibling();
                 break;
@@ -391,10 +391,17 @@ public sealed class PlayerStatusView : MonoBehaviour
         RectTransform rootRect = root.GetComponent<RectTransform>();
         rootRect.anchorMin = Vector2.zero;
         rootRect.anchorMax = Vector2.one;
-        rootRect.offsetMin = new Vector2(6f, 6f);
-        rootRect.offsetMax = new Vector2(-6f, -6f);
+        rootRect.offsetMin = Vector2.zero;
+        rootRect.offsetMax = Vector2.zero;
 
         Image background = root.GetComponent<Image>();
+        Image panelBackground = panel.GetComponent<Image>();
+        if (panelBackground != null)
+        {
+            background.sprite = panelBackground.sprite;
+            background.type = panelBackground.type;
+            background.pixelsPerUnitMultiplier = panelBackground.pixelsPerUnitMultiplier;
+        }
         background.raycastTarget = false;
 
         TMP_Text statusText = GetOrCreateOverlayText(root.transform, "ReconnectText");

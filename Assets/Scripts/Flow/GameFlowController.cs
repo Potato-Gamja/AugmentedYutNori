@@ -303,6 +303,8 @@ public class GameFlowController : MonoBehaviour
         OnBoardLayoutReloaded();
         hudPresenter.RefreshStoredResults();
         lastStateHash = StateHasher.HashHex(gameState, turnManager);
+        if (boardState.Pieces.Any(piece => piece.Team == setup.localTeam))
+            hud?.SetPlayerConnectionState(setup.localTeam, PlayerStatusView.ConnectionState.Connected);
 
         if (snapshot.phase == "ENDED")
         {
@@ -416,7 +418,6 @@ public class GameFlowController : MonoBehaviour
             new Vector3(screen.x, screen.y, -mainCamera.transform.position.z));
         world.z = 0f;
         selectionController.HandleClick(world);
-
     }
 
     public void OnThrowButtonClicked()
@@ -595,6 +596,7 @@ public class GameFlowController : MonoBehaviour
         {
             selectionController?.Clear();
             hud?.SetTimerRunning(false);
+            hud?.SetPlayerConnectionState(setup.localTeam, PlayerStatusView.ConnectionState.Reconnecting);
             hud?.SetInstruction("서버 재접속을 기다리는 중입니다.");
             return;
         }
