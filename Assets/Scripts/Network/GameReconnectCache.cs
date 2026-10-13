@@ -1,0 +1,56 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Newtonsoft.Json;
+using UnityEngine;
+
+// 이 기기가 실제 참가했던 경기 정보만 보관한다. 로그인 토큰은 저장하지 않는다.
+public sealed class GameReconnectData
+{
+    public string playerId;
+    public string serverUrl;
+    public GameStartMessage setup;
+    public List<PlayerDisplayInfo> profiles = new();
+
+    public bool Matches(string player, string server)
+    {
+        if (playerId != player || string.IsNullOrEmpty(player) || setup == null ||
+            string.IsNullOrWhiteSpace(setup.roomCode) ||
+            !string.Equals(serverUrl?.TrimEnd('/'), server?.TrimEnd('/'), StringComparison.OrdinalIgnoreCase)) return false;
+        try { setup.ToGameSetup().Validate(); }
+        catch (Exception) { return false; }
+        return setup.localTeam >= 0 && setup.localTeam < setup.teamCount && profiles != null &&
+               profiles.Any(profile => profile != null && profile.playerId == player && profile.team == setup.localTeam);
+    }
+
+    public bool CanRestore(GameSnapshotMessage snapshot) => snapshot != null && setup != null &&
+        (snapshot.phase == "PLAYING" || snapshot.phase == "AUGMENT_SELECT") &&
+        snapshot.myTeam == setup.localTeam && snapshot.pieces != null &&
+        snapshot.pieces.Any(piece => piece != null && piece.team == snapshot.myTeam);
+}
+
+public sealed class GameReconnectCache
+{
+    private readonly string key;
+    public GameReconnectCache(string key) => this.key = key;
+    public void Save(GameReconnectData data)
+    {
+        PlayerPrefs.SetString(key, JsonConvert.SerializeObject(data));
+        PlayerPrefs.Save();
+    }
+    public GameReconnectData Load(string playerId, string serverUrl)
+    {
+        if (!PlayerPrefs.HasKey(key)) return null;
+        try
+        {
+            var data = JsonConvert.DeserializeObject<GameReconnectData>(PlayerPrefs.GetString(key));
+            return data != null && data.Matches(playerId, serverUrl) ? data : null;
+        }
+        catch (Exception) { return null; }
+    }
+    public void Clear()
+    {
+        PlayerPrefs.DeleteKey(key);
+        PlayerPrefs.Save();
+    }
+}

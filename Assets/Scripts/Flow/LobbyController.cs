@@ -66,7 +66,9 @@ public class LobbyController : MonoBehaviour
         mainMenuPanel.ProfileRequested += OnProfileRequested;
         mainMenuPanel.AchievementRequested += OnAchievementRequested;
         mainMenuPanel.SettingsRequested += OnSettingsRequested;
-        FindFirstObjectByType<LobbyNetworkCoordinator>()?.RestoreWaitingRoom(this);
+        LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
+        coordinator?.RestoreWaitingRoom(this);
+        coordinator?.OfferReconnect(this);
     }
 
     private void OnDestroy()
@@ -96,6 +98,11 @@ public class LobbyController : MonoBehaviour
         }
         if (profilePanel != null)
             profilePanel.LogoutRequested -= OnLogoutRequested;
+    }
+
+    public void ShowReconnect(string roomCode)
+    {
+        uiManager?.Open<ReconnectPanel>()?.ShowRoom(roomCode);
     }
 
     private void OnSettingsRequested()

@@ -24,6 +24,8 @@ public class PlayerIdentity
     //   로그인 응답에 gold가 오면 그 값으로 맞추고, 게임이 끝나면 GAME_ENDED의 내 rewardGold를 더한다
     public int Gold { get; private set; }
 
+    internal string ReconnectCacheKey => keyPrefix + "ReconnectGame";
+
     public bool HasToken => !string.IsNullOrEmpty(Token);
 
     private static string verifiedTokenThisRun;

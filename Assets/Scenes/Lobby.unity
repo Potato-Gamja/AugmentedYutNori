@@ -129,7 +129,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 828511336472889071, guid: e44c14272cc20f148b45da5696d1af57, type: 3}
       propertyPath: prefabs.Array.size
-      value: 12
+      value: 13
       objectReference: {fileID: 0}
     - target: {fileID: 828511336472889071, guid: e44c14272cc20f148b45da5696d1af57, type: 3}
       propertyPath: 'prefabs.Array.data[9]'
@@ -143,6 +143,10 @@ PrefabInstance:
       propertyPath: 'prefabs.Array.data[11]'
       value: 
       objectReference: {fileID: 1410101933114320998, guid: 7e517d7b7d6cf8842a14880d0313f5cd, type: 3}
+    - target: {fileID: 828511336472889071, guid: e44c14272cc20f148b45da5696d1af57, type: 3}
+      propertyPath: 'prefabs.Array.data[12]'
+      value: 
+      objectReference: {fileID: 6028280105489028305, guid: 218b3124a6a9ac347a33db127145853b, type: 3}
     - target: {fileID: 2638968591324394123, guid: e44c14272cc20f148b45da5696d1af57, type: 3}
       propertyPath: m_Name
       value: UIRoot
