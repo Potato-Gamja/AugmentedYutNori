@@ -34,6 +34,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     private ApiClient apiClient;
     private AuthApi authApi;
     private GachaApi gachaApi;
+    private IconApi iconApi;
     private PlayerIdentity playerIdentity;
     private string pendingRoomCode;
     private string pendingNickname;
@@ -77,6 +78,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         apiClient = new ApiClient(apiBaseUrl);
         authApi = new AuthApi(apiClient);
         gachaApi = new GachaApi(apiClient);
+        iconApi = new IconApi(apiClient);
         playerIdentity = new PlayerIdentity(playerPrefsKeyPrefix);
         apiClient.Token = playerIdentity.Token;
         apiClient.Unauthorized += OnUnauthorized;
@@ -203,6 +205,32 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         GachaResultResponse response = await gachaApi.DrawAsync();
         playerIdentity.ApplyGold(response.gold);
         return response;
+    }
+
+    public async Task<OwnedIconsResponse> GetOwnedIconsAsync()
+    {
+        await EnsurePlayer(LocalNickname);
+        return await iconApi.GetOwnedAsync();
+    }
+
+    public async Task<PlayerProfileResponse> GetProfileAsync()
+    {
+        await EnsurePlayer(LocalNickname);
+        PlayerProfileResponse response = await iconApi.GetProfileAsync();
+        playerIdentity.ApplyGold(response.gold);
+        if (!string.IsNullOrWhiteSpace(response.nickname))
+            playerIdentity.ApplyNickname(response.nickname);
+        lobbyController?.SetLocalPlayer(LocalPlayerId, LocalNickname);
+        return response;
+    }
+
+    public async Task<PlayerProfileResponse> ChangeProfileIconAsync(string iconId)
+    {
+        OwnedIconsResponse owned = await GetOwnedIconsAsync();
+        if (string.IsNullOrWhiteSpace(iconId) || !owned.iconIds.Contains(iconId))
+            throw new InvalidOperationException("보유한 아이콘만 선택할 수 있습니다.");
+        await iconApi.ChangeIconAsync(iconId);
+        return await GetProfileAsync();
     }
 
     private void UnbindLobbyController()

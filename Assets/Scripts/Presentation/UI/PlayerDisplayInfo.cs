@@ -15,6 +15,11 @@ public static class PlayerProfileIconResolver
 {
     public static Sprite Resolve(IReadOnlyList<Sprite> icons, string iconId, int team)
     {
+        if (!string.IsNullOrWhiteSpace(iconId))
+        {
+            Sprite resourceIcon = Resources.Load<Sprite>(ProfileIconCatalog.SpritePath(iconId));
+            if (resourceIcon != null) return resourceIcon;
+        }
         if (icons == null || icons.Count == 0) return null;
 
         if (!string.IsNullOrWhiteSpace(iconId))
