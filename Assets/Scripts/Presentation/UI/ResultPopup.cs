@@ -52,7 +52,8 @@ public class ResultPopup : UIBase
     public ResultPopup SetWinner(string winnername, Color winnerColor, Sprite profileIcon = null)
     {
         if (winnerText != null) winnerText.text = string.Format("{0} win", winnername);
-        if (winnerColorImage != null) winnerColorImage.color = winnerColor;
+        // 기존 배경 참조는 프로필 테두리로 사용하며 팀 색을 입히지 않는다.
+        if (winnerColorImage != null) winnerColorImage.color = Color.white;
         if (winnerProfileIcon != null)
         {
             winnerProfileIcon.sprite = profileIcon;
