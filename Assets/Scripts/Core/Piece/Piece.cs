@@ -42,5 +42,14 @@ public class Piece
         State = PieceState.Waiting;
     }
 
+    // 서버 스냅샷 상태로 그대로 맞춘다 (재접속·재동기화용). 이동 규칙을 거치지 않는다
+    // node가 없으면 출발 칸
+    internal void Restore(PieceState state, BoardNode node, BoardNode cameFrom)
+    {
+        State = state;
+        Node = node ?? startNode;
+        CameFrom = cameFrom;
+    }
+
     public override string ToString() => $"Piece{Id}(Team{Team}, {State}, {Node})";
 }

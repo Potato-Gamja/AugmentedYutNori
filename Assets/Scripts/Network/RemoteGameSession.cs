@@ -31,6 +31,10 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
     private bool receivingLiveMessages;
 
     public bool IsCommandPending => commandPending;
+    private bool syncRequested;   // SYNC_REQUEST를 보냈고 아직 스냅샷을 못 받음 (중복 요청 방지)
+    private bool awaitingSnapshot;
+    private bool hasTurnNumber;
+    private int lastTurnNumber;   // 마지막으로 적용한 서버 턴 번호 (같은 턴 재전송 구분용)
 
     // 마지막 GAME_ENDED의 순위·보상 목록 (결과 화면용). 게임이 끝나기 전엔 빈 배열
     public IReadOnlyList<RankingEntry> Rankings { get; private set; } = Array.Empty<RankingEntry>();
@@ -47,6 +51,8 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
     public event Action<string, int> PlayerRemoved;
     public event Action<int> AutomatedMoveApplied;
     public event Action<bool> ConnectionAvailabilityChanged;
+    public event Action<GameSnapshotMessage> SnapshotApplied;
+
 
     public RemoteGameSession(
         WebSocketClient socket,
@@ -142,8 +148,25 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
             pendingMessages.Enqueue(envelope);
             return;
         }
-        if (envelope == null || !AcceptSequence(envelope)) return;
+        if (envelope == null) return;
 
+        // 스냅샷은 seq 기준을 새로 잡으므로 순서 검사 전에 처리
+        if (envelope.type == MessageType.GAME_SNAPSHOT)
+        {
+            try
+            {
+                ApplySnapshot(MessageSerializer.ReadPayload<GameSnapshotMessage>(envelope));
+            }
+            catch (Exception exception)
+            {
+                syncRequested = false;
+                awaitingSnapshot = false;
+                Reject($"게임 상태 복원에 실패했습니다: {exception.Message}");
+            }
+            return;
+        }
+        if (awaitingSnapshot && envelope.seq != 0) return;
+        if (!AcceptSequence(envelope)) return;
         try
         {
             switch (envelope.type)
@@ -178,6 +201,8 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
                 case MessageType.ERROR:
                     ErrorMessage error = MessageSerializer.ReadPayload<ErrorMessage>(envelope);
                     commandPending = false;
+                    // 재연결 후 SYNC_REQUEST가 거절되면(게임 없음 등) 대기를 풀어 멈추지 않게 한다
+                    if (awaitingSnapshot) { awaitingSnapshot = false; syncRequested = false; }
                     Reject(error?.message ?? error?.code ?? "서버가 요청을 거절했습니다.");
                     break;
             }
@@ -186,6 +211,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
         {
             commandPending = false;
             Reject($"서버 메시지를 적용하지 못했습니다: {exception.Message}");
+            RequestSync();   // 적용에 실패하면 서버 상태로 다시 맞춘다
         }
     }
 
@@ -240,8 +266,11 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
 
         // 연출은 Core 결과로 하지만, 서버가 계산한 결과(잡힌 말·같이 움직인 말·완주)와 같은지 확인한다
         string mismatch = FindResultMismatch(message, result);
-        if (mismatch != null) Reject($"이동 결과가 서버와 다릅니다 ({mismatch}). 상태를 다시 동기화해 주세요.");
-
+        if (mismatch != null)
+        {
+            Reject($"이동 결과가 서버와 다릅니다 ({mismatch}). 상태를 다시 동기화해 주세요.");
+            RequestSync();
+        }
         ReportStateHash(sequence, message.stateHash);
     }
 
@@ -273,10 +302,24 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
         return string.Join(",", ids);
     }
 
+    // TURN_CHANGED
+    //  - 새 턴(턴 번호가 바뀜): 턴 초기화 (윷 결과·이번 턴 표시 지움)
+    //  - 같은 턴 재전송(시간 초과 자동 처리 후, 재접속 복귀): 남은 던지기만 맞추고 윷 결과는 유지
     private void ApplyTurn(TurnChangedMessage message)
     {
         if (message == null) throw new InvalidOperationException("TURN_CHANGED 내용이 없습니다.");
-        turnManager.ApplyServerTurn(message.team, message.remainingThrows);
+
+        bool sameTurn = hasTurnNumber
+                        && message.turnNumber == lastTurnNumber
+                        && message.team == turnManager.CurrentTeam;
+
+        if (sameTurn)
+            gameState.RemainingThrows = message.remainingThrows;
+        else
+            turnManager.ApplyServerTurn(message.team, message.remainingThrows);
+
+        hasTurnNumber = true;
+        lastTurnNumber = message.turnNumber;
         commandPending = false;
         TurnChanged?.Invoke(message.team);
     }
@@ -382,6 +425,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
         if (envelope.seq != lastSequence + 1)
         {
             Reject($"서버 메시지 순서가 끊겼습니다. Last={lastSequence}, Received={envelope.seq}");
+            RequestSync();
             return false;
         }
 
@@ -446,6 +490,14 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
 
     private void OnConnected()
     {
+        // 게임 중 재연결이면 스냅샷을 받을 때까지 seq 메시지를 무시한다
+        // 서버가 재접속 시 자동으로 보내지만, 혹시 못 받는 경우를 대비해 직접도 요청한다 (중복 스냅샷은 무해)
+        if (hasReceivedSequence)
+        {
+            awaitingSnapshot = true;
+            syncRequested = false;
+            RequestSync();
+        }
         ConnectionAvailabilityChanged?.Invoke(true);
     }
 
@@ -457,4 +509,90 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
     }
 
     private void Reject(string message) => RequestRejected?.Invoke(message);
+
+    // 서버 상태로 통째로 덮어쓴다: 말 위치 → 증강 → 턴·윷 결과 → 승자 → seq 기준
+    private void ApplySnapshot(GameSnapshotMessage snapshot)
+    {
+        if (snapshot == null) throw new InvalidOperationException("GAME_SNAPSHOT 내용이 없습니다.");
+
+        RestorePieces(snapshot.pieces);
+        RestoreAugments(snapshot.ownedAugments);
+
+        bool ended = snapshot.phase == "ENDED";
+        if (!ended) turnManager.ApplyServerTurn(snapshot.currentTeam, snapshot.remainingThrows);
+
+        // ApplyServerTurn 뒤에 넣어야 턴 적용이 결과 목록을 건드려도 서버 값이 남는다
+        gameState.StoredResults.Clear();
+        if (snapshot.storedResults != null) gameState.StoredResults.AddRange(snapshot.storedResults);
+        gameState.WinnerTeam = snapshot.winnerTeam;
+
+        // 증강 선택 중이면 내 후보를 다시 등록 (선택 요청이 후보 검사를 통과하도록)
+        if (snapshot.phase == "AUGMENT_SELECT" && snapshot.offeredAugments != null && snapshot.offeredAugments.Count > 0)
+            rules.SetAugmentChoices(snapshot.myTeam, snapshot.offeredAugments);
+
+        hasReceivedSequence = true;
+        lastSequence = snapshot.lastSeq;
+        hasTurnNumber = true;
+        lastTurnNumber = snapshot.turnNumber;
+        commandPending = false;
+        syncRequested = false;
+        awaitingSnapshot = false;
+
+        SnapshotApplied?.Invoke(snapshot);
+    }
+
+    // 서버 말 상태로 맞추고, 서버 판에 없는 팀(나간 팀)은 판에서 지운다
+    private void RestorePieces(List<PieceSnapshot> pieces)
+    {
+        if (pieces == null || pieces.Count == 0) return;   // 서버 판이 없으면 그대로 둔다
+
+        var listed = new HashSet<int>();
+        foreach (PieceSnapshot p in pieces)
+        {
+            if (!gameState.Board.RestorePiece(p.pieceId, ParsePieceState(p.state), p.nodeId, p.cameFromNodeId))
+                throw new InvalidOperationException($"말 {p.pieceId}을(를) 복원할 수 없습니다 (칸 {p.nodeId}).");
+            listed.Add(p.pieceId);
+        }
+
+        var removedTeams = new HashSet<int>();
+        foreach (Piece piece in new List<Piece>(gameState.Board.Pieces))
+            if (!listed.Contains(piece.Id)) removedTeams.Add(piece.Team);
+        foreach (int team in removedTeams)
+            gameState.Board.RemoveTeam(team);
+    }
+
+    // 서버가 가진 증강 중 로컬에 없는 것만 추가한다 (서버 확정 증강 적용과 같은 경로)
+    private void RestoreAugments(Dictionary<int, List<string>> owned)
+    {
+        if (owned == null) return;
+        foreach (KeyValuePair<int, List<string>> pair in owned)
+        {
+            var have = new HashSet<string>();
+            foreach (IAugment augment in gameState.Board.GetAugments(pair.Key)) have.Add(augment.Id);
+
+            foreach (string id in pair.Value)
+            {
+                if (have.Contains(id)) continue;
+                rules.ApplyConfirmedAugment(pair.Key, id);
+            }
+        }
+    }
+
+    private static PieceState ParsePieceState(string state)
+    {
+        switch (state)
+        {
+            case "WAITING": return PieceState.Waiting;
+            case "ON_BOARD": return PieceState.OnBoard;
+            case "FINISHED": return PieceState.Finished;
+            default: throw new InvalidOperationException($"알 수 없는 말 상태: {state}");
+        }
+    }
+
+    // 서버에 현재 상태 스냅샷을 요청한다 (순서 끊김·이동 결과 불일치·적용 실패 때 자동 호출, 버튼에서 수동 호출 가능)
+    public void RequestSync()
+    {
+        if (syncRequested || !socket.IsConnected) return;
+        if (socket.Send(MessageType.SYNC_REQUEST)) syncRequested = true;
+    }
 }

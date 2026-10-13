@@ -54,8 +54,8 @@ public class GameSnapshotMessage
     public int currentTeam;
     public int remainingThrows;
     public int turnNumber;
-    public List<PieceSnapshot> pieces;
     public List<YutResult> storedResults = new List<YutResult>();
+    public List<PieceSnapshot> pieces = new List<PieceSnapshot>();
     public Dictionary<int, List<string>> ownedAugments = new Dictionary<int, List<string>>();
     public List<string> offeredAugments = new List<string>();   // 증강 선택 중일 때 내 후보
     public int? winnerTeam;

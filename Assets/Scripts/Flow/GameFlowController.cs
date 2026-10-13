@@ -279,6 +279,36 @@ public class GameFlowController : MonoBehaviour
         }
     }
 
+    // 재접속·재동기화: 서버 상태로 덮어쓴 Core를 기준으로 화면 전체를 다시 그린다
+    private void OnSnapshotApplied(GameSnapshotMessage snapshot)
+    {
+        Debug.Log($"[Snapshot] 적용 phase={snapshot.phase} team={snapshot.currentTeam} throws={snapshot.remainingThrows} results={snapshot.storedResults.Count} pieces={snapshot.pieces.Count} lastSeq={snapshot.lastSeq}");
+        isMoving = false;   // 진행 중이던 이동 연출은 버리고 서버 상태 기준으로
+
+        foreach (PieceView view in pieceViews)
+            if (view.Piece != null && !view.Piece.IsOnBoard) view.ReturnHome();
+
+        OnBoardLayoutReloaded();               // 말 배치·업힌 수·플레이어 패널·하이라이트
+        hudPresenter.RefreshStoredResults();
+
+        switch (snapshot.phase)
+        {
+            case "ENDED":
+                OnGameEnded(snapshot.winnerTeam ?? -1);
+                break;
+            case "AUGMENT_SELECT":
+                if (snapshot.offeredAugments != null && snapshot.offeredAugments.Count > 0)
+                    OnAugmentChoices(snapshot.myTeam, snapshot.offeredAugments);
+                else
+                    ChangeState(GameFlowState.AugmentSelect);   // 나는 이미 골랐고 다른 팀 대기
+                break;
+            default:
+                bool canThrow = gameState.RemainingThrows > 0 || gameState.StoredResults.Count == 0;
+                ChangeState(canThrow ? GameFlowState.Throw : GameFlowState.Move);
+                break;
+        }
+    }
+
     private void SubscribeEvents()
     {
         gameSession.Thrown += OnThrown;
@@ -324,9 +354,10 @@ public class GameFlowController : MonoBehaviour
             {
                 remote.PlayerDisconnected -= OnRemotePlayerDisconnected;
                 remote.PlayerReconnected -= OnRemotePlayerReconnected;
-            remote.PlayerRemoved -= OnRemotePlayerRemoved;
-            remote.AutomatedMoveApplied -= OnAutomatedMoveApplied;
-            remote.ConnectionAvailabilityChanged -= OnConnectionAvailabilityChanged;
+                remote.PlayerRemoved -= OnRemotePlayerRemoved;
+                remote.AutomatedMoveApplied -= OnAutomatedMoveApplied;
+                remote.ConnectionAvailabilityChanged -= OnConnectionAvailabilityChanged;
+                remote.SnapshotApplied += OnSnapshotApplied;
             }
             gameSession.Thrown -= OnThrown;
             gameSession.Moved -= OnMoved;
@@ -359,6 +390,7 @@ public class GameFlowController : MonoBehaviour
             new Vector3(screen.x, screen.y, -mainCamera.transform.position.z));
         world.z = 0f;
         selectionController.HandleClick(world);
+
     }
 
     public void OnThrowButtonClicked()
@@ -580,7 +612,8 @@ public class GameFlowController : MonoBehaviour
             pendingTurnTeam = team;
             return;
         }
-        ChangeState(GameFlowState.Throw);
+        bool canThrow = gameState.RemainingThrows > 0 || gameState.StoredResults.Count == 0;
+        ChangeState(canThrow ? GameFlowState.Throw : GameFlowState.Move);
     }
 
     private void OnGameEnded(int winnerTeam)
