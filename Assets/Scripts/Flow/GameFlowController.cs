@@ -416,6 +416,7 @@ public class GameFlowController : MonoBehaviour
             new Vector3(screen.x, screen.y, -mainCamera.transform.position.z));
         world.z = 0f;
         selectionController.HandleClick(world);
+
     }
 
     public void OnThrowButtonClicked()
