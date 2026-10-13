@@ -35,6 +35,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     private AuthApi authApi;
     private GachaApi gachaApi;
     private IconApi iconApi;
+    private AchievementApi achievementApi;
     private PlayerIdentity playerIdentity;
     private string pendingRoomCode;
     private string pendingNickname;
@@ -79,6 +80,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         authApi = new AuthApi(apiClient);
         gachaApi = new GachaApi(apiClient);
         iconApi = new IconApi(apiClient);
+        achievementApi = new AchievementApi(apiClient);
         playerIdentity = new PlayerIdentity(playerPrefsKeyPrefix);
         apiClient.Token = playerIdentity.Token;
         apiClient.Unauthorized += OnUnauthorized;
@@ -211,6 +213,21 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     {
         await EnsurePlayer(LocalNickname);
         return await iconApi.GetOwnedAsync();
+    }
+
+    public async Task<AchievementListResponse> GetAchievementsAsync()
+    {
+        await EnsurePlayer(LocalNickname);
+        return await achievementApi.GetAsync();
+    }
+
+    // 업적 보상 받기. 받은 뒤 보유 골드를 저장한다
+    public async Task<ClaimAchievementResponse> ClaimAchievementAsync(string achievementId)
+    {
+        await EnsurePlayer(LocalNickname);
+        ClaimAchievementResponse response = await achievementApi.ClaimAsync(achievementId);
+        playerIdentity.ApplyGold(response.gold);
+        return response;
     }
 
     private void UnbindLobbyController()

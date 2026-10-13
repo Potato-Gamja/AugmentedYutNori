@@ -163,7 +163,7 @@ public class LobbyController : MonoBehaviour
             if (profilePanel != null) profilePanel.SetLogoutBusy(false);
         }
     }
-    private void OnAchievementRequested() => mainMenuPanel.ShowStatus("업적 기능은 준비 중입니다.");
+    private void OnAchievementRequested() => uiManager?.Open<AchievementPanel>();
 
     private void OnCreateRoomRequested(string nickname)
     {
