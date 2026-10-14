@@ -453,7 +453,8 @@ public class GameFlowController : MonoBehaviour
             ChangeState(GameFlowState.Throw);
             hud?.SetInstruction($"{GameFlowHudPresenter.ResultLabel(outcome.Result)}! 한 번 더 던지세요.");
         }
-        else if (gameRules.HasAnyStoredMove())
+        // 이동할 말이 없어도 야바위꾼을 쓸 수 있으면 일반 던지기를 끄고 재던지기를 표시한다.
+        else if (gameRules.HasAnyStoredMove() || hudPresenter.CanUseRethrow(CurrentTeam))
         {
             ChangeState(GameFlowState.Move);
         }
