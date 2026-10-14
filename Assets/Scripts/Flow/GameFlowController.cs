@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -43,6 +43,7 @@ public class GameFlowController : MonoBehaviour
     private AugmentCatalog augmentCatalog;
     private GameFlowState currentState;
     private bool isMoving;
+    private bool leavingGame;
     private int teamCount;
     private int augmentSelectionTeam;
     private IReadOnlyList<string> currentAugmentChoices = Array.Empty<string>();
@@ -148,6 +149,9 @@ public class GameFlowController : MonoBehaviour
             team = profile.team,
             iconId = profile.iconId,
         }).ToArray() ?? Array.Empty<PlayerDisplayInfo>();
+        playerTeams.Clear();
+        foreach (PlayerDisplayInfo profile in playerProfiles)
+            if (profile != null) RegisterPlayerTeam(profile.playerId, profile.team);
     }
 
     private bool ValidateSetup()
@@ -288,12 +292,13 @@ public class GameFlowController : MonoBehaviour
 
     private void OnSnapshotApplied(GameSnapshotMessage snapshot)
     {
+        if (leavingGame) return;
         isMoving = false;
         pendingTurnTeam = null;
         pendingWinnerTeam = null;
         foreach (PieceView view in pieceViews)
         {
-            view.StopAllCoroutines();
+            view.CancelMove();
             if (view.Piece != null && view.Piece.IsOnBoard) view.gameObject.SetActive(true);
             if (view.Piece != null && !view.Piece.IsOnBoard) view.ReturnHome();
         }
@@ -407,7 +412,7 @@ public class GameFlowController : MonoBehaviour
 
     private void Update()
     {
-        if (currentState != GameFlowState.Move || isMoving || gameSession == null ||
+        if (leavingGame || gameState.WinnerTeam.HasValue || currentState != GameFlowState.Move || isMoving || gameSession == null ||
             gameSession.IsCommandPending || !setup.CanControl(CurrentTeam) ||
             Mouse.current == null || mainCamera == null ||
             !Mouse.current.leftButton.wasPressedThisFrame) return;
@@ -443,6 +448,7 @@ public class GameFlowController : MonoBehaviour
 
     private void OnThrown(YutThrowOutcome outcome)
     {
+        if (leavingGame) return;
         bool grantedExtraThrow = hudPresenter.DidGrantExtraThrow(outcome, CurrentTeam);
         hud?.ShowThrowResult(outcome, grantedExtraThrow, CurrentTeam);
         hudPresenter.RefreshStoredResults();
@@ -503,6 +509,7 @@ public class GameFlowController : MonoBehaviour
 
     private void OnReturnToRoomRequested()
     {
+        if (!BeginLeavingGame()) return;
         LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
         if (coordinator != null) coordinator.ReturnToWaitingRoom();
         else SceneManager.LoadScene(mainMenuSceneName);
@@ -510,6 +517,7 @@ public class GameFlowController : MonoBehaviour
 
     private void OnExitGameRequested()
     {
+        if (!BeginLeavingGame()) return;
         settingsPanel?.Close();
         LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
         if (coordinator != null)
@@ -521,11 +529,27 @@ public class GameFlowController : MonoBehaviour
         SceneManager.LoadScene(mainMenuSceneName);
     }
 
+    private bool BeginLeavingGame()
+    {
+        if (leavingGame) return false;
+        leavingGame = true;
+        isMoving = false;
+        pendingTurnTeam = null;
+        pendingWinnerTeam = null;
+        foreach (PieceView view in pieceViews) if (view != null) view.CancelMove();
+        hud?.SetInteractionState(false, true);
+        hud?.SetThrowInteractable(false);
+        hud?.SetRethrowVisible(false);
+        hud?.SetTimerRunning(false);
+        hud?.SetInstruction("로비로 이동하는 중입니다...");
+        return true;
+    }
+
     // 로비/GAME_START 담당 연결 지점:
     // 서버가 playerId와 team 목록을 GAME_START에 포함하면 게임 시작 전에 이 메서드로 등록한다.
     public void RegisterPlayerTeam(string playerId, int team)
     {
-        if (string.IsNullOrEmpty(playerId) || team < 0 || team >= teamCount) return;
+        if (string.IsNullOrEmpty(playerId) || team < 0 || team >= (setup?.teamCount ?? teamCount)) return;
         playerTeams[playerId] = team;
     }
 
@@ -641,6 +665,7 @@ public class GameFlowController : MonoBehaviour
 
     private void OnTurnChanged(int team)
     {
+        if (leavingGame) return;
         hud?.ResetTimer();
         hudPresenter.RefreshStoredResults();
         hudPresenter.RefreshPlayerPanels();
@@ -655,12 +680,21 @@ public class GameFlowController : MonoBehaviour
 
     private void OnGameEnded(int winnerTeam)
     {
+        if (leavingGame) return;
+        if (currentState == GameFlowState.Finish)
+        {
+            if (resultPopup != null && gameSession is RemoteGameSession remote)
+                resultPopup.SetRankings(remote.Rankings, playerProfiles,
+                    (iconId, team) => hud?.ResolveProfileIcon(iconId, team), setup.localTeam);
+            return;
+        }
         pendingWinnerTeam = winnerTeam;
         if (!isMoving) ChangeState(GameFlowState.Finish);
     }
 
     private void ChangeState(GameFlowState next)
     {
+        if (leavingGame || (next == GameFlowState.Finish && currentState == GameFlowState.Finish)) return;
         if (next != GameFlowState.AugmentSelect) uiManager?.Close<AugmentSelectPanel>();
         currentState = next;
 
@@ -747,13 +781,13 @@ public class GameFlowController : MonoBehaviour
 
     private bool CanSendCommand(GameFlowState requiredState, int team)
     {
-        return currentState == requiredState && gameSession != null &&
+        return !leavingGame && !gameState.WinnerTeam.HasValue && currentState == requiredState && gameSession != null &&
                !gameSession.IsCommandPending && setup.CanControl(team);
     }
 
     private void RefreshSessionInteraction()
     {
-        if (hud == null || gameSession == null) return;
+        if (leavingGame || hud == null || gameSession == null) return;
 
         int controlledTeam = currentState == GameFlowState.AugmentSelect
             ? augmentSelectionTeam
@@ -839,6 +873,7 @@ public class GameFlowController : MonoBehaviour
 
     private void OnMoved(MoveResult result)
     {
+        if (leavingGame) return;
         var points = new List<Vector3>();
         foreach (BoardNode node in result.Path.Nodes)
         {
@@ -852,9 +887,14 @@ public class GameFlowController : MonoBehaviour
 
         isMoving = true;
         int remaining = result.MovedPieces.Count;
+        if (remaining == 0) { FinishMove(result); return; }
         foreach (Piece piece in result.MovedPieces)
         {
-            PieceView view = views[piece];
+            if (!views.TryGetValue(piece, out PieceView view) || view == null)
+            {
+                if (--remaining == 0) FinishMove(result);
+                continue;
+            }
             view.SetWorldVisible(true);
             view.SetSortingOrder(20);
             view.PlayMove(points, result.Path.IsFinished, () =>
@@ -866,6 +906,8 @@ public class GameFlowController : MonoBehaviour
 
     private void FinishMove(MoveResult result)
     {
+        if (leavingGame) return;
+        isMoving = false;
         foreach (Piece captured in result.CapturedPieces)
             if (views.TryGetValue(captured, out PieceView capturedView))
                 capturedView.ReturnHome();
@@ -873,9 +915,18 @@ public class GameFlowController : MonoBehaviour
         RefreshPieceLayout();
         hudPresenter.RefreshPlayerPanels();
         hudPresenter.RefreshStoredResults();
-        isMoving = false;
         lastStateHash = StateHasher.HashHex(gameState, turnManager);
 
+        if (gameSession is RemoteGameSession && gameState.WinnerTeam.HasValue && !pendingWinnerTeam.HasValue)
+        {
+            // 로컬 완주 판정만으로 결과창을 열면 뒤늦은 GAME_ENDED가 창을 다시 연다.
+            hud?.SetInteractionState(false, true);
+            hud?.SetThrowInteractable(false);
+            hud?.SetRethrowVisible(false);
+            hud?.SetTimerRunning(false);
+            hud?.SetInstruction("경기 결과를 확인하는 중입니다...");
+            return;
+        }
         if (pendingWinnerTeam.HasValue || gameState.WinnerTeam.HasValue)
         {
             ChangeState(GameFlowState.Finish);

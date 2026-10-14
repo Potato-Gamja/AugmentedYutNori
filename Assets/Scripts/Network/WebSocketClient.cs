@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Text;
 using System.Threading.Tasks;
 using NativeWebSocket;
@@ -17,6 +17,7 @@ public class WebSocketClient : MonoBehaviour
     private WebSocket socket;
     private float nextPingTime;
     private bool closingByUser;
+    private Task closeTask;
 
     public bool IsConnected => socket != null && socket.State == WebSocketState.Open;
 
@@ -54,13 +55,15 @@ public class WebSocketClient : MonoBehaviour
         socket.OnError += OnError;
         socket.OnClose += OnClose;
 
+        WebSocket connecting = socket;
         try
         {
-            await socket.Connect(); // 연결이 끊길 때까지 기다리는 Task라 여기서 오래 머문다
+            await connecting.Connect(); // 연결이 끊길 때까지 기다리는 Task라 여기서 오래 머문다
         }
         catch (Exception exception)
         {
-            OnError(exception.Message);
+            // 닫힌 이전 방의 지연된 오류를 새 연결의 오류로 전달하지 않는다.
+            if (socket == connecting) OnError(exception.Message);
         }
     }
 
@@ -164,15 +167,35 @@ public class WebSocketClient : MonoBehaviour
         Disconnected?.Invoke(byUser);
     }
 
-    private async System.Threading.Tasks.Task CloseSocket()
+    private Task CloseSocket()
+    {
+        if (closeTask != null && !closeTask.IsCompleted) return closeTask;
+        closeTask = CloseSocketCore();
+        return closeTask;
+    }
+
+    internal static async Task<bool> WaitForCloseAsync(Task pending, int timeoutMs)
+    {
+        if (await Task.WhenAny(pending, Task.Delay(timeoutMs)) == pending)
+        {
+            await pending;
+            return true;
+        }
+        _ = pending.ContinueWith(task => { _ = task.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
+        return false;
+    }
+
+    private async Task CloseSocketCore()
     {
         if (socket == null) return;
 
         WebSocket closing = socket;
+        bool timedOut = false;
+        bool wasConnecting = closing.State == WebSocketState.Connecting;
         if (closing.State == WebSocketState.Open || closing.State == WebSocketState.Connecting)
         {
-            try { await closing.Close(); }
-            catch (Exception exception) { Debug.LogWarning($"[WebSocket] 닫는 중 오류: {exception.Message}", this); }
+            try { timedOut = !await WaitForCloseAsync(closing.Close(), 2000); }
+            catch (Exception exception) { timedOut = true; Debug.LogWarning($"[WebSocket] 닫는 중 오류: {exception.Message}", this); }
         }
 
         // NativeWebSocket은 직접 닫을 때 OnClose를 안 부르거나 늦게 부를 수 있으므로 여기서 마무리한다
@@ -180,6 +203,13 @@ public class WebSocketClient : MonoBehaviour
         {
             bool byUser = closingByUser;
             DetachSocket();
+#if !UNITY_WEBGL || UNITY_EDITOR
+            if (timedOut || wasConnecting)
+            {
+                try { closing.CancelConnection(); }
+                catch (Exception exception) { Debug.LogWarning($"[WebSocket] 연결 정리 중 오류: {exception.Message}", this); }
+            }
+#endif
             Disconnected?.Invoke(byUser);
         }
     }

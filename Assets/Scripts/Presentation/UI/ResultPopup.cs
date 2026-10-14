@@ -24,6 +24,7 @@ public class ResultPopup : UIBase
     [SerializeField] private Transform rankRowContainer;       // VerticalLayoutGroup이 붙은 부모
     [SerializeField] private ResultRankRowView rankRowPrefab;
 
+    private bool returning;
     private readonly List<ResultRankRowView> rankRows = new();
 
     public event Action MainMenuClicked;
@@ -44,6 +45,7 @@ public class ResultPopup : UIBase
 
     protected override void OnOpen()
     {
+        returning = false;
         if (mainMenuButton != null) mainMenuButton.interactable = true;
         if (returnToRoomButton != null) returnToRoomButton.interactable = true;
         SoundManager.Play(SoundId.ResultPopup);
@@ -136,6 +138,8 @@ public class ResultPopup : UIBase
 
     private void HandleMainMenu()
     {
+        if (returning) return;
+        returning = true;
         DisableReturnButtons();
         Close();
 
@@ -150,6 +154,8 @@ public class ResultPopup : UIBase
 
     private void HandleReturnToRoom()
     {
+        if (returning) return;
+        returning = true;
         DisableReturnButtons();
         Close();
         if (ReturnToRoomClicked != null) ReturnToRoomClicked.Invoke();

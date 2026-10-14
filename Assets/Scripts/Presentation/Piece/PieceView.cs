@@ -203,7 +203,15 @@ public bool Contains(Vector3 worldPosition)
     // points: 지나갈 칸들의 월드 좌표. hideAtEnd: 골인하면 도착 후 사라짐
     public void PlayMove(IReadOnlyList<Vector3> points, bool hideAtEnd, Action onComplete)
     {
+        CancelMove();
+        gameObject.SetActive(true);
         StartCoroutine(MoveRoutine(points, hideAtEnd, onComplete));
+    }
+
+    public void CancelMove()
+    {
+        StopAllCoroutines();
+        IsMoving = false;
     }
 
     private IEnumerator MoveRoutine(IReadOnlyList<Vector3> points, bool hideAtEnd, Action onComplete)
@@ -224,8 +232,9 @@ public bool Contains(Vector3 worldPosition)
         }
 
         IsMoving = false;
-        if (hideAtEnd) gameObject.SetActive(false);
+        // 완료 처리를 먼저 알린다. 오브젝트를 끄면 해당 오브젝트의 코루틴도 중단된다.
         onComplete?.Invoke();
+        if (hideAtEnd && this != null) gameObject.SetActive(false);
     }
 
     private TextMesh CreateStackText()

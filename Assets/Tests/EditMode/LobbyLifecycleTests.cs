@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Linq;
 using System.Reflection;
@@ -108,5 +108,86 @@ public class LobbyLifecycleTests
         RuntimeType("WsEnvelope").GetField("type").SetValue(envelope, Enum.Parse(RuntimeType("MessageType"), "ROOM_STATE"));
         Invoke(coordinator, "OnMessageReceived", envelope);
         Assert.That(Get(coordinator, "lastRoomState"), Is.SameAs(previous));
+    }
+
+    private Component CreateJoinCoordinator()
+    {
+        Component coordinator = Create("LobbyNetworkCoordinator");
+        var socketOwner = new GameObject("SocketTest"); socketOwner.transform.SetParent(owner.transform);
+        socketOwner.SetActive(false);
+        Set(coordinator, "webSocketClient", socketOwner.AddComponent(RuntimeType("WebSocketClient")));
+        return coordinator;
+    }
+    private static object JoinEnvelope(string type, string payload) => RuntimeType("MessageSerializer")
+        .GetMethod("Deserialize").Invoke(null, new object[] { "{\"type\":\"" + type + "\",\"seq\":0,\"payload\":" + payload + "}" });
+
+    [Test]
+    public void FailedJoinClearsPendingRoomBeforeRetry()
+    {
+        Component coordinator = CreateJoinCoordinator();
+        Set(coordinator, "awaitingRoomJoin", true);
+        Set(coordinator, "pendingRoomCode", "BAD");
+        Set(coordinator, "pendingNickname", "감자");
+        Set(coordinator, "lastRoomState", Activator.CreateInstance(RuntimeType("RoomStateMessage")));
+        Invoke(coordinator, "OnMessageReceived", JoinEnvelope("ERROR", "{\"code\":\"ROOM_NOT_FOUND\",\"message\":\"없는 방입니다.\"}"));
+        Assert.That(Get(coordinator, "awaitingRoomJoin"), Is.False);
+        Assert.That(Get(coordinator, "pendingRoomCode"), Is.Null);
+        Assert.That(Get(coordinator, "pendingNickname"), Is.Null);
+        Assert.That(Get(coordinator, "lastRoomState"), Is.Null);
+        Assert.That(Get(coordinator, "changingRoomSocket"), Is.False);
+    }
+
+    [Test]
+    public void OldSocketCallbacksCannotClearNextJoin()
+    {
+        Component coordinator = CreateJoinCoordinator();
+        Set(coordinator, "changingRoomSocket", true);
+        Set(coordinator, "pendingRoomCode", "NEXT");
+        Set(coordinator, "awaitingRoomJoin", true);
+        Invoke(coordinator, "OnDisconnected", true);
+        Invoke(coordinator, "OnSocketError", "old socket error");
+        Invoke(coordinator, "OnMessageReceived", JoinEnvelope("ERROR", "{\"code\":\"ROOM_NOT_FOUND\"}"));
+        Assert.That(Get(coordinator, "pendingRoomCode"), Is.EqualTo("NEXT"));
+        Assert.That(Get(coordinator, "awaitingRoomJoin"), Is.True);
+    }
+
+    [Test]
+    public void UnexpectedRoomBroadcastCannotAcceptPendingJoin()
+    {
+        Component coordinator = CreateJoinCoordinator();
+        Set(coordinator, "awaitingRoomJoin", true);
+        Set(coordinator, "pendingRoomCode", "NEXT");
+        Invoke(coordinator, "OnMessageReceived", JoinEnvelope("ROOM_STATE", "{\"roomCode\":\"OLD\",\"members\":[]}"));
+        Assert.That(Get(coordinator, "awaitingRoomJoin"), Is.True);
+        Assert.That(Get(coordinator, "lastRoomState"), Is.Null);
+    }
+
+    [Test]
+    public void ConnectionFailureDuringJoinClearsPendingRequest()
+    {
+        Component coordinator = CreateJoinCoordinator();
+        Set(coordinator, "awaitingRoomJoin", true);
+        Set(coordinator, "pendingRoomCode", "BAD");
+        Invoke(coordinator, "OnSocketError", "connection failed");
+        Assert.That(Get(coordinator, "awaitingRoomJoin"), Is.False);
+        Assert.That(Get(coordinator, "pendingRoomCode"), Is.Null);
+    }
+
+    [Test]
+    public async System.Threading.Tasks.Task LatestJoinWaitsForCleanupAndUsesItsOwnUrl()
+    {
+        Component coordinator = CreateJoinCoordinator();
+        var closing = new System.Threading.Tasks.TaskCompletionSource<bool>();
+        Set(coordinator, "roomSocketCleanupTask", closing.Task);
+        Invoke(coordinator, "ConnectAndJoin", "OLD", "감자");
+        Invoke(coordinator, "ConnectAndJoin", " NEXT ", "감자");
+        Assert.That(Get(coordinator, "pendingRoomCode"), Is.Null);
+        Component socket = (Component)Get(coordinator, "webSocketClient");
+        closing.SetResult(true);
+        await System.Threading.Tasks.Task.Yield();
+        await System.Threading.Tasks.Task.Yield();
+        // 로그인 객체를 만들지 않아 실제 네트워크 연결은 실행되지 않는다.
+        Assert.That(socket.GetType().GetProperty("Url").GetValue(socket), Is.EqualTo("ws://localhost:8080/ws/rooms/NEXT"));
+        Assert.That(Get(coordinator, "awaitingRoomJoin"), Is.False);
     }
 }

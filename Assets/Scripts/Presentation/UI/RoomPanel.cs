@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Collections.Generic;
 using TMPro;
@@ -28,7 +28,11 @@ public class RoomPanel : UIBase
     [SerializeField] private TMP_Text readyButtonText;
     [SerializeField] private Button leaveButton;
     [SerializeField] private Button copyRoomCodeButton;
+    [SerializeField] private Button settingsButton;
 
+    private readonly HashSet<string> reconnectingPlayers = new();
+    private RoomStateMessage displayedRoom;
+    private string displayedLocalPlayerId;
     private bool localReady;
     private string currentRoomCode;
 
@@ -47,12 +51,14 @@ public class RoomPanel : UIBase
 
     public event Action<bool> ReadyRequested;
     public event Action LeaveRequested;
+    public event Action SettingsRequested;
 
     public override void Init()
     {
         readyButton?.onClick.AddListener(OnReadyClicked);
         leaveButton?.onClick.AddListener(OnLeaveClicked);
         copyRoomCodeButton?.onClick.AddListener(OnCopyRoomCodeClicked);
+        settingsButton?.onClick.AddListener(OnSettingsClicked);
         if (copyRoomCodeButton != null) copyRoomCodeButton.interactable = false;
     }
 
@@ -61,12 +67,16 @@ public class RoomPanel : UIBase
         readyButton?.onClick.RemoveListener(OnReadyClicked);
         leaveButton?.onClick.RemoveListener(OnLeaveClicked);
         copyRoomCodeButton?.onClick.RemoveListener(OnCopyRoomCodeClicked);
+        settingsButton?.onClick.RemoveListener(OnSettingsClicked);
     }
 
     public void ShowRoom(RoomStateMessage room, string localPlayerId)
     {
         if (room == null) return;
         bool roomChanged = currentRoomCode != room.roomCode;
+        if (roomChanged) reconnectingPlayers.Clear();
+        displayedRoom = room;
+        displayedLocalPlayerId = localPlayerId;
         currentRoomCode = room.roomCode;
         if (roomChanged) ShowRoomVisibility(currentRoomCode, null);
         if (copyRoomCodeButton != null)
@@ -100,8 +110,11 @@ public class RoomPanel : UIBase
 
             if (playerStatusTexts != null && i < playerStatusTexts.Length && playerStatusTexts[i] != null)
             {
-                playerStatusTexts[i].text = occupied ? (player.ready ? "준비 완료" : "대기 중") : "빈 자리";
-                playerStatusTexts[i].color = occupied && player.ready
+                bool reconnecting = occupied && reconnectingPlayers.Contains(player.playerId);
+                playerStatusTexts[i].text = reconnecting ? "재연결 대기 중..."
+                    : occupied ? (player.ready ? "준비 완료" : "대기 중") : "빈 자리";
+                playerStatusTexts[i].color = reconnecting ? new Color32(164, 108, 43, 255)
+                    : occupied && player.ready
                     ? new Color32(31, 145, 87, 255)
                     : new Color32(135, 120, 100, 255);
             }
@@ -116,6 +129,15 @@ public class RoomPanel : UIBase
 
         if (playersText != null) playersText.gameObject.SetActive(false);
         RefreshReadyLabel();
+    }
+
+    public void ShowReconnectingPlayers(IEnumerable<string> playerIds)
+    {
+        reconnectingPlayers.Clear();
+        if (playerIds != null)
+            foreach (string playerId in playerIds)
+                if (!string.IsNullOrEmpty(playerId)) reconnectingPlayers.Add(playerId);
+        if (displayedRoom != null) ShowRoom(displayedRoom, displayedLocalPlayerId);
     }
 
     public void ShowRoomVisibility(string roomCode, bool? isPublic)
@@ -172,6 +194,7 @@ public class RoomPanel : UIBase
     public void OnRoomCodeCopyFailed() => ShowStatus("복사하지 못했습니다. 표시된 방 코드를 직접 입력해 주세요.");
 
     private void OnLeaveClicked() => LeaveRequested?.Invoke();
+    private void OnSettingsClicked() => SettingsRequested?.Invoke();
 
     private void RefreshReadyLabel()
     {
