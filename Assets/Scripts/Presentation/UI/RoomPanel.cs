@@ -29,11 +29,15 @@ public class RoomPanel : UIBase
     [SerializeField] private Button leaveButton;
     [SerializeField] private Button copyRoomCodeButton;
     [SerializeField] private Button settingsButton;
+    [SerializeField] private Button startGameButton;
 
     private readonly HashSet<string> reconnectingPlayers = new();
     private RoomStateMessage displayedRoom;
     private string displayedLocalPlayerId;
     private bool localReady;
+    private bool isRoomHost;
+    private bool interactionEnabled = true;
+    private Action requestGameStart;
     private string currentRoomCode;
 
 #if UNITY_WEBGL && !UNITY_EDITOR
@@ -59,6 +63,8 @@ public class RoomPanel : UIBase
         leaveButton?.onClick.AddListener(OnLeaveClicked);
         copyRoomCodeButton?.onClick.AddListener(OnCopyRoomCodeClicked);
         settingsButton?.onClick.AddListener(OnSettingsClicked);
+        startGameButton?.onClick.AddListener(OnStartGameClicked);
+        RefreshStartGameButton();
         if (copyRoomCodeButton != null) copyRoomCodeButton.interactable = false;
     }
 
@@ -68,13 +74,19 @@ public class RoomPanel : UIBase
         leaveButton?.onClick.RemoveListener(OnLeaveClicked);
         copyRoomCodeButton?.onClick.RemoveListener(OnCopyRoomCodeClicked);
         settingsButton?.onClick.RemoveListener(OnSettingsClicked);
+        startGameButton?.onClick.RemoveListener(OnStartGameClicked);
     }
 
     public void ShowRoom(RoomStateMessage room, string localPlayerId)
     {
         if (room == null) return;
         bool roomChanged = currentRoomCode != room.roomCode;
-        if (roomChanged) reconnectingPlayers.Clear();
+        if (roomChanged)
+        {
+            reconnectingPlayers.Clear();
+            isRoomHost = false;
+            requestGameStart = null;
+        }
         displayedRoom = room;
         displayedLocalPlayerId = localPlayerId;
         currentRoomCode = room.roomCode;
@@ -82,7 +94,7 @@ public class RoomPanel : UIBase
         if (copyRoomCodeButton != null)
             copyRoomCodeButton.interactable = !string.IsNullOrWhiteSpace(currentRoomCode);
         if (roomCodeText != null)
-            roomCodeText.text = $"방 코드  {room.roomCode}";
+            roomCodeText.text = room.roomCode;
 
         localReady = false;
         RoomPlayer[] members = room.members.OrderBy(player => player.team).ToArray();
@@ -115,9 +127,12 @@ public class RoomPanel : UIBase
                     : occupied ? (player.ready ? "준비 완료" : "대기 중") : "빈 자리";
                 playerStatusTexts[i].color = reconnecting ? new Color32(164, 108, 43, 255)
                     : occupied && player.ready
-                    ? new Color32(31, 145, 87, 255)
-                    : new Color32(135, 120, 100, 255);
+                    ? Color.white
+                    : occupied ? new Color32(122, 92, 62, 255) : new Color32(168, 142, 110, 255);
             }
+
+            playerSlots[i]?.GetComponent<YutNori.UI.Common.RoomSlotPresentation>()?.Show(
+                occupied, occupied && player.ready, occupied && reconnectingPlayers.Contains(player.playerId));
 
             if (playerSlotBackgrounds != null && i < playerSlotBackgrounds.Length && playerSlotBackgrounds[i] != null)
                 playerSlotBackgrounds[i].color = occupied
@@ -129,6 +144,7 @@ public class RoomPanel : UIBase
 
         if (playersText != null) playersText.gameObject.SetActive(false);
         RefreshReadyLabel();
+        RefreshStartGameButton();
     }
 
     public void ShowReconnectingPlayers(IEnumerable<string> playerIds)
@@ -145,10 +161,8 @@ public class RoomPanel : UIBase
         if (roomCode != currentRoomCode || roomVisibilityText == null) return;
         roomVisibilityText.text = !isPublic.HasValue
             ? "공개 여부 확인 중..."
-            : isPublic.Value ? "공개방 · 빠른 참가 가능" : "비공개방 · 코드로만 참가 가능";
-        roomVisibilityText.color = isPublic == true
-            ? new Color32(31, 145, 87, 255)
-            : new Color32(135, 100, 60, 255);
+            : isPublic.Value ? "공개방" : "비공개방";
+        roomVisibilityText.color = new Color32(122, 92, 62, 255);
     }
 
     public void ShowRoomVisibilityUnavailable(string roomCode)
@@ -159,8 +173,39 @@ public class RoomPanel : UIBase
 
     public void SetInteraction(bool interactable)
     {
+        interactionEnabled = interactable;
         if (readyButton != null) readyButton.interactable = interactable;
         if (leaveButton != null) leaveButton.interactable = interactable;
+        RefreshStartGameButton();
+    }
+
+    // ROOM_STATE表示後、서버가 확인한 방장 여부와 시작 요청 콜백을 연결한다.
+    // 기존 서버에는 이 정보가 없으므로 연결 전에는 시작 버튼을 숨긴다.
+    public void ConfigureGameStart(bool isHost, Action requestStart)
+    {
+        isRoomHost = isHost;
+        requestGameStart = requestStart;
+        RefreshStartGameButton();
+    }
+
+    private void RefreshStartGameButton()
+    {
+        if (startGameButton == null) return;
+        bool canStart = displayedRoom?.status == "WAITING" &&
+            displayedRoom.members != null && displayedRoom.members.Count >= 2 &&
+            displayedRoom.members.Count <= 4 && displayedRoom.members.All(player =>
+                player.ready && !reconnectingPlayers.Contains(player.playerId));
+        bool visible = isRoomHost && requestGameStart != null && canStart;
+        startGameButton.gameObject.SetActive(visible);
+        startGameButton.interactable = visible && interactionEnabled;
+    }
+
+    private void OnStartGameClicked()
+    {
+        if (startGameButton == null || !startGameButton.gameObject.activeSelf || !startGameButton.interactable) return;
+        SetInteraction(false);
+        ShowStatus("게임 시작을 요청하는 중입니다.");
+        requestGameStart?.Invoke();
     }
 
     public void SetReadyInteractable(bool interactable)
@@ -199,5 +244,6 @@ public class RoomPanel : UIBase
     private void RefreshReadyLabel()
     {
         if (readyButtonText != null) readyButtonText.text = localReady ? "준비 취소" : "준비";
+        readyButton?.GetComponent<YutNori.UI.Common.RoomReadyButtonPresentation>()?.SetReady(localReady);
     }
 }

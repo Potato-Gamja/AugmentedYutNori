@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -47,19 +47,12 @@ public sealed class YutResultRevealView : MonoBehaviour
         }
 
         EnsureCreated();
-        int steps = outcome.Result.Steps();
         title.text = outcome.IsResultChanged
             ? $"{outcome.OriginalResult.DisplayName()} → {outcome.Result.DisplayName()}"
             : outcome.Result.DisplayName();
         title.color = TurnHudView.GetTeamColor(team);
 
-        string moveText = steps < 0 ? $"뒤로 {Mathf.Abs(steps)}칸" : $"앞으로 {steps}칸";
-        if (outcome.IsResultChanged)
-            detail.text = $"도박사 효과 · {moveText} · 추가 던지기 없음";
-        else if (outcome.Result.GrantsExtraThrow() && !grantedExtraThrow)
-            detail.text = $"사냥꾼 효과 · {moveText} · 추가 던지기 없음";
-        else
-            detail.text = grantedExtraThrow ? $"{moveText} · 추가 던지기 1회" : moveText;
+        detail.text = EffectDescription(outcome, grantedExtraThrow);
 
         if (routine != null) StopCoroutine(routine);
         revealRoot.SetActive(true);
@@ -101,14 +94,9 @@ public sealed class YutResultRevealView : MonoBehaviour
 
     private void ShowInResultPanel(YutThrowOutcome outcome, bool grantedExtraThrow, int team)
     {
-        int steps = outcome.Result.Steps();
         panelResult.text = outcome.OriginalResult.DisplayName();
         panelResult.color = TurnHudView.GetTeamColor(team);
-        panelSteps.text = steps < 0 ? "1칸 뒤로" : $"{steps}칸 이동";
-        if (grantedExtraThrow)
-            panelSteps.text += " · 한 번 더";
-        else if (outcome.Result.GrantsExtraThrow())
-            panelSteps.text += " · 사냥꾼 효과 · 추가 던지기 없음";
+        panelSteps.text = EffectDescription(outcome, grantedExtraThrow);
 
         for (int i = 0; i < panelSticks.Length; i++)
         {
@@ -122,8 +110,17 @@ public sealed class YutResultRevealView : MonoBehaviour
 
         if (routine != null) StopCoroutine(routine);
         routine = outcome.IsResultChanged
-            ? StartCoroutine(PlayResultChange(outcome, steps))
+            ? StartCoroutine(PlayResultChange(outcome, grantedExtraThrow))
             : StartCoroutine(PulsePanelResult());
+    }
+
+    private static string EffectDescription(YutThrowOutcome outcome, bool grantedExtraThrow)
+    {
+        string effect = outcome.IsResultChanged ? "도박사 효과"
+            : outcome.Result.GrantsExtraThrow() && !grantedExtraThrow ? "사냥꾼 효과" : string.Empty;
+        string extraThrow = grantedExtraThrow ? "한 번 더"
+            : !string.IsNullOrEmpty(effect) ? "추가 던지기 없음" : string.Empty;
+        return string.IsNullOrEmpty(effect) ? extraThrow : $"{effect}\n{extraThrow}";
     }
 
     private Sprite GetStickFace(bool[] sticks, int index)
@@ -136,7 +133,7 @@ public sealed class YutResultRevealView : MonoBehaviour
             : stickFlat;
     }
 
-    private IEnumerator PlayResultChange(YutThrowOutcome outcome, int steps)
+    private IEnumerator PlayResultChange(YutThrowOutcome outcome, bool grantedExtraThrow)
     {
         const float effectDuration = 0.9f;
         const float resultPause = 0.2f;
@@ -176,7 +173,7 @@ public sealed class YutResultRevealView : MonoBehaviour
 
         yield return new WaitForSecondsRealtime(resultPause);
         panelResult.text = outcome.Result.DisplayName();
-        panelSteps.text = $"도박사 효과\n{(steps < 0 ? "1칸 뒤로" : $"{steps}칸 이동")}";
+        panelSteps.text = EffectDescription(outcome, grantedExtraThrow);
         yield return PulsePanelResult();
     }
 
@@ -233,7 +230,7 @@ public sealed class YutResultRevealView : MonoBehaviour
         }
 
         title = CreateText("ResultTitle", rootRect, new Vector2(0f, 22f), new Vector2(360f, 82f), 52f);
-        detail = CreateText("ResultDetail", rootRect, new Vector2(0f, -48f), new Vector2(360f, 40f), 23f);
+        detail = CreateText("ResultDetail", rootRect, new Vector2(0f, -48f), new Vector2(360f, 64f), 23f);
         detail.color = new Color32(58, 38, 24, 255);
 
         canvasGroup = revealRoot.GetComponent<CanvasGroup>();

@@ -10,6 +10,7 @@ public sealed class GachaResultView : UIBase
     [SerializeField] private Image iconImage;
     [SerializeField] private TMP_Text nameText;
     [SerializeField] private TMP_Text resultText;
+    [SerializeField] private Image resultPill;
     [SerializeField] private Button confirmButton;
     [SerializeField] private float revealDuration = 0.35f;
 
@@ -35,6 +36,8 @@ public sealed class GachaResultView : UIBase
         if (nameText != null) nameText.text = iconName ?? result.iconId;
         if (resultText != null)
             resultText.text = result.duplicate ? $"이미 가진 아이콘이에요 (x{result.count})" : "NEW! 새 아이콘을 얻었어요";
+        if (resultPill != null) resultPill.color = result.duplicate
+            ? new Color32(243, 230, 207, 255) : new Color32(224, 149, 15, 255);
 
         if (reveal != null) StopCoroutine(reveal);
         reveal = StartCoroutine(Reveal());

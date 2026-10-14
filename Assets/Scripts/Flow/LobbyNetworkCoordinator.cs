@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -72,6 +72,8 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     public string LocalPlayerId => playerIdentity?.PlayerId ?? string.Empty;
     public string LocalNickname => playerIdentity?.Nickname ?? string.Empty;
     public int LocalGold => playerIdentity?.Gold ?? 0;
+    public string LocalIconId { get; private set; } = string.Empty;
+    public event Action LocalDisplayChanged;
 
     private void Awake()
     {
@@ -308,6 +310,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         await EnsurePlayer(LocalNickname);
         GachaResultResponse response = await gachaApi.DrawAsync();
         playerIdentity.ApplyGold(response.gold);
+        LocalDisplayChanged?.Invoke();
         return response;
     }
 
@@ -329,6 +332,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         await EnsurePlayer(LocalNickname);
         ClaimAchievementResponse response = await achievementApi.ClaimAsync(achievementId);
         playerIdentity.ApplyGold(response.gold);
+        LocalDisplayChanged?.Invoke();
         return response;
     }
 
@@ -340,6 +344,8 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         if (!string.IsNullOrWhiteSpace(response.nickname))
             playerIdentity.ApplyNickname(response.nickname);
         ActiveLobbyController?.SetLocalPlayer(LocalPlayerId, LocalNickname);
+        LocalIconId = response.iconId;
+        LocalDisplayChanged?.Invoke();
         return response;
     }
 
@@ -466,6 +472,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
         playerIdentity.ApplyNickname(updatedNickname);
         ActiveLobbyController?.SetLocalPlayer(playerIdentity.PlayerId, updatedNickname);
+        LocalDisplayChanged?.Invoke();
         return updatedNickname;
     }
 

@@ -101,4 +101,35 @@ public class VeteranAugmentTests
         // 증강을 고르기 전(또는 증강 선택을 건너뛴 경우)에는 그대로
         Assert.AreEqual(BasePieces, VeteranAugment.PieceCountFor(board.State, MyTeam, BasePieces));
     }
+    [TestCase(YutResult.Yut)]
+    [TestCase(YutResult.Mo)]
+    public void YutAndMo_KeepExtraThrow(YutResult result)
+    {
+        var (board, piece) = Setup(MyTeam);
+        board.State.AddPiece(100, OtherTeam);
+        var game = new GameState(board.State);
+        var rules = new GameRules(game, new TurnManager(game, 2), new GameEvents(),
+            new YutThrower(new SequenceRandomProvider(0.0)), new StandardGetResult(),
+            new AugmentPool(new SequenceRandomProvider(0.0)));
+        bool flat = result == YutResult.Yut;
+        rules.ApplyThrow(new[] { flat, flat, flat, flat }, result);
+        Assert.That(game.RemainingThrows, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void Setup_VeteranAndRemovedTeams_ExcludeLastSlotAndRemovedTeam()
+    {
+        var board = new TestBoard();
+        board.State.AddAugment(new VeteranAugment(1));
+        var setup = new GameSetup { teamCount = 3, piecesPerTeam = 4 };
+        System.Func<int, int> count = team => team == 2 ? 0 :
+            VeteranAugment.PieceCountFor(board.State, team, setup.piecesPerTeam);
+        var pieces = new System.Collections.Generic.List<(int id, int team, int slot)>(setup.EnumeratePieces(count));
+        Assert.That(pieces.Count, Is.EqualTo(7));
+        Assert.That(pieces.Exists(piece => piece.id == 103 || piece.team == 2), Is.False);
+        var scenePieces = pieces.ConvertAll(piece => (piece.team, piece.slot));
+        Assert.That(setup.CheckScenePieces(scenePieces, count), Is.Empty);
+        scenePieces.Add((1, 3));
+        Assert.That(setup.CheckScenePieces(scenePieces, count), Has.Count.EqualTo(1));
+    }
 }

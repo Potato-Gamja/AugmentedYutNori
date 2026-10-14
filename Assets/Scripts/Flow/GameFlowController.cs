@@ -97,7 +97,7 @@ public class GameFlowController : MonoBehaviour
             gameState,
             augmentCatalog,
             pieceViews,
-            () => CurrentTeam);
+            () => CurrentTeam, teamCount);
         selectionController = new GameFlowSelectionController(
             boardView,
             boardState,
@@ -240,7 +240,7 @@ public class GameFlowController : MonoBehaviour
     private bool AllTeamsHaveAugment()
     {
         for (int t = 0; t < teamCount; t++)
-            if (boardState.GetAugments(t).Count == 0) return false;
+            if (!removedTeams.Contains(t) && boardState.GetAugments(t).Count == 0) return false;
         return true;
     }
 
@@ -314,7 +314,7 @@ public class GameFlowController : MonoBehaviour
             if (view.Piece != null && !view.Piece.IsOnBoard) view.ReturnHome();
         }
         for (int team = 0; team < teamCount; team++)
-            if (!boardState.Pieces.Any(piece => piece.Team == team))
+            if (snapshot.phase != "AUGMENT_SELECT" && !boardState.Pieces.Any(piece => piece.Team == team))
                 hud?.SetPlayerConnectionState(team, PlayerStatusView.ConnectionState.Removed);
         OnBoardLayoutReloaded();
         hudPresenter.RefreshStoredResults();
@@ -895,7 +895,7 @@ public class GameFlowController : MonoBehaviour
         List<AugmentDefinition> selection = new();
         foreach (string id in ids)
             selection.Add(augmentCatalog.Find(id));
-        panel.Setup(selection, OnAugmentSelected);
+        panel.Setup(selection, OnAugmentSelected, augmentSelectionTeam, gameSession is RemoteGameSession);
         uiManager.Open<AugmentSelectPanel>();
         hud?.SetInstruction("증강을 선택하세요.");
     }

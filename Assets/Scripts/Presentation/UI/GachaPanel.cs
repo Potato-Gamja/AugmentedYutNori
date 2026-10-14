@@ -101,7 +101,7 @@ public sealed class GachaPanel : UIBase
 
     private void ShowGold(int gold)
     {
-        if (goldText != null) goldText.text = $"보유 골드  {gold:N0}";
+        if (goldText != null) goldText.text = $"{gold:N0}";
     }
 
     private void ShowStatus(string message)

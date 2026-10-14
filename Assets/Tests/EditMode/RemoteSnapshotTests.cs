@@ -29,6 +29,7 @@ public class RemoteSnapshotTests
         var events = new GameEvents();
         var pool = new AugmentPool(new SystemRandomProvider());
         pool.Register("Monk", team => new MonkAugment(team));
+        pool.Register("Veteran", team => new VeteranAugment(team));
         var rules = new GameRules(state, turn, events,
             new YutThrower(new SystemRandomProvider()), new StandardGetResult(), pool);
         socketObject = new GameObject("SnapshotTestSocket");
@@ -85,6 +86,43 @@ public class RemoteSnapshotTests
 
     private void Apply(object snapshot) => sessionType.GetMethod("ApplySnapshot",
         BindingFlags.Instance | BindingFlags.NonPublic).Invoke(session, new[] { snapshot });
+
+    private static Action<T> SnapshotHandler<T>(Action<object> handler) => snapshot => handler(snapshot);
+
+    [Test]
+    public void VeteranSnapshot_RestoresAugmentsBeforeCreatingPieces_ThenRestoresPositions()
+    {
+        foreach (int team in Enumerable.Range(0, 3)) board.State.RemoveTeam(team);
+        object snapshot = Snapshot();
+        Set(snapshot, "ownedAugments", new Dictionary<int, List<string>>
+        {
+            { 0, new List<string> { "Veteran" } }, { 1, new List<string> { "Monk" } }
+        });
+        AddPiece(snapshot, 0, 0, "ON_BOARD", 3, 2);
+        AddPiece(snapshot, 100, 1, "WAITING", 0);
+        AddPiece(snapshot, 101, 1, "WAITING", 0);
+        int callbackCount = 0;
+        Action<object> handler = received =>
+        {
+            Assert.That(received, Is.SameAs(snapshot));
+            Assert.That(board.State.GetAugments(0).Single(), Is.TypeOf<VeteranAugment>());
+            if (callbackCount++ != 0) return;
+            var setup = new GameSetup { teamCount = 3, piecesPerTeam = 2 };
+            foreach (var piece in setup.EnumeratePieces(team => team == 2 ? 0 :
+                         VeteranAugment.PieceCountFor(board.State, team, setup.piecesPerTeam)))
+                board.State.AddPiece(piece.id, piece.team);
+        };
+        Delegate callback = (Delegate)typeof(RemoteSnapshotTests).GetMethod("SnapshotHandler",
+            BindingFlags.Static | BindingFlags.NonPublic).MakeGenericMethod(snapshot.GetType())
+            .Invoke(null, new object[] { handler });
+        sessionType.GetEvent("AugmentsRestored").AddEventHandler(session, callback);
+        Apply(snapshot);
+        Apply(snapshot);
+        Assert.That(callbackCount, Is.EqualTo(2));
+        Assert.That(board.State.GetPiece(0).Node.Id, Is.EqualTo(3));
+        Assert.That(board.State.GetPiece(1), Is.Null);
+        Assert.That(board.State.Pieces.Count(), Is.EqualTo(3));
+    }
 
     [Test]
     public void Snapshot_RestoresPiecesAugmentTurnAndResults_RemovesAbsentTeam()

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
@@ -254,6 +254,7 @@ public sealed class PlayerStatusView : MonoBehaviour
         }
         if (augmentTooltipName != null) augmentTooltipName.text = definition.name;
         if (augmentTooltipDescription != null) augmentTooltipDescription.text = definition.description;
+        ResizeAugmentTooltip();
 
         RectTransform panel = slot.parent as RectTransform;
         if (panel == null) return;
@@ -267,6 +268,33 @@ public sealed class PlayerStatusView : MonoBehaviour
             slot.anchoredPosition.y - slot.rect.height * 0.5f);
         augmentTooltip.SetAsLastSibling();
         augmentTooltip.gameObject.SetActive(true);
+    }
+
+    private void ResizeAugmentTooltip()
+    {
+        if (augmentTooltip == null || augmentTooltipDescription == null) return;
+        const float padding = 12f;
+        const float gap = 6f;
+        float nameHeight = augmentTooltipName != null
+            ? Mathf.Max(30f, augmentTooltipName.GetPreferredValues(augmentTooltipName.text,
+                augmentTooltipName.rectTransform.rect.width, Mathf.Infinity).y)
+            : 0f;
+        augmentTooltipDescription.textWrappingMode = TextWrappingModes.Normal;
+        float descriptionHeight = Mathf.Max(32f, Mathf.Ceil(augmentTooltipDescription.GetPreferredValues(
+            augmentTooltipDescription.text, augmentTooltipDescription.rectTransform.rect.width, Mathf.Infinity).y));
+        augmentTooltip.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical,
+            Mathf.Max(100f, padding * 2f + nameHeight + gap + descriptionHeight));
+        if (augmentTooltipName != null)
+            LayoutTooltipText(augmentTooltipName.rectTransform, padding, nameHeight);
+        LayoutTooltipText(augmentTooltipDescription.rectTransform, padding + nameHeight + gap, descriptionHeight);
+    }
+
+    private static void LayoutTooltipText(RectTransform rect, float top, float height)
+    {
+        rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
+        rect.pivot = new Vector2(0f, 1f);
+        rect.anchoredPosition = new Vector2(rect.anchoredPosition.x, -top);
+        rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
     }
 
     private void HideAugmentTooltip()

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -43,7 +43,7 @@ public class LobbyController : MonoBehaviour
         }
 
         mainMenuPanel = uiManager.Open<MainMenuPanel>();
-        lobbyPanel = uiManager.Get<LobbyPanel>();
+        lobbyPanel = uiManager.Open<LobbyPanel>();
         roomPanel = uiManager.Get<RoomPanel>();
         if (mainMenuPanel == null || lobbyPanel == null || roomPanel == null)
         {
@@ -68,6 +68,7 @@ public class LobbyController : MonoBehaviour
         mainMenuPanel.AchievementRequested += OnAchievementRequested;
         mainMenuPanel.SettingsRequested += OnSettingsRequested;
         LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
+        lobbyPanel.SetNickname(coordinator?.LocalNickname);
         coordinator?.RestoreWaitingRoom(this);
         coordinator?.OfferReconnect(this);
     }
@@ -106,6 +107,7 @@ public class LobbyController : MonoBehaviour
     {
         uiManager?.Close<ReconnectPanel>();
         uiManager?.Close<MainMenuPanel>();
+        uiManager?.Close<LobbyPanel>();
         ReturnToLobby();
         ReceiveError(reason);
     }
@@ -128,7 +130,7 @@ public class LobbyController : MonoBehaviour
 
     private void OnPlayRequested()
     {
-        uiManager.Close<MainMenuPanel>();
+        uiManager.Open<MainMenuPanel>();
         uiManager.Open<LobbyPanel>();
         lobbyPanel.ShowStatus(string.Empty);
         LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
@@ -137,8 +139,8 @@ public class LobbyController : MonoBehaviour
 
     private void OnMainMenuRequested()
     {
-        uiManager.Close<LobbyPanel>();
         uiManager.Open<MainMenuPanel>();
+        uiManager.Open<LobbyPanel>();
     }
 
     private void OnGachaRequested() => uiManager?.Open<GachaPanel>();
@@ -282,6 +284,7 @@ public class LobbyController : MonoBehaviour
     public void ReturnToLobby()
     {
         uiManager.Close<RoomPanel>();
+        uiManager.Open<MainMenuPanel>();
         uiManager.Open<LobbyPanel>();
         lobbyPanel.SetBusy(false);
         lobbyPanel.ShowStatus(string.Empty);

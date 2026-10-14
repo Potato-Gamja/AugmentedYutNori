@@ -14,6 +14,7 @@ public sealed class GameFlowHudPresenter
     private readonly AugmentCatalog augmentCatalog;
     private readonly IReadOnlyList<PieceView> pieceViews;
     private readonly Func<int> currentTeamProvider;
+    private readonly int configuredTeamCount;
 
     public GameFlowHudPresenter(
         GameHudPanel hud,
@@ -22,6 +23,18 @@ public sealed class GameFlowHudPresenter
         AugmentCatalog augmentCatalog,
         IReadOnlyList<PieceView> pieceViews,
         Func<int> currentTeamProvider = null)
+        : this(hud, boardState, gameState, augmentCatalog, pieceViews, currentTeamProvider, 2)
+    {
+    }
+
+    public GameFlowHudPresenter(
+        GameHudPanel hud,
+        BoardState boardState,
+        GameState gameState,
+        AugmentCatalog augmentCatalog,
+        IReadOnlyList<PieceView> pieceViews,
+        Func<int> currentTeamProvider,
+        int configuredTeamCount)
     {
         this.hud = hud;
         this.boardState = boardState;
@@ -29,13 +42,14 @@ public sealed class GameFlowHudPresenter
         this.augmentCatalog = augmentCatalog;
         this.pieceViews = pieceViews;
         this.currentTeamProvider = currentTeamProvider;
+        this.configuredTeamCount = Mathf.Clamp(configuredTeamCount, 2, 4);
     }
 
     public void RefreshPlayerPanels()
     {
         if (hud == null || boardState == null) return;
 
-        int teamCount = 2;
+        int teamCount = configuredTeamCount;
         foreach (Piece piece in boardState.Pieces)
             teamCount = Mathf.Max(teamCount, piece.Team + 1);
         teamCount = Mathf.Min(teamCount, 4);
