@@ -595,6 +595,11 @@ public class GameRules
         if (HasAnyStoredMove())
             return;
 
+        // 판에 말이 없어 이동할 수 없는 빽도여도 야바위꾼을 사용할 수 있으면 턴 유지.
+        if (state.Board.GetAugments(turnManager.CurrentTeam).Exists(augment =>
+                augment is RethrowAugment rethrow && rethrow.CanUse(state, turnManager.CurrentTeam)))
+            return;
+
         // 더 이상 사용할 수 없는 결과 제거
         state.StoredResults.Clear();
         EndTurn();

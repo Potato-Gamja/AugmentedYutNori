@@ -7,6 +7,7 @@ public class RethrowAugmentTests
     private const int OtherTeam = 1;
 
     // StandardGetResult 기준 윷가락 (true = 평평한 면, 0번이 표시된 막대)
+    private static readonly bool[] BackDoSticks = { true, false, false, false };
     private static readonly bool[] DoSticks = { false, true, false, false };
     private static readonly bool[] GaeSticks = { true, true, false, false };
     private static readonly bool[] GeolSticks = { true, true, true, false };
@@ -22,7 +23,7 @@ public class RethrowAugmentTests
     }
 
     // 실제 던지기 흐름을 확인할 GameRules를 만든다 (각 팀 대기 말 1개, 팀 0이 야바위꾼 보유)
-    private static GameRules MakeRules(out GameState game, out TurnManager turn, out RethrowAugment rethrow)
+    private static GameRules MakeRules(out GameState game, out TurnManager turn, out RethrowAugment rethrow, bool ownsRethrow = true)
     {
         var board = new TestBoard();
         board.State.AddPiece(0, MyTeam);
@@ -30,7 +31,7 @@ public class RethrowAugmentTests
         game = new GameState(board.State);
         turn = new TurnManager(game, 2);
         rethrow = new RethrowAugment(MyTeam);
-        board.State.AddAugment(rethrow);
+        if (ownsRethrow) board.State.AddAugment(rethrow);
 
         return new GameRules(
             game,
@@ -191,4 +192,48 @@ public class RethrowAugmentTests
         Assert.IsFalse(game.HasRethrownThisTurn);
         Assert.IsTrue(rethrow.CanUse(game, MyTeam));
     }
+    [Test]
+    public void FirstBackDoWithOnlyWaitingPieces_PreservesTurnAndAllowsRethrow()
+    {
+        GameRules rules = MakeRules(out GameState game, out TurnManager turn, out RethrowAugment rethrow);
+        rules.ApplyThrow(BackDoSticks, YutResult.BackDo);
+        Assert.AreEqual(MyTeam, turn.CurrentTeam);
+        Assert.IsFalse(rules.HasAnyStoredMove());
+        Assert.IsTrue(rethrow.CanUse(game, MyTeam));
+        CollectionAssert.AreEqual(new[] { YutResult.BackDo }, game.StoredResults);
+        Assert.IsTrue(rules.ApplyRethrow(DoSticks, YutResult.Do));
+        Assert.AreEqual(MyTeam, turn.CurrentTeam);
+        CollectionAssert.AreEqual(new[] { YutResult.Do }, game.StoredResults);
+    }
+
+    [Test]
+    public void BackDoWithoutRethrowAugment_EndsTurn()
+    {
+        GameRules rules = MakeRules(out GameState game, out TurnManager turn, out _, ownsRethrow: false);
+        rules.ApplyThrow(BackDoSticks, YutResult.BackDo);
+        Assert.AreEqual(OtherTeam, turn.CurrentTeam);
+        Assert.IsEmpty(game.StoredResults);
+    }
+
+    [Test]
+    public void RethrownBackDoWithNoMove_EndsTurnInsteadOfWaitingForAnotherRethrow()
+    {
+        GameRules rules = MakeRules(out GameState game, out TurnManager turn, out RethrowAugment rethrow);
+        rules.ApplyThrow(BackDoSticks, YutResult.BackDo);
+        Assert.IsTrue(rules.ApplyRethrow(BackDoSticks, YutResult.BackDo));
+        Assert.AreEqual(OtherTeam, turn.CurrentTeam);
+        Assert.IsEmpty(game.StoredResults);
+        Assert.IsTrue(game.Board.GetAugments(MyTeam).Contains(rethrow));
+    }
+
+    [Test]
+    public void BackDoAfterMoving_CannotHoldTurnForRethrow()
+    {
+        GameRules rules = MakeRules(out GameState game, out TurnManager turn, out _);
+        game.HasMovedThisTurn = true;
+        rules.ApplyThrow(BackDoSticks, YutResult.BackDo);
+        Assert.AreEqual(OtherTeam, turn.CurrentTeam);
+        Assert.IsEmpty(game.StoredResults);
+    }
+
 }
