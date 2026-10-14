@@ -30,7 +30,8 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
     private readonly Queue<WsEnvelope> pendingMessages;
     private bool receivingLiveMessages;
 
-    public bool IsCommandPending => commandPending || awaitingSnapshot;
+    private bool reconnectRejected;
+    public bool IsCommandPending => commandPending || awaitingSnapshot || reconnectRejected;
     private bool syncRequested;   // SYNC_REQUEST를 보냈고 아직 스냅샷을 못 받음 (중복 요청 방지)
     private bool awaitingSnapshot;
     private bool hasTurnNumber;
@@ -54,6 +55,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
     public event Action<int> AutomatedMoveApplied;
     public event Action<bool> ConnectionAvailabilityChanged;
     public event Action<GameSnapshotMessage> SnapshotApplied;
+    public event Action<string> ReconnectRejected;
 
 
     public RemoteGameSession(
@@ -145,6 +147,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
 
     private void OnMessageReceived(WsEnvelope envelope)
     {
+        if (reconnectRejected) return;
         if (!receivingLiveMessages)
         {
             pendingMessages.Enqueue(envelope);
@@ -205,6 +208,14 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
                     commandPending = false;
                     // 재연결 후 SYNC_REQUEST가 거절되면(게임 없음 등) 대기를 풀어 멈추지 않게 한다
                     if (awaitingSnapshot) { awaitingSnapshot = false; syncRequested = false; }
+                    if (ReconnectFailure.IsTerminal(error?.code))
+                    {
+                        reconnectRejected = true;
+                        pendingMessages.Clear();
+                        ConnectionAvailabilityChanged?.Invoke(false);
+                        ReconnectRejected?.Invoke(error?.message ?? "이 경기에 복귀할 수 없습니다.");
+                        break;
+                    }
                     Reject(error?.message ?? error?.code ?? "서버가 요청을 거절했습니다.");
                     break;
             }
@@ -494,6 +505,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
 
     private void OnConnected()
     {
+        if (reconnectRejected) return;
         // 게임 중 재연결이면 스냅샷을 받을 때까지 seq 메시지를 무시한다
         // 서버가 재접속 시 자동으로 보내지만, 혹시 못 받는 경우를 대비해 직접도 요청한다 (중복 스냅샷은 무해)
         if (hasReceivedSequence)
@@ -507,6 +519,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
 
     private void OnDisconnected(bool byUser)
     {
+        if (reconnectRejected) return;
         commandPending = false;
         ConnectionAvailabilityChanged?.Invoke(false);
         if (!byUser) Reject("서버 연결이 끊어졌습니다.");
@@ -609,7 +622,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
     // 서버에 현재 상태 스냅샷을 요청한다 (순서 끊김·이동 결과 불일치·적용 실패 때 자동 호출, 버튼에서 수동 호출 가능)
     public void RequestSync()
     {
-        if (syncRequested || !socket.IsConnected) return;
+        if (reconnectRejected || syncRequested || !socket.IsConnected) return;
         if (socket.Send(MessageType.SYNC_REQUEST))
         {
             syncRequested = true;

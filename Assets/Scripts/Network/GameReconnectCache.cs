@@ -54,3 +54,10 @@ public sealed class GameReconnectCache
         PlayerPrefs.Save();
     }
 }
+
+// 서버의 복귀 불가 ERROR 코드. 일시적인 통신 실패와 구분해 저장 정보를 지운다.
+public static class ReconnectFailure
+{
+    public static bool IsTerminal(string code) => code == "REMOVED_FROM_GAME" ||
+        code == "GAME_ALREADY_ENDED" || code == "GAME_NOT_FOUND" || code == "PLAYER_NOT_IN_GAME";
+}
