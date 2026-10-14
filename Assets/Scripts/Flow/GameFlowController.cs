@@ -234,6 +234,14 @@ public class GameFlowController : MonoBehaviour
     // 팀의 말 수 (노장이면 1개 적게). 증강이 확정된 뒤에만 의미가 있다
     private int PieceCount(int team) => VeteranAugment.PieceCountFor(boardState, team, setup.piecesPerTeam);
 
+    // 모든 팀이 증강을 하나씩 가졌는지 (원격·재접속에서 말을 만들 시점)
+    private bool AllTeamsHaveAugment()
+    {
+        for (int t = 0; t < teamCount; t++)
+            if (boardState.GetAugments(t).Count == 0) return false;
+        return true;
+    }
+
     private void CreateCoreState()
     {
         teamCount = setup.teamCount;
@@ -479,6 +487,8 @@ public class GameFlowController : MonoBehaviour
                 uiManager?.Close<AugmentSelectPanel>();
                 hud?.SetInstruction("선택 완료! 다른 플레이어의 선택을 기다리는 중입니다.");
             }
+            // 모든 팀의 증강이 확정되면 팀별 말 수로 말을 만든다 (서버도 이 시점에 만든다)
+            if (AllTeamsHaveAugment()) CreatePieces();
             return; // PLAYING 진입은 서버 TURN_CHANGED로 확정한다.
         }
         uiManager?.Close<AugmentSelectPanel>();
@@ -680,6 +690,8 @@ public class GameFlowController : MonoBehaviour
     private void OnTurnChanged(int team)
     {
         if (leavingGame) return;
+        // 첫 턴 전에는 증강 선택이 끝났다는 뜻 (증강 없이 나간 팀이 있어도 말이 생기도록, 이미 만들었으면 아무것도 안 함)
+        CreatePieces();
         hud?.ResetTimer();
         hudPresenter.RefreshStoredResults();
         hudPresenter.RefreshPlayerPanels();
