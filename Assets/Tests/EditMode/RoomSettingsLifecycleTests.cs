@@ -85,4 +85,45 @@ public class RoomSettingsLifecycleTests
         bool opened = (bool)manager.GetType().GetMethod("IsOpen").MakeGenericMethod(RuntimeType("SettingsPanel")).Invoke(manager, null);
         Assert.That(opened, Is.True);
     }
+
+    [TestCase(1, false)]
+    [TestCase(2, true)]
+    [TestCase(3, true)]
+    [TestCase(4, true)]
+    public void StartButtonRequiresHostAndTwoToFourReadyPlayers(int count, bool expected)
+    {
+        GameObject roomOwner = UnityEngine.Object.Instantiate(UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/UI/RoomPanel.prefab"));
+        objects.Add(roomOwner);
+        Component panel = roomOwner.GetComponent(RuntimeType("RoomPanel"));
+        panel.GetType().GetMethod("Init").Invoke(panel, null);
+        object room = Activator.CreateInstance(RuntimeType("RoomStateMessage"));
+        room.GetType().GetField("roomCode").SetValue(room, "TEST");
+        room.GetType().GetField("status").SetValue(room, "WAITING");
+        var members = (System.Collections.IList)room.GetType().GetField("members").GetValue(room);
+        for (int i = 0; i < count; i++)
+        {
+            object player = Activator.CreateInstance(RuntimeType("RoomPlayer"));
+            player.GetType().GetField("playerId").SetValue(player, "p" + i);
+            player.GetType().GetField("team").SetValue(player, i);
+            player.GetType().GetField("ready").SetValue(player, true);
+            members.Add(player);
+        }
+        panel.GetType().GetMethod("ShowRoom").Invoke(panel, new object[] { room, "p0" });
+        Component button = (Component)Get(panel, "startGameButton");
+        Assert.That(button.gameObject.activeSelf, Is.False);
+        int sent = 0;
+        panel.GetType().GetMethod("ConfigureGameStart").Invoke(panel, new object[] { true, (Action)(() => sent++) });
+        Assert.That(button.gameObject.activeSelf, Is.EqualTo(expected));
+        if (expected)
+        {
+            Call(panel, "OnStartGameClicked"); Call(panel, "OnStartGameClicked");
+            Assert.That(sent, Is.EqualTo(1));
+            panel.GetType().GetMethod("SetInteraction").Invoke(panel, new object[] { true });
+            members[0].GetType().GetField("ready").SetValue(members[0], false);
+            panel.GetType().GetMethod("ShowRoom").Invoke(panel, new object[] { room, "p0" });
+            Assert.That(button.gameObject.activeSelf, Is.False);
+        }
+        panel.GetType().GetMethod("ConfigureGameStart").Invoke(panel, new object[] { false, (Action)(() => sent++) });
+        Assert.That(button.gameObject.activeSelf, Is.False);
+    }
 }

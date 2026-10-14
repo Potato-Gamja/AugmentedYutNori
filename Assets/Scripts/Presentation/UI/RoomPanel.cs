@@ -29,11 +29,15 @@ public class RoomPanel : UIBase
     [SerializeField] private Button leaveButton;
     [SerializeField] private Button copyRoomCodeButton;
     [SerializeField] private Button settingsButton;
+    [SerializeField] private Button startGameButton;
 
     private readonly HashSet<string> reconnectingPlayers = new();
     private RoomStateMessage displayedRoom;
     private string displayedLocalPlayerId;
     private bool localReady;
+    private bool isRoomHost;
+    private bool interactionEnabled = true;
+    private Action requestGameStart;
     private string currentRoomCode;
 
 #if UNITY_WEBGL && !UNITY_EDITOR
@@ -59,6 +63,8 @@ public class RoomPanel : UIBase
         leaveButton?.onClick.AddListener(OnLeaveClicked);
         copyRoomCodeButton?.onClick.AddListener(OnCopyRoomCodeClicked);
         settingsButton?.onClick.AddListener(OnSettingsClicked);
+        startGameButton?.onClick.AddListener(OnStartGameClicked);
+        RefreshStartGameButton();
         if (copyRoomCodeButton != null) copyRoomCodeButton.interactable = false;
     }
 
@@ -68,13 +74,19 @@ public class RoomPanel : UIBase
         leaveButton?.onClick.RemoveListener(OnLeaveClicked);
         copyRoomCodeButton?.onClick.RemoveListener(OnCopyRoomCodeClicked);
         settingsButton?.onClick.RemoveListener(OnSettingsClicked);
+        startGameButton?.onClick.RemoveListener(OnStartGameClicked);
     }
 
     public void ShowRoom(RoomStateMessage room, string localPlayerId)
     {
         if (room == null) return;
         bool roomChanged = currentRoomCode != room.roomCode;
-        if (roomChanged) reconnectingPlayers.Clear();
+        if (roomChanged)
+        {
+            reconnectingPlayers.Clear();
+            isRoomHost = false;
+            requestGameStart = null;
+        }
         displayedRoom = room;
         displayedLocalPlayerId = localPlayerId;
         currentRoomCode = room.roomCode;
@@ -129,6 +141,7 @@ public class RoomPanel : UIBase
 
         if (playersText != null) playersText.gameObject.SetActive(false);
         RefreshReadyLabel();
+        RefreshStartGameButton();
     }
 
     public void ShowReconnectingPlayers(IEnumerable<string> playerIds)
@@ -159,8 +172,49 @@ public class RoomPanel : UIBase
 
     public void SetInteraction(bool interactable)
     {
+        interactionEnabled = interactable;
         if (readyButton != null) readyButton.interactable = interactable;
         if (leaveButton != null) leaveButton.interactable = interactable;
+        RefreshStartGameButton();
+    }
+
+    // ROOM_STATE表示後、서버가 확인한 방장 여부와 시작 요청 콜백을 연결한다.
+    // 기존 서버에는 이 정보가 없으므로 연결 전에는 시작 버튼을 숨긴다.
+    public void ConfigureGameStart(bool isHost, Action requestStart)
+    {
+        isRoomHost = isHost;
+        requestGameStart = requestStart;
+        RefreshStartGameButton();
+    }
+
+    private void RefreshStartGameButton()
+    {
+        if (startGameButton == null) return;
+        bool canStart = displayedRoom?.status == "WAITING" &&
+            displayedRoom.members != null && displayedRoom.members.Count >= 2 &&
+            displayedRoom.members.Count <= 4 && displayedRoom.members.All(player =>
+                player.ready && !reconnectingPlayers.Contains(player.playerId));
+        bool visible = isRoomHost && requestGameStart != null && canStart;
+        startGameButton.gameObject.SetActive(visible);
+        startGameButton.interactable = visible && interactionEnabled;
+        if (readyButton != null)
+        {
+            readyButton.GetComponent<RectTransform>().anchoredPosition = new Vector2(visible ? -210f : -160f, -245f);
+            readyButton.GetComponent<RectTransform>().sizeDelta = new Vector2(visible ? 190f : 280f, 76f);
+        }
+        if (leaveButton != null)
+        {
+            leaveButton.GetComponent<RectTransform>().anchoredPosition = new Vector2(visible ? 210f : 160f, -245f);
+            leaveButton.GetComponent<RectTransform>().sizeDelta = new Vector2(visible ? 190f : 280f, 76f);
+        }
+    }
+
+    private void OnStartGameClicked()
+    {
+        if (startGameButton == null || !startGameButton.gameObject.activeSelf || !startGameButton.interactable) return;
+        SetInteraction(false);
+        ShowStatus("게임 시작을 요청하는 중입니다.");
+        requestGameStart?.Invoke();
     }
 
     public void SetReadyInteractable(bool interactable)
