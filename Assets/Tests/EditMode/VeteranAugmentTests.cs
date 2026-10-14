@@ -6,6 +6,8 @@ public class VeteranAugmentTests
     private const int MyTeam = 0;
     private const int OtherTeam = 1;
 
+    private const int BasePieces = 4;
+
     private static (TestBoard board, Piece piece) Setup(int team)
     {
         var board = new TestBoard();
@@ -68,5 +70,35 @@ public class VeteranAugmentTests
 
         // 내 증강은 상대 말에 적용되지 않는다
         Assert.AreEqual(expected, count);
+    }
+
+    [Test]
+    public void PieceCount_VeteranTeam_OneLess()
+    {
+        var board = new TestBoard();
+        board.State.AddAugment(new VeteranAugment(MyTeam));
+
+        // 노장 팀은 말이 1개 적다
+        Assert.AreEqual(BasePieces - 1, VeteranAugment.PieceCountFor(board.State, MyTeam, BasePieces));
+    }
+
+    [Test]
+    public void PieceCount_OtherAugmentTeam_Unchanged()
+    {
+        var board = new TestBoard();
+        board.State.AddAugment(new VeteranAugment(MyTeam));
+        board.State.AddAugment(new MonkAugment(OtherTeam));
+
+        // 다른 증강을 가진 팀은 그대로 (상대 팀 노장의 영향도 없음)
+        Assert.AreEqual(BasePieces, VeteranAugment.PieceCountFor(board.State, OtherTeam, BasePieces));
+    }
+
+    [Test]
+    public void PieceCount_NoAugment_Unchanged()
+    {
+        var board = new TestBoard();
+
+        // 증강을 고르기 전(또는 증강 선택을 건너뛴 경우)에는 그대로
+        Assert.AreEqual(BasePieces, VeteranAugment.PieceCountFor(board.State, MyTeam, BasePieces));
     }
 }
