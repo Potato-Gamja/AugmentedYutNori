@@ -675,6 +675,9 @@ public class GameFlowController : MonoBehaviour
         if (piecesCreated) return;
         piecesCreated = true;
         EnsurePieceViewsForSetup();
+        var errors = setup.CheckScenePieces(pieceViews.Select(v => (v.Team, v.SlotIndex)), PieceCount);
+        if (errors.Count > 0)
+            Debug.LogWarning($"[GameFlow] GameSetup과 씬의 말 구성이 다릅니다. 기존 목록 ID로 실행합니다.\n{string.Join("\n", errors)}", this);
         BindPieces();
         RefreshPieceLayout();
         hudPresenter.RefreshPlayerPanels();
