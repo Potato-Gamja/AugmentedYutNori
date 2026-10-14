@@ -350,6 +350,12 @@ public class GameFlowController : MonoBehaviour
         }
     }
 
+    // 재접속 스냅샷: 증강이 복원된 직후, 말 복원 전에 팀별 말 수로 말을 만든다 (증강 선택 중이면 만들지 않음)
+    private void OnAugmentsRestored()
+    {
+        if (AllTeamsHaveAugment()) CreatePieces();
+    }
+
     private void SubscribeEvents()
     {
         gameSession.Thrown += OnThrown;
@@ -362,6 +368,7 @@ public class GameFlowController : MonoBehaviour
         boardState.PiecesReturnedByBoardChange += OnPiecesReturnedByBoardChange;
         boardState.DesyncDetected += OnDesyncDetected;
         boardView.LayoutReloaded += OnBoardLayoutReloaded;
+
         if (gameSession is RemoteGameSession remote)
         {
             remote.PlayerDisconnected += OnRemotePlayerDisconnected;
@@ -370,6 +377,7 @@ public class GameFlowController : MonoBehaviour
             remote.AutomatedMoveApplied += OnAutomatedMoveApplied;
             remote.ConnectionAvailabilityChanged += OnConnectionAvailabilityChanged;
             remote.SnapshotApplied += OnSnapshotApplied;
+            remote.AugmentsRestored += OnAugmentsRestored;
         }
     }
 
@@ -400,6 +408,7 @@ public class GameFlowController : MonoBehaviour
                 remote.AutomatedMoveApplied -= OnAutomatedMoveApplied;
                 remote.ConnectionAvailabilityChanged -= OnConnectionAvailabilityChanged;
                 remote.SnapshotApplied -= OnSnapshotApplied;
+                remote.AugmentsRestored -= OnAugmentsRestored;
             }
             gameSession.Thrown -= OnThrown;
             gameSession.Moved -= OnMoved;
