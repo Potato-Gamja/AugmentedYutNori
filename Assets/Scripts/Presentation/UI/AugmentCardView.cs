@@ -9,7 +9,7 @@ public class AugmentCardView : MonoBehaviour
     private static readonly string[] AugmentIds =
     {
         "Assassin", "Hunter", "Marathoner", "Monk", "Sprinter", "Loner",
-        "Pacifist", "FriendShield", "Gambler", "Rethrow", "Contrarian"
+        "Pacifist", "FriendShield", "Gambler", "Rethrow", "Contrarian", "Veteran"
     };
 
     [SerializeField] private Image augmentIcon;

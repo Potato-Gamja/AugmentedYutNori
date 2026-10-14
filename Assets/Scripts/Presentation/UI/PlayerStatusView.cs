@@ -17,7 +17,7 @@ public sealed class PlayerStatusView : MonoBehaviour
     private static readonly string[] AugmentIds =
     {
         "Assassin", "Hunter", "Marathoner", "Monk", "Sprinter", "Loner",
-        "Pacifist", "FriendShield", "Gambler", "Rethrow", "Contrarian"
+        "Pacifist", "FriendShield", "Gambler", "Rethrow", "Contrarian", "Veteran"
     };
     private int activeTeamCount = 2;
     private readonly int[] pieceSlotCounts = { MaxPieceSlotCount, MaxPieceSlotCount, MaxPieceSlotCount, MaxPieceSlotCount };

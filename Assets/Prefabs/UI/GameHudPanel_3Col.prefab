@@ -3045,6 +3045,7 @@ MonoBehaviour:
   - {fileID: 21300000, guid: a610c42d2265e464f829b43ba6afac86, type: 3}
   - {fileID: 21300000, guid: 65065c5b407c6374490df4ed2ab60c98, type: 3}
   - {fileID: 21300000, guid: ab956810436ca4c4e9cea3e66122109f, type: 3}
+  - {fileID: 21300000, guid: d63033a12d52a90429b8db6bea31677e, type: 3}
   augmentActiveRing: {fileID: 21300000, guid: 2dbd673236ddf294e8b7ca97fe8899c1, type: 3}
   augmentDefinitions: {fileID: 4900000, guid: 8203d30928a62d84a9fb09280497fd93, type: 3}
   profileIcons:
