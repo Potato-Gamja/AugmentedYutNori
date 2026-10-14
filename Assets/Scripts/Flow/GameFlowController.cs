@@ -844,7 +844,7 @@ public class GameFlowController : MonoBehaviour
         List<AugmentDefinition> selection = new();
         foreach (string id in ids)
             selection.Add(augmentCatalog.Find(id));
-        panel.Setup(selection, OnAugmentSelected);
+        panel.Setup(selection, OnAugmentSelected, augmentSelectionTeam, gameSession is RemoteGameSession);
         uiManager.Open<AugmentSelectPanel>();
         hud?.SetInstruction("증강을 선택하세요.");
     }

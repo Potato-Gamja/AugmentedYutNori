@@ -134,11 +134,11 @@ PrefabInstance:
     - target: {fileID: 828511336472889071, guid: e44c14272cc20f148b45da5696d1af57, type: 3}
       propertyPath: 'prefabs.Array.data[0]'
       value: 
-      objectReference: {fileID: 189175139541178056, guid: a4efd74223a1b8b468d253bbbd699015, type: 3}
+      objectReference: {fileID: 6713037468680568508, guid: 85bc6fd14ffff444299db63fc550a4df, type: 3}
     - target: {fileID: 828511336472889071, guid: e44c14272cc20f148b45da5696d1af57, type: 3}
       propertyPath: 'prefabs.Array.data[1]'
       value: 
-      objectReference: {fileID: 1182732243874703311, guid: 4c0eeefff9c8d394e97808f7f552319e, type: 3}
+      objectReference: {fileID: 3139504158511933533, guid: e9da5db786fa812419ec0a22506e6e4d, type: 3}
     - target: {fileID: 2638968591324394123, guid: e44c14272cc20f148b45da5696d1af57, type: 3}
       propertyPath: m_Name
       value: UIRoot

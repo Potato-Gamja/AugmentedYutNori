@@ -23,7 +23,7 @@ public sealed class ReconnectPanel : UIBase
     }
     public void ShowRoom(string roomCode)
     {
-        if (roomText != null) roomText.text = $"이전에 참가한 방  {roomCode}";
+        if (roomText != null) roomText.text = roomCode;
         ShowStatus("연결이 끊긴 경기가 있습니다.\n서버에서 복귀 가능한지 확인합니다.");
         SetBusy(false);
     }

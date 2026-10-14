@@ -94,7 +94,7 @@ public class RoomPanel : UIBase
         if (copyRoomCodeButton != null)
             copyRoomCodeButton.interactable = !string.IsNullOrWhiteSpace(currentRoomCode);
         if (roomCodeText != null)
-            roomCodeText.text = $"방 코드  {room.roomCode}";
+            roomCodeText.text = room.roomCode;
 
         localReady = false;
         RoomPlayer[] members = room.members.OrderBy(player => player.team).ToArray();
@@ -127,9 +127,12 @@ public class RoomPanel : UIBase
                     : occupied ? (player.ready ? "준비 완료" : "대기 중") : "빈 자리";
                 playerStatusTexts[i].color = reconnecting ? new Color32(164, 108, 43, 255)
                     : occupied && player.ready
-                    ? new Color32(31, 145, 87, 255)
-                    : new Color32(135, 120, 100, 255);
+                    ? Color.white
+                    : occupied ? new Color32(122, 92, 62, 255) : new Color32(168, 142, 110, 255);
             }
+
+            playerSlots[i]?.GetComponent<YutNori.UI.Common.RoomSlotPresentation>()?.Show(
+                occupied, occupied && player.ready, occupied && reconnectingPlayers.Contains(player.playerId));
 
             if (playerSlotBackgrounds != null && i < playerSlotBackgrounds.Length && playerSlotBackgrounds[i] != null)
                 playerSlotBackgrounds[i].color = occupied
@@ -158,10 +161,8 @@ public class RoomPanel : UIBase
         if (roomCode != currentRoomCode || roomVisibilityText == null) return;
         roomVisibilityText.text = !isPublic.HasValue
             ? "공개 여부 확인 중..."
-            : isPublic.Value ? "공개방 · 빠른 참가 가능" : "비공개방 · 코드로만 참가 가능";
-        roomVisibilityText.color = isPublic == true
-            ? new Color32(31, 145, 87, 255)
-            : new Color32(135, 100, 60, 255);
+            : isPublic.Value ? "공개방" : "비공개방";
+        roomVisibilityText.color = new Color32(122, 92, 62, 255);
     }
 
     public void ShowRoomVisibilityUnavailable(string roomCode)
@@ -197,16 +198,6 @@ public class RoomPanel : UIBase
         bool visible = isRoomHost && requestGameStart != null && canStart;
         startGameButton.gameObject.SetActive(visible);
         startGameButton.interactable = visible && interactionEnabled;
-        if (readyButton != null)
-        {
-            readyButton.GetComponent<RectTransform>().anchoredPosition = new Vector2(visible ? -210f : -160f, -245f);
-            readyButton.GetComponent<RectTransform>().sizeDelta = new Vector2(visible ? 190f : 280f, 76f);
-        }
-        if (leaveButton != null)
-        {
-            leaveButton.GetComponent<RectTransform>().anchoredPosition = new Vector2(visible ? 210f : 160f, -245f);
-            leaveButton.GetComponent<RectTransform>().sizeDelta = new Vector2(visible ? 190f : 280f, 76f);
-        }
     }
 
     private void OnStartGameClicked()
@@ -253,5 +244,6 @@ public class RoomPanel : UIBase
     private void RefreshReadyLabel()
     {
         if (readyButtonText != null) readyButtonText.text = localReady ? "준비 취소" : "준비";
+        readyButton?.GetComponent<YutNori.UI.Common.RoomReadyButtonPresentation>()?.SetReady(localReady);
     }
 }

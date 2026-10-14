@@ -101,7 +101,7 @@ public sealed class ProfilePanel : UIBase
         ownedIconIds.Clear();
         selectedIconId = null;
         ShowProfile(coordinator?.LocalPlayerId, coordinator?.LocalNickname);
-        if (goldText != null) goldText.text = "보유 골드  —";
+        if (goldText != null) goldText.text = "—";
         SetBusy(true);
         ShowStatus("프로필과 보유 아이콘을 불러오는 중입니다.");
         try
@@ -135,7 +135,8 @@ public sealed class ProfilePanel : UIBase
         if (nicknameText != null)
             nicknameText.text = string.IsNullOrWhiteSpace(nickname) ? "닉네임 미설정" : nickname;
         if (playerIdText != null)
-            playerIdText.text = string.IsNullOrWhiteSpace(playerId) ? "플레이어 ID 없음" : $"플레이어 ID  {playerId}";
+            playerIdText.text = string.IsNullOrWhiteSpace(playerId) ? "플레이어 ID 없음"
+                : playerId.Length > 12 ? $"{playerId[..4]}…{playerId[^4..]}" : playerId;
         if (profileIcon != null)
         {
             profileIcon.sprite = icon;
@@ -154,7 +155,7 @@ public sealed class ProfilePanel : UIBase
         Sprite icon = string.IsNullOrWhiteSpace(profile.iconId)
             ? null : Resources.Load<Sprite>(ProfileIconCatalog.SpritePath(profile.iconId));
         ShowProfile(coordinator?.LocalPlayerId, profile.nickname, icon);
-        if (goldText != null) goldText.text = $"보유 골드  {profile.gold:N0}";
+        if (goldText != null) goldText.text = $"{profile.gold:N0}";
         RefreshIconOptions();
     }
 
@@ -200,12 +201,12 @@ public sealed class ProfilePanel : UIBase
             {
                 option.button.interactable = !busy && owned && !selected;
                 if (option.button.targetGraphic != null)
-                    option.button.targetGraphic.color = selected
-                        ? new Color(0.88f, 0.58f, 0.16f) : new Color(0.93f, 0.87f, 0.75f);
+                    option.button.targetGraphic.color = Color.white;
             }
             if (option.icon != null) option.icon.color = owned || selected ? Color.white : new Color(0.3f, 0.3f, 0.3f);
             if (option.stateText != null)
                 option.stateText.text = selected ? "사용 중" : owned ? "선택" : "미보유";
+            option.button?.GetComponent<YutNori.UI.Common.ProfileIconOptionPresentation>()?.Show(selected, owned);
         }
     }
 

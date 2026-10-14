@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -32,6 +32,8 @@ public static class UIImportSettingsApplier
     private static readonly string[] ApprovedSlicedConversions =
     {
         "Assets/Art/Board/Moon/brd_moon_corner.png",
+        // screens_spec 0-2 및 screens CSV에서 Single 적용을 명시한 새 로고.
+        "Assets/Art/UI/Outgame/Logo/logo_title.png",
     };
 
     // 참조 fileID를 고쳐도 되는 파일. 계획에 이 밖의 파일이 있으면 실행하지 않는다.
@@ -135,9 +137,22 @@ public static class UIImportSettingsApplier
     [MenuItem(MenuPath)]
     public static void ApplyMenu() => Apply(showDialog: true);
 
-    public static void Apply(bool showDialog)
+    [MenuItem("Tools/Yutnori/Apply UI Import Settings From CSV")]
+    public static void ApplySelectedCsvMenu()
     {
-        Plan plan = BuildPlan();
+        string folder = Path.Combine(Directory.GetParent(Application.dataPath).FullName, CsvFolder);
+        string selected = EditorUtility.OpenFilePanel("UI Import Settings CSV", folder, "csv");
+        if (string.IsNullOrEmpty(selected)) return;
+        if (!string.Equals(Path.GetDirectoryName(Path.GetFullPath(selected)), Path.GetFullPath(folder), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Docs/UI 폴더의 CSV만 선택할 수 있습니다.");
+        ApplyCsv(Path.GetFileName(selected), true);
+    }
+
+    public static void ApplyCsv(string csvName, bool showDialog = false) => Apply(showDialog, csvName);
+
+    public static void Apply(bool showDialog, string csvName = null)
+    {
+        Plan plan = BuildPlan(csvName);
         if (plan == null) return;
 
         List<string> filesToRewrite = plan.FilesToRewrite();
@@ -197,7 +212,7 @@ public static class UIImportSettingsApplier
         report.Save("apply");
     }
 
-    private static Plan BuildPlan()
+    private static Plan BuildPlan(string selectedCsv = null)
     {
         string projectRoot = Directory.GetParent(Application.dataPath).FullName;
         string folder = Path.Combine(projectRoot, CsvFolder);
@@ -208,13 +223,17 @@ public static class UIImportSettingsApplier
             return null;
         }
 
-        foreach (string name in PriorityOrder.Where(name => !File.Exists(Path.Combine(folder, name))))
+        foreach (string name in PriorityOrder.Where(name => selectedCsv == null && !File.Exists(Path.Combine(folder, name))))
         {
             Debug.LogError($"[UIImport] CSV 파일이 없습니다: {CsvFolder}/{name}");
         }
 
+        if (selectedCsv != null && (Path.GetFileName(selectedCsv) != selectedCsv ||
+            !selectedCsv.StartsWith("import_settings", StringComparison.Ordinal) ||
+            !selectedCsv.EndsWith(".csv", StringComparison.OrdinalIgnoreCase) || !File.Exists(Path.Combine(folder, selectedCsv))))
+            throw new InvalidOperationException($"유효한 UI CSV가 아닙니다: {selectedCsv}");
         var plan = new Plan();
-        plan.CsvFiles = Directory.GetFiles(folder, CsvPattern)
+        plan.CsvFiles = (selectedCsv == null ? Directory.GetFiles(folder, CsvPattern) : new[] { Path.Combine(folder, selectedCsv) })
             .Select(Path.GetFileName)
             .OrderBy(GetPriority)
             .ThenBy(name => name, StringComparer.Ordinal)

@@ -14,6 +14,9 @@ public class AchievementItemView : MonoBehaviour
     [SerializeField] private TMP_Text rewardText;
     [SerializeField] private Button claimButton;
     [SerializeField] private TMP_Text claimButtonLabel;
+    [SerializeField] private Image claimableBorder;
+    [SerializeField] private GameObject claimedCheck;
+    [SerializeField] private Sprite claimReadySprite, claimDisabledSprite, claimBusySprite;
 
     public event Action<AchievementItemView> ClaimClicked;
 
@@ -59,12 +62,26 @@ public class AchievementItemView : MonoBehaviour
         if (claimButtonLabel != null)
         {
             claimButtonLabel.text = Entry.claimed ? "받음" : canClaim ? (busy ? "받는 중" : "받기") : "진행 중";
-            claimButtonLabel.color = canClaim ? Color.white : new Color(0.35f, 0.28f, 0.18f);
+            claimButtonLabel.color = canClaim && !busy ? Color.white : new Color32(168, 142, 110, 255);
+            claimButtonLabel.fontSize = canClaim ? 28 : 24;
+            claimButtonLabel.rectTransform.anchoredPosition = new Vector2(Entry.claimed ? 12 : 0, 0);
         }
         if (claimButton?.targetGraphic != null)
-            claimButton.targetGraphic.color = canClaim
-                ? new Color(0.12f, 0.58f, 0.36f)
-                : Entry.claimed ? new Color(0.88f, 0.75f, 0.5f) : new Color(0.9f, 0.86f, 0.76f);
+        {
+            claimButton.targetGraphic.color = canClaim && !busy ? new Color32(145, 95, 48, 255) : Color.white;
+            if (claimReadySprite != null && claimDisabledSprite != null && claimBusySprite != null)
+            {
+                ((Image)claimButton.targetGraphic).sprite = canClaim ? claimReadySprite : claimDisabledSprite;
+                SpriteState state = claimButton.spriteState;
+                state.disabledSprite = canClaim ? claimBusySprite : claimDisabledSprite;
+                claimButton.spriteState = state;
+            }
+        }
+        if (claimableBorder != null) claimableBorder.gameObject.SetActive(canClaim);
+        if (claimedCheck != null) claimedCheck.SetActive(Entry.claimed);
+        if (nameText != null) nameText.color = Entry.claimed ? new Color32(168, 142, 110, 255) : new Color32(58, 38, 24, 255);
+        if (descriptionText != null) descriptionText.color = Entry.claimed ? new Color32(168, 142, 110, 255) : new Color32(122, 92, 62, 255);
+        if (progressFill != null) progressFill.color = Entry.claimed ? new Color32(203, 176, 138, 255) : new Color32(138, 90, 46, 255);
     }
 
     // 받기 성공 후 상태만 바꿔 다시 그린다
