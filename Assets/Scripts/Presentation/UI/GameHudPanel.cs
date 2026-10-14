@@ -169,6 +169,8 @@ public class GameHudPanel : UIBase
         playerView?.Configure(teamCount, piecesPerTeam, teamPieceSprites, teamPieceGlowSprites);
     }
 
+    public void SetPieceCount(int team, int count) => playerView?.SetPieceCount(team, count);
+
     public void ConfigurePlayerProfiles(IReadOnlyList<PlayerDisplayInfo> profiles)
     {
         playerView?.SetPlayerProfiles(profiles, profileIcons);

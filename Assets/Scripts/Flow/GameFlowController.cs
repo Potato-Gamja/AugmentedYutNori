@@ -680,6 +680,8 @@ public class GameFlowController : MonoBehaviour
             Debug.LogWarning($"[GameFlow] GameSetup과 씬의 말 구성이 다릅니다. 기존 목록 ID로 실행합니다.\n{string.Join("\n", errors)}", this);
         BindPieces();
         RefreshPieceLayout();
+        for (int team = 0; team < setup.teamCount; team++)
+            hud.SetPieceCount(team, PieceCount(team));
         hudPresenter.RefreshPlayerPanels();
         lastStateHash = StateHasher.HashHex(gameState, turnManager);
     }
