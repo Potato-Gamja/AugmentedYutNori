@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -60,6 +60,7 @@ public class LobbyController : MonoBehaviour
         lobbyPanel.CollectionRequested += OnCollectionRequested;
         roomPanel.ReadyRequested += OnReadyRequested;
         roomPanel.LeaveRequested += OnLeaveRequested;
+        roomPanel.SettingsRequested += OnSettingsRequested;
         mainMenuPanel.PlayRequested += OnPlayRequested;
         mainMenuPanel.GachaRequested += OnGachaRequested;
         mainMenuPanel.CollectionRequested += OnCollectionRequested;
@@ -86,6 +87,7 @@ public class LobbyController : MonoBehaviour
         {
             roomPanel.ReadyRequested -= OnReadyRequested;
             roomPanel.LeaveRequested -= OnLeaveRequested;
+            roomPanel.SettingsRequested -= OnSettingsRequested;
         }
         if (mainMenuPanel != null)
         {
@@ -240,6 +242,11 @@ public class LobbyController : MonoBehaviour
             roomPanel.SetReadyInteractable(false);
             roomPanel.ShowStatus("경기가 종료되었습니다. 재경기는 서버의 방 초기화 기능 연결 후 가능합니다.");
         }
+    }
+
+    public void ReceiveRoomConnections(System.Collections.Generic.IEnumerable<string> reconnectingPlayerIds)
+    {
+        if (roomPanel != null) roomPanel.ShowReconnectingPlayers(reconnectingPlayerIds);
     }
 
     public void ReceiveRoomVisibility(string roomCode, bool? isPublic)

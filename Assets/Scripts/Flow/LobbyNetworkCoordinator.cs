@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -47,7 +47,15 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     private GameReconnectData reconnectData;
     private string pendingRoomCode;
     private string pendingNickname;
+    private bool awaitingRoomJoin;
+    private bool changingRoomSocket;
+    private int roomJoinVersion;
+    private Task roomSocketCleanupTask = Task.CompletedTask;
     private bool leaveRequested;
+    private bool gameExitInProgress;
+    private readonly HashSet<string> reconnectingRoomPlayers = new();
+    // Unity의 파괴된 객체는 ?. 검사에서 걸러지지 않으므로 실제 null로 바꿔서 호출한다.
+    private LobbyController ActiveLobbyController => lobbyController != null ? lobbyController : null;
     // GAME_ENDED가 재전송돼도 보상을 한 번만 더하도록 (GAME_START마다 초기화)
     private bool rewardAppliedThisGame;
     private Task silentLoginTask = Task.CompletedTask;
@@ -147,7 +155,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     private void BindLobbyController()
     {
         LobbyController next = FindFirstObjectByType<LobbyController>();
-        if (next == lobbyController) return;
+        if (ReferenceEquals(next, lobbyController)) return;
 
         UnbindLobbyController();
         lobbyController = next;
@@ -196,7 +204,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
             playerIdentity.ApplyLogin(login, firebaseUser.RefreshToken);
             apiClient.Token = playerIdentity.Token;
-            lobbyController?.SetLocalPlayer(playerIdentity.PlayerId, playerIdentity.Nickname);
+            ActiveLobbyController?.SetLocalPlayer(playerIdentity.PlayerId, playerIdentity.Nickname);
         }
         catch (RefreshFailedException exception) when (exception.Expired)
         {
@@ -279,7 +287,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
                 {
                     ClearRoomSessionState();
                     reconnecting = false;
-                    lobbyController?.ShowReconnectFailure(exception.Message);
+                    ActiveLobbyController?.ShowReconnectFailure(exception.Message);
                 }
             }
             throw;
@@ -331,7 +339,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         playerIdentity.ApplyGold(response.gold);
         if (!string.IsNullOrWhiteSpace(response.nickname))
             playerIdentity.ApplyNickname(response.nickname);
-        lobbyController?.SetLocalPlayer(LocalPlayerId, LocalNickname);
+        ActiveLobbyController?.SetLocalPlayer(LocalPlayerId, LocalNickname);
         return response;
     }
 
@@ -346,7 +354,11 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     private void UnbindLobbyController()
     {
-        if (lobbyController == null) return;
+        if (lobbyController == null)
+        {
+            lobbyController = null;
+            return;
+        }
         lobbyController.CreateRoomRequested -= OnCreateRoomRequested;
         lobbyController.JoinRoomRequested -= OnJoinRoomRequested;
         lobbyController.QuickJoinRequested -= OnQuickJoinRequested;
@@ -380,7 +392,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         }
         catch (Exception exception)
         {
-            lobbyController?.ReceiveError(ToUserMessage(exception));
+            ActiveLobbyController?.ReceiveError(ToUserMessage(exception));
         }
     }
 
@@ -404,7 +416,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         }
         catch (Exception exception)
         {
-            lobbyController?.ReceiveError(ToUserMessage(exception));
+            ActiveLobbyController?.ReceiveError(ToUserMessage(exception));
         }
     }
 
@@ -417,7 +429,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         }
         catch (Exception exception)
         {
-            lobbyController?.ReceiveError(ToUserMessage(exception));
+            ActiveLobbyController?.ReceiveError(ToUserMessage(exception));
         }
     }
 
@@ -437,7 +449,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         }
 
         apiClient.Token = playerIdentity.Token;
-        lobbyController?.SetLocalPlayer(playerIdentity.PlayerId, playerIdentity.Nickname);
+        ActiveLobbyController?.SetLocalPlayer(playerIdentity.PlayerId, playerIdentity.Nickname);
     }
 
     public async Task<string> ChangeNicknameAsync(string nickname)
@@ -453,7 +465,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
             : response.nickname.Trim();
 
         playerIdentity.ApplyNickname(updatedNickname);
-        lobbyController?.SetLocalPlayer(playerIdentity.PlayerId, updatedNickname);
+        ActiveLobbyController?.SetLocalPlayer(playerIdentity.PlayerId, updatedNickname);
         return updatedNickname;
     }
 
@@ -501,6 +513,8 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     private void GoToLogin()
     {
+        ++roomJoinVersion;
+        awaitingRoomJoin = false;
         UnbindLobbyController();
         pendingRoomCode = null;
         pendingNickname = null;
@@ -510,25 +524,57 @@ public class LobbyNetworkCoordinator : MonoBehaviour
             SceneManager.LoadScene(loginSceneName);
     }
 
-    private void ConnectAndJoin(string roomCode, string nickname)
+    private async void ConnectAndJoin(string roomCode, string nickname)
     {
-        pendingRoomCode = roomCode?.Trim();
-        pendingNickname = nickname?.Trim();
-        leaveRequested = false;
-
-        if (string.IsNullOrEmpty(pendingRoomCode))
+        string nextRoomCode = roomCode?.Trim();
+        if (string.IsNullOrEmpty(nextRoomCode))
         {
-            lobbyController?.ReceiveError("방 코드를 입력해 주세요.");
+            ActiveLobbyController?.ReceiveError("방 코드를 입력해 주세요.");
             return;
         }
 
-        // 서버 확정 주소: ws://{host}/ws/rooms/{roomCode}
-        // webSocketUrl에는 방 코드를 제외한 ws://{host}/ws까지만 설정한다.
-        webSocketClient.Url = BuildRoomWebSocketUrl(pendingRoomCode);
-        if (webSocketClient.IsConnected)
-            SendJoinRoom();
-        else
+        int version = ++roomJoinVersion;
+        leaveRequested = false;
+        try
+        {
+            // JOIN_ROOM은 소켓 주소의 방에만 입장한다. 이전 주소의 연결을 재사용하지 않는다.
+            await CloseRoomSocketForJoin();
+            if (this == null || version != roomJoinVersion || logoutRequested) return;
+            pendingRoomCode = nextRoomCode;
+            pendingNickname = nickname?.Trim();
+            awaitingRoomJoin = true;
+            webSocketClient.Url = BuildRoomWebSocketUrl(nextRoomCode);
             webSocketClient.Connect(playerIdentity.Token);
+        }
+        catch (Exception exception)
+        {
+            if (version == roomJoinVersion) FailRoomJoin(ToUserMessage(exception));
+        }
+    }
+
+    private Task CloseRoomSocketForJoin()
+    {
+        if (!roomSocketCleanupTask.IsCompleted) return roomSocketCleanupTask;
+        roomSocketCleanupTask = CloseRoomSocketForJoinCore();
+        return roomSocketCleanupTask;
+    }
+
+    private async Task CloseRoomSocketForJoinCore()
+    {
+        changingRoomSocket = true;
+        ClearRoomSessionState();
+        try { if (webSocketClient != null) await webSocketClient.CloseAndWait(); }
+        finally { changingRoomSocket = false; }
+    }
+
+    private async void FailRoomJoin(string message)
+    {
+        int version = ++roomJoinVersion;
+        awaitingRoomJoin = false;
+        try { await CloseRoomSocketForJoin(); }
+        catch (Exception exception) { Debug.LogWarning($"[Lobby] 참가 실패 연결 정리: {exception.Message}"); }
+        if (this != null && version == roomJoinVersion)
+            ActiveLobbyController?.ReceiveError(message);
     }
 
     private string BuildRoomWebSocketUrl(string roomCode)
@@ -542,6 +588,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     private void OnConnected()
     {
+        if (changingRoomSocket) return;
         // 재접속은 새 방 참가가 아니다. 진행 중인 방에 JOIN_ROOM을 보내지 않는다.
         if (reconnecting)
         {
@@ -549,7 +596,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
                 reconnectSnapshot?.TrySetException(new InvalidOperationException("게임 상태를 요청하지 못했습니다."));
             return;
         }
-        SendJoinRoom();
+        if (awaitingRoomJoin) SendJoinRoom();
     }
 
     private void SendJoinRoom()
@@ -562,26 +609,28 @@ public class LobbyNetworkCoordinator : MonoBehaviour
             nickname = pendingNickname,
         });
 
-        if (!sent) lobbyController?.ReceiveError("방 참가 요청을 보내지 못했습니다.");
+        if (!sent) FailRoomJoin("방 참가 요청을 보내지 못했습니다.");
     }
 
     private void OnReadyRequested(bool ready)
     {
         if (!CanReadyInCurrentRoom)
         {
-            lobbyController?.ReceiveError("재경기는 서버의 방 초기화 기능 연결 후 가능합니다.");
+            ActiveLobbyController?.ReceiveError("재경기는 서버의 방 초기화 기능 연결 후 가능합니다.");
             return;
         }
         if (!webSocketClient.IsConnected ||
             !webSocketClient.Send(MessageType.READY, new ReadyRequest { ready = ready }))
         {
-            lobbyController?.ReceiveError("서버에 연결되어 있지 않습니다.");
+            ActiveLobbyController?.ReceiveError("서버에 연결되어 있지 않습니다.");
         }
     }
 
     private async void OnLeaveRoomRequested()
     {
         if (leaveRequested) return;
+        ++roomJoinVersion;
+        awaitingRoomJoin = false;
         leaveRequested = true;
         reconnectCache?.Clear();
         if (webSocketClient.IsConnected) webSocketClient.Send(MessageType.LEAVE_ROOM);
@@ -592,12 +641,13 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         {
             ClearRoomSessionState();
             leaveRequested = false;
-            lobbyController?.ReturnToLobby();
+            ActiveLobbyController?.ReturnToLobby();
         }
     }
 
     public void ReturnToWaitingRoom()
     {
+        if (gameExitInProgress || returnToRoomRequested) return;
         if (!webSocketClient.IsConnected || lastRoomState == null)
         {
             LeaveGameToMainMenu();
@@ -614,6 +664,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         returnToRoomRequested = false;
         controller.SetLocalPlayer(LocalPlayerId, LocalNickname);
         controller.ReceiveRoomState(lastRoomState);
+        controller.ReceiveRoomConnections(reconnectingRoomPlayers);
         _ = RefreshRoomVisibilityAsync(lastRoomState.roomCode);
     }
 
@@ -636,21 +687,25 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     public async void LeaveGameToMainMenu()
     {
-        if (leaveRequested) return;
+        if (gameExitInProgress) return;
 
+        gameExitInProgress = true;
         leaveRequested = true;
         reconnectCache?.Clear();
         if (webSocketClient.IsConnected)
             webSocketClient.Send(MessageType.LEAVE_ROOM);
-        await webSocketClient.CloseAndWait();
-
+        try { if (webSocketClient != null) await webSocketClient.CloseAndWait(); }
+        catch (Exception exception) { Debug.LogWarning($"[Lobby] 연결 종료 실패: {exception.Message}"); }
+        if (this == null) return;
         ClearRoomSessionState();
         leaveRequested = false;
         SceneManager.LoadScene(lobbySceneName);
+        gameExitInProgress = false;
     }
 
     private void OnMessageReceived(WsEnvelope envelope)
     {
+        if (changingRoomSocket) return;
         // GAME_START 직후의 개인 선택지·확정 메시지가 씬 로딩 중 사라지지 않도록 보관한다.
         if (waitingForGameSession && envelope.type != MessageType.GAME_START &&
             envelope.type != MessageType.ROOM_STATE && envelope.type != MessageType.PONG)
@@ -663,10 +718,19 @@ public class LobbyNetworkCoordinator : MonoBehaviour
                     // LEAVE_ROOM 방송은 나간 본인에게도 올 수 있다. 대기실을 다시 열지 않는다.
                     if (leaveRequested) break;
                     RoomStateMessage room = MessageSerializer.ReadPayload<RoomStateMessage>(envelope);
+                    if (awaitingRoomJoin)
+                    {
+                        if (room?.roomCode != pendingRoomCode ||
+                            room.members?.Exists(member => member.playerId == LocalPlayerId) != true) break;
+                        awaitingRoomJoin = false;
+                    }
+                    if (lastRoomState?.roomCode != room?.roomCode) reconnectingRoomPlayers.Clear();
+                    reconnectingRoomPlayers.RemoveWhere(id => room?.members == null || !room.members.Exists(member => member.playerId == id));
                     lastRoomState = room;
                     if (gameEnded && room?.status == "WAITING") gameEnded = false;
                     CachePlayerTeams(room);
-                    lobbyController?.ReceiveRoomState(room);
+                    ActiveLobbyController?.ReceiveRoomState(room);
+                    ActiveLobbyController?.ReceiveRoomConnections(reconnectingRoomPlayers);
                     if (lobbyController != null && room != null)
                         _ = RefreshRoomVisibilityAsync(room.roomCode);
                     break;
@@ -695,7 +759,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
                     waitingForGameSession = true;
                     rewardAppliedThisGame = false;
                     GameInstaller.PreparePlayerProfiles(playerProfiles);
-                    lobbyController?.ReceiveGameStart(started);
+                    ActiveLobbyController?.ReceiveGameStart(started);
                     break;
 
                 case MessageType.GAME_SNAPSHOT:
@@ -717,9 +781,33 @@ public class LobbyNetworkCoordinator : MonoBehaviour
                     reconnectSnapshot.TrySetResult(envelope);
                     break;
 
+                case MessageType.PLAYER_DISCONNECTED:
+                    PlayerDisconnectedMessage disconnected = MessageSerializer.ReadPayload<PlayerDisconnectedMessage>(envelope);
+                    if (!leaveRequested && !string.IsNullOrEmpty(disconnected?.playerId) &&
+                        lastRoomState?.members?.Exists(member => member.playerId == disconnected.playerId) == true)
+                    {
+                        reconnectingRoomPlayers.Add(disconnected.playerId);
+                        ActiveLobbyController?.ReceiveRoomConnections(reconnectingRoomPlayers);
+                    }
+                    break;
+
+                case MessageType.PLAYER_RECONNECTED:
+                    PlayerReconnectedMessage reconnected = MessageSerializer.ReadPayload<PlayerReconnectedMessage>(envelope);
+                    if (!leaveRequested && reconnected != null)
+                    {
+                        reconnectingRoomPlayers.Remove(reconnected.playerId);
+                        ActiveLobbyController?.ReceiveRoomConnections(reconnectingRoomPlayers);
+                    }
+                    break;
+
                 case MessageType.PLAYER_REMOVED:
                     PlayerRemovedMessage removed = MessageSerializer.ReadPayload<PlayerRemovedMessage>(envelope);
                     if (removed?.playerId == LocalPlayerId) reconnectCache?.Clear();
+                    if (removed != null)
+                    {
+                        reconnectingRoomPlayers.Remove(removed.playerId);
+                        ActiveLobbyController?.ReceiveRoomConnections(reconnectingRoomPlayers);
+                    }
                     break;
 
                 case MessageType.GAME_ENDED:
@@ -756,14 +844,16 @@ public class LobbyNetworkCoordinator : MonoBehaviour
                         OnGameReconnectRejected(error?.message ?? "이 경기에 복귀할 수 없습니다.");
                         break;
                     }
-                    lobbyController?.ReceiveError(error?.message ?? "서버 요청이 거절됐습니다.");
+                    if (awaitingRoomJoin)
+                        FailRoomJoin(error?.message ?? "방 참가에 실패했습니다.");
+                    else ActiveLobbyController?.ReceiveError(error?.message ?? "서버 요청이 거절됐습니다.");
                     break;
             }
         }
         catch (Exception exception)
         {
             if (reconnecting) reconnectSnapshot?.TrySetException(exception);
-            else lobbyController?.ReceiveError($"서버 메시지를 처리하지 못했습니다: {exception.Message}");
+            else ActiveLobbyController?.ReceiveError($"서버 메시지를 처리하지 못했습니다: {exception.Message}");
         }
     }
 
@@ -776,31 +866,39 @@ public class LobbyNetworkCoordinator : MonoBehaviour
             CreateRoomRestResponse response = await apiClient.Get<CreateRoomRestResponse>(
                 $"/rooms/{Uri.EscapeDataString(roomCode)}");
             if (version != roomVisibilityRequestVersion || lastRoomState?.roomCode != roomCode) return;
-            lobbyController?.ReceiveRoomVisibility(roomCode, response?.code == roomCode ? response.isPublic : null);
+            ActiveLobbyController?.ReceiveRoomVisibility(roomCode, response?.code == roomCode ? response.isPublic : null);
         }
         catch (Exception exception)
         {
             if (version != roomVisibilityRequestVersion || lastRoomState?.roomCode != roomCode) return;
-            lobbyController?.ReceiveRoomVisibility(roomCode, null);
+            ActiveLobbyController?.ReceiveRoomVisibility(roomCode, null);
             Debug.LogWarning($"[LobbyNetwork] 방 공개 여부 조회 실패: {exception.Message}");
         }
     }
 
     private void OnSocketError(string message)
     {
+        if (changingRoomSocket) return;
         if (reconnecting)
         {
             reconnectSnapshot?.TrySetException(new InvalidOperationException("서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요."));
             return;
         }
-        lobbyController?.ReceiveError($"서버 연결 오류: {message}");
+        if (awaitingRoomJoin) FailRoomJoin($"서버 연결 오류: {message}");
+        else ActiveLobbyController?.ReceiveError($"서버 연결 오류: {message}");
     }
 
     private void OnDisconnected(bool byUser)
     {
+        if (changingRoomSocket) return;
         if (reconnecting)
         {
             if (!byUser) reconnectSnapshot?.TrySetException(new InvalidOperationException("재접속 중 연결이 끊어졌습니다."));
+            return;
+        }
+        if (awaitingRoomJoin)
+        {
+            FailRoomJoin("방 참가 중 서버 연결이 끊어졌습니다.");
             return;
         }
         pendingRoomCode = null;
@@ -811,18 +909,20 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         {
             ClearRoomSessionState();
             leaveRequested = false;
-            lobbyController?.ReturnToLobby();
+            ActiveLobbyController?.ReturnToLobby();
             return;
         }
 
-        lobbyController?.ReceiveError("서버 연결이 끊어졌습니다.");
+        ActiveLobbyController?.ReceiveError("서버 연결이 끊어졌습니다.");
     }
 
     private void ClearRoomSessionState()
     {
+        awaitingRoomJoin = false;
         pendingRoomCode = null;
         pendingNickname = null;
         lastRoomState = null;
+        reconnectingRoomPlayers.Clear();
         gameEnded = false;
         returnToRoomRequested = false;
         waitingForGameSession = false;
