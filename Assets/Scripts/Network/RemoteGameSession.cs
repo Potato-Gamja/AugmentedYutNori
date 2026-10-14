@@ -55,7 +55,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
     public event Action<int> AutomatedMoveApplied;
     public event Action<bool> ConnectionAvailabilityChanged;
     public event Action<GameSnapshotMessage> SnapshotApplied;
-    public event Action AugmentsRestored;   // 스냅샷의 증강 복원 직후, 말 복원 전 (팀별 말 수를 정할 수 있는 시점)
+    public event Action<GameSnapshotMessage> AugmentsRestored;   // 스냅샷의 증강 복원 직후, 말 복원 전 (팀별 말 수를 정할 수 있는 시점)
     public event Action<string> ReconnectRejected;
 
 
@@ -535,7 +535,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
 
         // 증강 먼저: 노장이면 말 수가 달라서, 증강을 알아야 말을 만들 수 있다
         RestoreAugments(snapshot.ownedAugments);
-        AugmentsRestored?.Invoke();
+        AugmentsRestored?.Invoke(snapshot);
         RestorePieces(snapshot.pieces);
 
         bool ended = snapshot.phase == "ENDED";

@@ -44,6 +44,7 @@ public class GameFlowController : MonoBehaviour
     private GameFlowState currentState;
     private bool isMoving;
     private bool piecesCreated;
+    private readonly HashSet<int> removedTeams = new();  // 게임에서 빠진 팀 (말을 만들지 않음)
     private bool leavingGame;
     private int teamCount;
     private int augmentSelectionTeam;
@@ -231,8 +232,9 @@ public class GameFlowController : MonoBehaviour
         pieceViews.RemoveAll(view => !view.gameObject.activeSelf);
     }
 
-    // 팀의 말 수 (노장이면 1개 적게). 증강이 확정된 뒤에만 의미가 있다
-    private int PieceCount(int team) => VeteranAugment.PieceCountFor(boardState, team, setup.piecesPerTeam);
+    // 팀의 말 수 (나간 팀 0, 노장이면 1개 적게). 증강이 확정된 뒤에만 의미가 있다
+    private int PieceCount(int team) =>
+        removedTeams.Contains(team) ? 0 : VeteranAugment.PieceCountFor(boardState, team, setup.piecesPerTeam);
 
     // 모든 팀이 증강을 하나씩 가졌는지 (원격·재접속에서 말을 만들 시점)
     private bool AllTeamsHaveAugment()
@@ -350,10 +352,14 @@ public class GameFlowController : MonoBehaviour
         }
     }
 
-    // 재접속 스냅샷: 증강이 복원된 직후, 말 복원 전에 팀별 말 수로 말을 만든다 (증강 선택 중이면 만들지 않음)
-    private void OnAugmentsRestored()
+    // 재접속: 증강 선택 중이면 말을 만들지 않고, 그 뒤면 스냅샷에 말이 없는 팀(나간 팀)을 빼고 만든다
+    private void OnAugmentsRestored(GameSnapshotMessage snapshot)
     {
-        if (AllTeamsHaveAugment()) CreatePieces();
+        if (snapshot.phase == "AUGMENT_SELECT") return;
+        for (int team = 0; team < teamCount; team++)
+            if (snapshot.pieces != null && !snapshot.pieces.Exists(p => p != null && p.team == team))
+                removedTeams.Add(team);
+        CreatePieces();
     }
 
     private void SubscribeEvents()
@@ -619,6 +625,7 @@ public class GameFlowController : MonoBehaviour
 
     private void OnRemotePlayerRemoved(string playerId, int team)
     {
+        removedTeams.Add(team);
         hud?.SetPlayerConnectionState(team, PlayerStatusView.ConnectionState.Removed);
         selectionController?.Clear();
         foreach (PieceView view in pieceViews)
@@ -681,7 +688,10 @@ public class GameFlowController : MonoBehaviour
         BindPieces();
         RefreshPieceLayout();
         for (int team = 0; team < setup.teamCount; team++)
-            hud.SetPieceCount(team, PieceCount(team));
+        {
+            int count = PieceCount(team);
+            if (count > 0) hud.SetPieceCount(team, count);
+        }
         hudPresenter.RefreshPlayerPanels();
         lastStateHash = StateHasher.HashHex(gameState, turnManager);
     }
