@@ -25,12 +25,19 @@ public static class UIAugmentPlayVerification
     {
         if(EditorApplication.isPlayingOrWillChangePlaymode)throw new InvalidOperationException("Play를 종료해 주세요.");
         var original=SceneManager.GetActiveScene();if(original.isDirty)throw new InvalidOperationException("현재 씬의 변경을 먼저 저장하거나 취소해 주세요.");
+        SessionState.SetBool(Key+"veteran",false);SessionState.SetInt(Key+"forcedTeam",-1);
         SessionState.SetString(Key+"original",original.path);SessionState.SetString(Key+"report","");SessionState.SetInt(Key+"count",0);SessionState.SetInt(Key+"independentCount",0);SessionState.SetBool(Key+"restore",false);SessionState.SetBool(Key+"running",true);
         var game=EditorSceneManager.OpenScene("Assets/Scenes/Game.unity",OpenSceneMode.Single);var installer=UnityEngine.Object.FindFirstObjectByType<GameInstaller>();
         var so=new SerializedObject(installer);Require(so.FindProperty("defaultMode").enumValueIndex==(int)GameSessionMode.Local,"GameInstaller 기본 설정 Local");
         // 이번 검사는 로비에서 전달된 온라인 시작 정보가 없는 순수 Game 씬 실행이다.
         Require(typeof(GameInstaller).GetField("pendingGameStart",BindingFlags.Static|BindingFlags.NonPublic).GetValue(null)==null,"미소비 온라인 시작 정보 없음");
         EditorApplication.isPlaying=true;
+    }
+    [MenuItem("Tools/Yutnori/Augments/Verify Veteran Local Play")]
+    public static void StartVeteran()
+    {
+        Start();
+        SessionState.SetBool(Key+"veteran",true);
     }
     private static T Private<T>(object owner,string name)
     {return (T)owner.GetType().GetField(name,BindingFlags.Instance|BindingFlags.NonPublic).GetValue(owner);}
@@ -74,6 +81,18 @@ public static class UIAugmentPlayVerification
             if(now>deadline)throw new TimeoutException("검증 단계 "+phase+" 시간 초과 · 확정 수="+SessionState.GetInt(Key+"count",0));
             if(phase==0)
             {
+                if(SessionState.GetBool(Key+"veteran",false))
+                {
+                    Require(Private<BoardState>(flow,"boardState").Pieces.Count==0,"증강 선택 중 말 생성 없음");
+                    foreach(var view in Private<System.Collections.Generic.List<PieceView>>(flow,"pieceViews"))Require(!view.gameObject.activeSelf,"선택 중 씬 말 숨김");
+                    if(SessionState.GetInt(Key+"forcedTeam",-1)!=team)
+                    {
+                        var choices=new System.Collections.Generic.List<string>{team==0?"Veteran":"Hunter","Monk","Rethrow"};
+                        Private<GameRules>(flow,"gameRules").SetAugmentChoices(team,choices);
+                        typeof(GameFlowController).GetMethod("OnAugmentChoices",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(flow,new object[]{team,choices});
+                        SessionState.SetInt(Key+"forcedTeam",team);
+                    }
+                }
                 var panel=RealPanel();if(panel==null||!panel.IsOpen)return;
                 var cards=panel.GetComponentsInChildren<AugmentCardView>();if(cards.Length!=3)return;
                 Require(Private<int>(flow,"augmentSelectionTeam")==team,"선택 차례 "+team);Require(UIAugmentPrefabBuilder.Field<TMPro.TMP_Text>(panel,"titleText").color==AugmentCardView.TeamColor(team,true),"로컬 현재 팀 색");
@@ -87,7 +106,19 @@ public static class UIAugmentPlayVerification
             {
                 Require(SessionState.GetInt(Key+"count",0)==team+1,"확정 이벤트 정확히 한 번");Require(SessionState.GetFloat(Key+"delay",0)>=0.29f,"0.3초보다 먼저 확정하지 않음");Require(SessionState.GetString(Key+"chosen","")==chosen,"누른 후보 확정");Pass("팀 "+team+" · 선택 +8 · 0.3초 지연 · 중복 클릭 차단 · 실제 확정");
                 team++;deadline=now+15;if(team<4){phase=0;return;}
-                Require(Private<GameFlowState>(flow,"currentState")==GameFlowState.Throw,"4팀 선택 뒤 Throw 진입");Pass("4팀 실제 선택 완료 → 윷 던지기 단계");BeginIndependent();phase=4;
+                Require(Private<GameFlowState>(flow,"currentState")==GameFlowState.Throw,"4팀 선택 뒤 Throw 진입");Pass("4팀 실제 선택 완료 → 윷 던지기 단계");
+                if(SessionState.GetBool(Key+"veteran",false))
+                {
+                    var board=Private<BoardState>(flow,"boardState");Require(board.Pieces.Count==15,"전체 말 15개");
+                    Require(board.GetPiece(3)==null&&board.GetPiece(2)!=null,"노장 슬롯 0~2만 생성");
+                    typeof(GameFlowController).GetMethod("CreatePieces",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(flow,null);
+                    Require(board.Pieces.Count==15,"중복 말 생성 차단");
+                    var hud=UnityEngine.Object.FindFirstObjectByType<UIManager>().Get<GameHudPanel>();
+                    var playerView=Private<PlayerStatusView>(hud,"playerView");
+                    Require(Private<int[]>(playerView,"pieceSlotCounts")[0]==3,"노장 HUD 슬롯 3개");
+                    Pass("노장 실제 선택 → 말 3개 · 나머지 4개 · 중복 생성 차단 · HUD 3칸");
+                }
+                BeginIndependent();phase=4;
             }
             else if(phase==4&&now-clickedAt>=0.1){independent.Close();phase=5;}
             else if(phase==5&&now-clickedAt>=0.5)
@@ -112,7 +143,7 @@ public static class UIAugmentPlayVerification
     {
         if(session!=null)session.AugmentSelected-=OnConfirmed;
         string report=SessionState.GetString(Key+"report","")+(exception==null?"RESULT: PASS\n":"RESULT: FAIL · "+exception+"\n");
-        Directory.CreateDirectory(UIScreenPreparation.Reports);File.WriteAllText(UIScreenPreparation.Reports+"stage6_local_play_validation.txt",report);
+        Directory.CreateDirectory(UIScreenPreparation.Reports);File.WriteAllText(UIScreenPreparation.Reports+(SessionState.GetBool(Key+"veteran",false)?"veteran_local_play_validation.txt":"stage6_local_play_validation.txt"),report);
         SessionState.SetBool(Key+"restore",true);EditorApplication.isPlaying=false;
         if(exception!=null)Debug.LogError(report);else Debug.Log(report);
     }

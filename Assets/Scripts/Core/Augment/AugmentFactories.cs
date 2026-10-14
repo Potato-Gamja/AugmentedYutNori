@@ -19,6 +19,7 @@ public static class AugmentFactories
         augments.Add("Loner", team => new LonerAugment(team));
         augments.Add("Hunter", team => new HunterAugment(team));
         augments.Add("Gambler", team => new GamblerAugment(team));
+        augments.Add("Veteran", team => new VeteranAugment(team));
         return augments;
     }
 }

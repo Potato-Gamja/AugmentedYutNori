@@ -59,7 +59,7 @@ public static class UIAugmentPrefabBuilder
         var badge=Image("CheckBadge",visual.transform,Sprite("badge_check_red"),Color.white,false);Center(badge.rectTransform,304,36,40,40);
         var check=Image("Check",badge.transform,Sprite("icon_check"),Color.white,false);Center(check.rectTransform,20,20,20,20);badge.gameObject.SetActive(false);
         Bind(view,"augmentIcon",icon);Bind(view,"augumentName",name);Bind(view,"augmentDescription",description);
-        string[] keys={"assassin","hunter","marathoner","monk","sprinter","loner","pacifist","friend_shield","gambler","rethrow","contrarian"};BindArray(view,"augmentIcons",keys.Select(key=>Sprite("aug_"+key)));
+        string[] keys={"assassin","hunter","marathoner","monk","sprinter","loner","pacifist","friend_shield","gambler","rethrow","contrarian"};BindArray(view,"augmentIcons",keys.Select(key=>Sprite("aug_"+key)).Concat(new[]{VeteranUIIntegration.Icon} ));
         Bind(view,"visual",visual.GetComponent<RectTransform>());Bind(view,"categoryPill",category);Bind(view,"categoryLabel",categoryText);Bind(view,"hoverBorder",hover);Bind(view,"selectedBorder",selected);Bind(view,"selectedGlow",glow);Bind(view,"checkBadge",badge);Bind(view,"checkMark",check);
         BindArray(view,"teamCheckBadges",new[]{"red","blue","green","yellow"}.Select(key=>Sprite("badge_check_"+key)));return root.gameObject;
     }
@@ -132,16 +132,17 @@ public static class UIAugmentPrefabBuilder
     {
         var results=new List<string>();var prefab=AssetDatabase.LoadAssetAtPath<GameObject>(CardPath).GetComponent<AugmentCardView>();var so=new SerializedObject(prefab);
         var ids=(string[])typeof(AugmentCardView).GetField("AugmentIds",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Static).GetValue(null);
-        var icons=so.FindProperty("augmentIcons");Require(icons.arraySize==11,"아이콘 11종");string[] keys={"assassin","hunter","marathoner","monk","sprinter","loner","pacifist","friend_shield","gambler","rethrow","contrarian"};for(int i=0;i<11;i++)Require(icons.GetArrayElementAtIndex(i).objectReferenceValue.name=="aug_"+keys[i],"아이콘 순서 "+ids[i]);
+        var icons=so.FindProperty("augmentIcons");Require(icons.arraySize==12,"아이콘 12종");string[] keys={"assassin","hunter","marathoner","monk","sprinter","loner","pacifist","friend_shield","gambler","rethrow","contrarian"};for(int i=0;i<11;i++)Require(icons.GetArrayElementAtIndex(i).objectReferenceValue.name=="aug_"+keys[i],"아이콘 순서 "+ids[i]);
         var catalog=new AugmentCatalog(JsonUtility.FromJson<AugmentDefinitionFile>(AssetDatabase.LoadAssetAtPath<TextAsset>("Assets/Data/augments.json").text),AugmentFactories.Create());
         using(var preview=new Preview(0))
         {
             Require(preview.Panel.transform.Find("Dim").GetComponent<RectTransform>().offsetMax.y==-130,"Dim 위쪽 130");
-            var card=preview.Panel.GetComponentsInChildren<AugmentCardView>()[0];string[] categories={"공격","공격","이동","이동","이동","방어","방어","방어","운","운","운"};
-            foreach(int i in Enumerable.Range(0,11)){card.Init(catalog.Find(ids[i]),id=>{});preview.Render();var description=Field<TMP_Text>(card,"augmentDescription");Require(Field<TMP_Text>(card,"categoryLabel").text==categories[i],"분류 "+ids[i]);Require(description.textInfo.lineCount<=3&&!description.isTextTruncated,"설명 3줄 이내 "+ids[i]);}
+            var card=preview.Panel.GetComponentsInChildren<AugmentCardView>()[0];string[] categories={"공격","공격","이동","이동","이동","방어","방어","방어","운","운","운","이동"};
+            foreach(int i in Enumerable.Range(0,12)){card.Init(catalog.Find(ids[i]),id=>{});preview.Render();var description=Field<TMP_Text>(card,"augmentDescription");Require(Field<TMP_Text>(card,"categoryLabel").text==categories[i],"분류 "+ids[i]);Require(description.textInfo.lineCount<=3&&!description.isTextTruncated,"설명 3줄 이내 "+ids[i]);}
             card.SetHovered(true);Require(Field<Image>(card,"hoverBorder").gameObject.activeSelf,"오버 테두리");card.SetSelected(true);card.SetInput(false);Require(Field<Image>(card,"selectedGlow").gameObject.activeSelf&&Field<Image>(card,"checkBadge").gameObject.activeSelf&&!card.GetComponent<Button>().interactable,"누름 스타일");
         }
-        results.Add("아이콘 11종 순서 · 분류 표 · 설명 3줄/잘림 없음 · Dim 상단 130 · 오버/선택 표시: PASS");
+        Require(icons.GetArrayElementAtIndex(11).objectReferenceValue==VeteranUIIntegration.Icon,"노장 임시 아이콘");
+        results.Add("아이콘 12종 순서 · 분류 표 · 설명 3줄/잘림 없음 · Dim 상단 130 · 오버/선택 표시: PASS");
         for(int team=0;team<4;team++){using(var preview=new Preview(team,true)){preview.Render();Require(Field<TMP_Text>(preview.Panel,"titleText").color==AugmentCardView.TeamColor(team,true),"제목 팀 색");var card=preview.Panel.GetComponentsInChildren<AugmentCardView>()[1];Require(Path.GetFileNameWithoutExtension(AssetDatabase.GetAssetPath(Field<Image>(card,"checkBadge").sprite))=="badge_check_"+new[]{"red","blue","green","yellow"}[team],"팀별 체크");Require(Field<Image>(card,"checkMark").color==(team==3?(Color)new Color32(58,38,24,255):Color.white),"체크 글자색");}}
         using(var preview=new Preview(2,false,true))Require(Field<TMP_Text>(preview.Panel,"titleText").text=="직업을 고르세요","온라인 제목");results.Add("4팀 제목·테두리·체크 · 노랑 Ink 체크 · 온라인 제목: PASS");
         string report=string.Join("\n",results)+"\n";Directory.CreateDirectory(UIScreenPreparation.Reports);File.WriteAllText(UIScreenPreparation.Reports+"stage6_editor_validation.txt",report);return report;

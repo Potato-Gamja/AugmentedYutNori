@@ -17,10 +17,10 @@ public sealed class PlayerStatusView : MonoBehaviour
     private static readonly string[] AugmentIds =
     {
         "Assassin", "Hunter", "Marathoner", "Monk", "Sprinter", "Loner",
-        "Pacifist", "FriendShield", "Gambler", "Rethrow", "Contrarian"
+        "Pacifist", "FriendShield", "Gambler", "Rethrow", "Contrarian", "Veteran"
     };
     private int activeTeamCount = 2;
-    private int pieceSlotCount = MaxPieceSlotCount;
+    private readonly int[] pieceSlotCounts = { MaxPieceSlotCount, MaxPieceSlotCount, MaxPieceSlotCount, MaxPieceSlotCount };
     private int currentActiveTeam;
     private Action<int, int> waitingPieceClicked;
     private IReadOnlyList<Sprite> teamPieceSprites;
@@ -64,7 +64,8 @@ public sealed class PlayerStatusView : MonoBehaviour
         IReadOnlyList<Sprite> pieceGlowSprites)
     {
         activeTeamCount = Mathf.Clamp(teamCount, 2, MaxTeamCount);
-        pieceSlotCount = Mathf.Clamp(piecesPerTeam, 1, MaxPieceSlotCount);
+        int slotCount = Mathf.Clamp(piecesPerTeam, 1, MaxPieceSlotCount);
+        for (int team = 0; team < MaxTeamCount; team++) pieceSlotCounts[team] = slotCount;
         teamPieceSprites = pieceSprites;
         teamPieceGlowSprites = pieceGlowSprites;
         EnsureFourPlayerPanels();
@@ -72,6 +73,15 @@ public sealed class PlayerStatusView : MonoBehaviour
         for (int team = 0; team < MaxTeamCount; team++)
             ConfigureSeat(team, team < activeTeamCount);
 
+        if (waitingPieceClicked != null) BindWaitingPieceClicks(waitingPieceClicked);
+    }
+
+    // 팀 하나의 말 슬롯 수를 바꾼다 (노장은 1개 적음). 말을 만든 뒤 호출
+    public void SetPieceCount(int team, int count)
+    {
+        if (team < 0 || team >= MaxTeamCount) return;
+        pieceSlotCounts[team] = Mathf.Clamp(count, 1, MaxPieceSlotCount);
+        ConfigureSeat(team, team < activeTeamCount);
         if (waitingPieceClicked != null) BindWaitingPieceClicks(waitingPieceClicked);
     }
 
@@ -106,7 +116,7 @@ public sealed class PlayerStatusView : MonoBehaviour
                 int capturedTeam = team;
                 int capturedSlot = slotIndex;
                 button.onClick.RemoveAllListeners();
-                button.interactable = capturedTeam < activeTeamCount && capturedSlot < pieceSlotCount;
+                button.interactable = capturedTeam < activeTeamCount && capturedSlot < pieceSlotCounts[capturedTeam];
                 button.onClick.AddListener(() => waitingPieceClicked?.Invoke(capturedTeam, capturedSlot));
                 SoundManager.BindButtonClick(button);
             }
@@ -148,24 +158,25 @@ public sealed class PlayerStatusView : MonoBehaviour
     {
         Transform panel = FindPanel(team);
         if (panel == null) return;
+        int slotCount = pieceSlotCounts[team];
 
         TMP_Text waitingLabel = panel.Find("WaitingLabel")?.GetComponent<TMP_Text>();
         if (waitingLabel != null) waitingLabel.gameObject.SetActive(false);
 
         TMP_Text finishLabel = panel.Find("FinishLabel")?.GetComponent<TMP_Text>();
-        if (finishLabel != null) finishLabel.text = $"완주 {finished}/{pieceSlotCount}";
+        if (finishLabel != null) finishLabel.text = $"완주 {finished}/{slotCount}";
 
         for (int i = 0; i < MaxPieceSlotCount; i++)
         {
             Transform waitingSlot = panel.Find($"PieceSlot_{i}");
             Transform piece = waitingSlot != null ? waitingSlot.Find("Piece") : null;
             bool isWaiting = waitingSlots != null ? ContainsSlot(waitingSlots, i) : i < waiting;
-            if (piece != null) piece.gameObject.SetActive(i < pieceSlotCount && isWaiting);
+            if (piece != null) piece.gameObject.SetActive(i < slotCount && isWaiting);
 
             Image finishImage = panel.Find($"FinishSlot_{i}")?.GetComponent<Image>();
             if (finishImage != null)
             {
-                finishImage.gameObject.SetActive(i < pieceSlotCount);
+                finishImage.gameObject.SetActive(i < slotCount);
                 finishImage.color = i < finished
                     ? TurnHudView.GetTeamColor(team)
                     : new Color32(241, 226, 196, 255);
@@ -533,7 +544,7 @@ public sealed class PlayerStatusView : MonoBehaviour
             Transform waitingSlot = panel.Find($"PieceSlot_{slot}");
             if (waitingSlot != null)
             {
-                waitingSlot.gameObject.SetActive(occupied && slot < pieceSlotCount);
+                waitingSlot.gameObject.SetActive(occupied && slot < pieceSlotCounts[team]);
                 Image pieceImage = waitingSlot.Find("Piece")?.GetComponent<Image>();
                 if (pieceImage != null && teamPieceSprites != null && team < teamPieceSprites.Count && teamPieceSprites[team] != null)
                 {
@@ -543,7 +554,7 @@ public sealed class PlayerStatusView : MonoBehaviour
                 SetWaitingPieceAvailable(team, slot, false);
             }
             Transform finishSlot = panel.Find($"FinishSlot_{slot}");
-            if (finishSlot != null) finishSlot.gameObject.SetActive(occupied && slot < pieceSlotCount);
+            if (finishSlot != null) finishSlot.gameObject.SetActive(occupied && slot < pieceSlotCounts[team]);
         }
         ApplyPlayerProfile(team);
     }

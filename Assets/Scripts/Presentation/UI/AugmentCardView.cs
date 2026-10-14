@@ -10,7 +10,7 @@ public class AugmentCardView : MonoBehaviour, IPointerEnterHandler, IPointerExit
     private static readonly string[] AugmentIds =
     {
         "Assassin", "Hunter", "Marathoner", "Monk", "Sprinter", "Loner",
-        "Pacifist", "FriendShield", "Gambler", "Rethrow", "Contrarian"
+        "Pacifist", "FriendShield", "Gambler", "Rethrow", "Contrarian", "Veteran"
     };
 
     [SerializeField] private Image augmentIcon;
@@ -77,7 +77,7 @@ public class AugmentCardView : MonoBehaviour, IPointerEnterHandler, IPointerExit
         switch (id)
         {
             case "Assassin": case "Hunter": category = "공격"; color = "94584E"; break;
-            case "Marathoner": case "Monk": case "Sprinter": category = "이동"; color = "6B8A6E"; break;
+            case "Marathoner": case "Monk": case "Sprinter": case "Veteran": category = "이동"; color = "6B8A6E"; break;
             case "Loner": case "Pacifist": case "FriendShield": category = "방어"; color = "5B7A8C"; break;
             case "Gambler": case "Rethrow": case "Contrarian": category = "운"; color = "8C6BA8"; break;
             default: category = string.Empty; color = "A88E6E"; break;

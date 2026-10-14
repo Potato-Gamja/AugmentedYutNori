@@ -55,6 +55,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
     public event Action<int> AutomatedMoveApplied;
     public event Action<bool> ConnectionAvailabilityChanged;
     public event Action<GameSnapshotMessage> SnapshotApplied;
+    public event Action<GameSnapshotMessage> AugmentsRestored;   // 스냅샷의 증강 복원 직후, 말 복원 전 (팀별 말 수를 정할 수 있는 시점)
     public event Action<string> ReconnectRejected;
 
 
@@ -527,13 +528,15 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
 
     private void Reject(string message) => RequestRejected?.Invoke(message);
 
-    // 서버 상태로 통째로 덮어쓴다: 말 위치 → 증강 → 턴·윷 결과 → 승자 → seq 기준
+    // 서버 상태로 통째로 덮어쓴다: 증강 → 말 위치 → 턴·윷 결과 → 승자 → seq 기준
     private void ApplySnapshot(GameSnapshotMessage snapshot)
     {
         if (snapshot == null) throw new InvalidOperationException("GAME_SNAPSHOT 내용이 없습니다.");
 
-        RestorePieces(snapshot.pieces);
+        // 증강 먼저: 노장이면 말 수가 달라서, 증강을 알아야 말을 만들 수 있다
         RestoreAugments(snapshot.ownedAugments);
+        AugmentsRestored?.Invoke(snapshot);
+        RestorePieces(snapshot.pieces);
 
         bool ended = snapshot.phase == "ENDED";
         if (!ended) turnManager.ApplyServerTurn(snapshot.currentTeam, snapshot.remainingThrows);

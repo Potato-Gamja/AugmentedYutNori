@@ -23,12 +23,15 @@ public class GameSetup
     //이 기기가 해당 팀을 조작할 수 있는 지
     public bool CanControl(int team) => IsLocalMode || team == localTeam;
 
-    //만들어야 할 말 목록.ㅣ 팀 -> 슬롯 순
-    public IEnumerable<(int id, int team, int slot)> EnumeratePieces()
+    //만들어야 할 말 목록. 팀 -> 슬롯 순. pieceCountOf가 없으면 모든 팀 piecesPerTeam
+    public IEnumerable<(int id, int team, int slot)> EnumeratePieces(Func<int, int> pieceCountOf = null)
     {
         for (int team = 0; team < teamCount; team++)
-            for (int slot = 0; slot < piecesPerTeam; slot++)
+        {
+            int count = pieceCountOf?.Invoke(team) ?? piecesPerTeam;
+            for (int slot = 0; slot < count; slot++)
                 yield return (PieceId(team, slot), team, slot);
+        }
     }
     
     // 설정값 검사
@@ -40,19 +43,21 @@ public class GameSetup
         if (string.IsNullOrEmpty(boardLayoutId)) throw new ArgumentException("boardLayoutId가 비어 있습니다.");
     }
 
-    public List<String> CheckScenePieces(IEnumerable<(int team, int slot)> scenePieces)
+    public List<String> CheckScenePieces(IEnumerable<(int team, int slot)> scenePieces, Func<int, int> pieceCountOf = null)
     {
         var errors = new List<string>();
         var seen = new HashSet<int>();
 
         foreach(var (team, slot) in scenePieces)
         {
-            if (team < 0 || team >= teamCount) errors.Add($"팀 {team}은 teamCount({teamCount}) 범위 밖입니다.");
-            else if (slot < 0 || slot >= piecesPerTeam) errors.Add($"팀 {team}의 slotIndex {slot}이 0 ~ {piecesPerTeam - 1} 범위 밖입니다.");
+            if (team < 0 || team >= teamCount) { errors.Add($"팀 {team}은 teamCount({teamCount}) 범위 밖입니다."); continue; }
+
+            int count = pieceCountOf?.Invoke(team) ?? piecesPerTeam;
+            if (slot < 0 || slot >= count) errors.Add($"팀 {team}의 slotIndex {slot}이 0 ~ {count - 1} 범위 밖입니다.");
             else if (!seen.Add(PieceId(team, slot))) errors.Add($"팀 {team}의 slotIndex {slot}이 중복됩니다.");
         }
 
-        foreach(var (id, team, slot) in EnumeratePieces())
+        foreach (var (id, team, slot) in EnumeratePieces(pieceCountOf))
         {
             if (!seen.Contains(id)) errors.Add($"팀 {team}의 slotIndex {slot} 말이 씬에 없습니다.");
         }
