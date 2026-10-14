@@ -100,6 +100,14 @@ public class LobbyController : MonoBehaviour
             profilePanel.LogoutRequested -= OnLogoutRequested;
     }
 
+    public void ShowReconnectFailure(string reason)
+    {
+        uiManager?.Close<ReconnectPanel>();
+        uiManager?.Close<MainMenuPanel>();
+        ReturnToLobby();
+        ReceiveError(reason);
+    }
+
     public void ShowReconnect(string roomCode)
     {
         uiManager?.Open<ReconnectPanel>()?.ShowRoom(roomCode);

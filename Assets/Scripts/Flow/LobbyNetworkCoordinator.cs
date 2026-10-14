@@ -40,6 +40,9 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     private GameReconnectCache reconnectCache;
     private bool reconnecting;
     private bool reconnectCanceled;
+    private bool terminalReconnectFailure;
+    private bool leavingRejectedGame;
+    private string pendingReconnectFailure;
     private TaskCompletionSource<WsEnvelope> reconnectSnapshot;
     private GameReconnectData reconnectData;
     private string pendingRoomCode;
@@ -96,6 +99,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         GameInstaller.RegisterRemoteSessionFactory((rules, events, state, turn, setup) =>
         {
             var session = new RemoteGameSession(webSocketClient, rules, events, state, turn, setup, pendingGameMessages);
+            session.ReconnectRejected += OnGameReconnectRejected;
             pendingGameMessages.Clear();
             waitingForGameSession = false;
             return session;
@@ -210,6 +214,13 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     {
         await silentLoginTask;
         if (this == null || controller == null || controller != lobbyController || !IsLoggedIn() || lastRoomState != null) return;
+        if (!string.IsNullOrEmpty(pendingReconnectFailure))
+        {
+            string reason = pendingReconnectFailure;
+            pendingReconnectFailure = null;
+            controller.ShowReconnectFailure(reason);
+            return;
+        }
         GameReconnectData saved = reconnectCache.Load(LocalPlayerId, apiBaseUrl);
         if (saved != null) controller.ShowReconnect(saved.setup.roomCode);
     }
@@ -226,6 +237,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         if (reconnecting) throw new InvalidOperationException("이미 재접속을 시도하고 있습니다.");
         reconnecting = true;
         reconnectCanceled = false;
+        terminalReconnectFailure = false;
         reconnectSnapshot = new TaskCompletionSource<WsEnvelope>();
         try
         {
@@ -255,7 +267,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
             GameInstaller.PreparePlayerProfiles(playerProfiles);
             lobbyController.ReceiveGameStart(reconnectData.setup);
         }
-        catch
+        catch (Exception exception)
         {
             if (this != null)
             {
@@ -263,6 +275,12 @@ public class LobbyNetworkCoordinator : MonoBehaviour
                 pendingRoomCode = null;
                 waitingForGameSession = false;
                 pendingGameMessages.Clear();
+                if (terminalReconnectFailure)
+                {
+                    ClearRoomSessionState();
+                    reconnecting = false;
+                    lobbyController?.ShowReconnectFailure(exception.Message);
+                }
             }
             throw;
         }
@@ -599,6 +617,21 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         _ = RefreshRoomVisibilityAsync(lastRoomState.roomCode);
     }
 
+    private async void OnGameReconnectRejected(string reason)
+    {
+        if (leavingRejectedGame) return;
+        leavingRejectedGame = true;
+        reconnectCache?.Clear();
+        // 이미 종료·제거된 게임이다. LEAVE_ROOM을 다시 보내지 않고 연결만 정리한다.
+        try { if (webSocketClient != null) await webSocketClient.CloseAndWait(); }
+        catch (Exception exception) { Debug.LogWarning($"[Reconnect] 연결 종료 실패: {exception.Message}"); }
+        if (this == null) return;
+        ClearRoomSessionState();
+        pendingReconnectFailure = reason;
+        SceneManager.LoadScene(lobbySceneName);
+        leavingRejectedGame = false;
+    }
+
     public bool CanReadyInCurrentRoom => !gameEnded;
 
     public async void LeaveGameToMainMenu()
@@ -670,6 +703,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
                     GameSnapshotMessage snapshot = MessageSerializer.ReadPayload<GameSnapshotMessage>(envelope);
                     if (!reconnectData.CanRestore(snapshot))
                     {
+                        terminalReconnectFailure = true;
                         reconnectCache.Clear();
                         reconnectSnapshot.TrySetException(new InvalidOperationException("경기가 종료되었거나 이미 퇴장 처리되어 복귀할 수 없습니다."));
                         break;
@@ -692,6 +726,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
                     reconnectCache?.Clear();
                     if (reconnecting && !waitingForGameSession)
                     {
+                        terminalReconnectFailure = true;
                         reconnectSnapshot?.TrySetException(new InvalidOperationException("경기가 종료되어 복귀할 수 없습니다."));
                         break;
                     }
@@ -708,8 +743,17 @@ public class LobbyNetworkCoordinator : MonoBehaviour
                     ErrorMessage error = MessageSerializer.ReadPayload<ErrorMessage>(envelope);
                     if (reconnecting)
                     {
-                        if (error?.code == "GAME_NOT_FOUND" || error?.code == "PLAYER_NOT_IN_GAME") reconnectCache.Clear();
+                        if (ReconnectFailure.IsTerminal(error?.code))
+                        {
+                            terminalReconnectFailure = true;
+                            reconnectCache.Clear();
+                        }
                         reconnectSnapshot?.TrySetException(new InvalidOperationException(error?.message ?? "재접속 요청이 거절됐습니다."));
+                        break;
+                    }
+                    if (waitingForGameSession && ReconnectFailure.IsTerminal(error?.code))
+                    {
+                        OnGameReconnectRejected(error?.message ?? "이 경기에 복귀할 수 없습니다.");
                         break;
                     }
                     lobbyController?.ReceiveError(error?.message ?? "서버 요청이 거절됐습니다.");

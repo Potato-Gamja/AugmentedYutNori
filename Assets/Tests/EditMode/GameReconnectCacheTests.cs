@@ -100,4 +100,49 @@ public class GameReconnectCacheTests
         finally { UnityEngine.Object.DestroyImmediate(owner); }
     }
 
+    [TestCase("REMOVED_FROM_GAME", true)]
+    [TestCase("GAME_ALREADY_ENDED", true)]
+    [TestCase("GAME_NOT_FOUND", true)]
+    [TestCase("PLAYER_NOT_IN_GAME", true)]
+    [TestCase("NOT_YOUR_TURN", false)]
+    [TestCase(null, false)]
+    public void ClassifiesOnlyTerminalReconnectCodes(string code, bool expected)
+    {
+        Assert.That(RuntimeType("ReconnectFailure").GetMethod("IsTerminal").Invoke(null, new object[] { code }), Is.EqualTo(expected));
+    }
+
+    [TestCase("REMOVED_FROM_GAME")]
+    [TestCase("GAME_ALREADY_ENDED")]
+    [TestCase("GAME_NOT_FOUND")]
+    [TestCase("PLAYER_NOT_IN_GAME")]
+    public void LobbyTerminalErrorClearsCacheAndFailsPendingAttempt(string code)
+    {
+        Call(cache, "Save", data);
+        var owner = new GameObject("LobbyTerminalErrorTest"); owner.SetActive(false);
+        try
+        {
+            Component coordinator = owner.AddComponent(RuntimeType("LobbyNetworkCoordinator"));
+            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            Type waiterType = typeof(System.Threading.Tasks.TaskCompletionSource<>).MakeGenericType(RuntimeType("WsEnvelope"));
+            object waiter = Activator.CreateInstance(waiterType);
+            coordinator.GetType().GetField("reconnecting", flags).SetValue(coordinator, true);
+            coordinator.GetType().GetField("reconnectSnapshot", flags).SetValue(coordinator, waiter);
+            coordinator.GetType().GetField("reconnectCache", flags).SetValue(coordinator, cache);
+            object error = Activator.CreateInstance(RuntimeType("ErrorMessage"));
+            Set(error, "code", code); Set(error, "message", "복귀 거절");
+            Type serializer = RuntimeType("MessageSerializer");
+            MethodInfo serialize = serializer.GetMethods().First(method => method.Name == "Serialize" && method.IsGenericMethod);
+            string json = (string)serialize.MakeGenericMethod(error.GetType()).Invoke(null,
+                new[] { Enum.Parse(RuntimeType("MessageType"), "ERROR"), error, (object)0L });
+            object envelope = serializer.GetMethod("Deserialize").Invoke(null, new object[] { json });
+            coordinator.GetType().GetMethod("OnMessageReceived", flags).Invoke(coordinator, new[] { envelope });
+            Assert.That(Call(cache, "Load", "p1", "http://localhost:8080"), Is.Null);
+            Assert.That(coordinator.GetType().GetField("terminalReconnectFailure", flags).GetValue(coordinator), Is.True);
+            var task = (System.Threading.Tasks.Task)waiterType.GetProperty("Task").GetValue(waiter);
+            Assert.That(task.IsFaulted, Is.True);
+            Assert.That(task.Exception.InnerException.Message, Is.EqualTo("복귀 거절"));
+        }
+        finally { UnityEngine.Object.DestroyImmediate(owner); }
+    }
+
 }
