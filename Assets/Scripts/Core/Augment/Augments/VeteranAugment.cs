@@ -18,4 +18,8 @@ public class VeteranAugment : Augment
         // 개~모는 1칸 덜
         return moveCount - 1;
     }
+
+    // 팀의 말 수: 기본 말 수에서 노장이면 1개 적게 (서버도 같은 규칙)
+    public static int PieceCountFor(BoardState board, int team, int basePieces)
+        => board.GetAugments(team).Exists(a => a is VeteranAugment) ? basePieces - 1 : basePieces;
 }

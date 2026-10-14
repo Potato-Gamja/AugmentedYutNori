@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -43,6 +43,7 @@ public class GameFlowController : MonoBehaviour
     private AugmentCatalog augmentCatalog;
     private GameFlowState currentState;
     private bool isMoving;
+    private bool piecesCreated;
     private bool leavingGame;
     private int teamCount;
     private int augmentSelectionTeam;
@@ -85,13 +86,9 @@ public class GameFlowController : MonoBehaviour
         }
 
         OpenHud();
-        EnsurePieceViewsForSetup();
         CreateCoreState();
-        var errors = setup.CheckScenePieces(pieceViews.Select(v => (v.Team, v.SlotIndex)));
-        if (errors.Count > 0)
-            Debug.LogWarning($"[GameFlow] GameSetup과 씬의 말 구성이 다릅니다. 기존 목록 ID로 실행합니다.\n{string.Join("\n", errors)}", this);
-        BindPieces();
-        lastStateHash = StateHasher.HashHex(gameState, turnManager);
+        // 말은 증강이 모두 확정된 뒤 만든다 (노장은 말 수가 바뀜). 그 전까지 씬의 말은 숨긴다
+        foreach (PieceView view in pieceViews) view.gameObject.SetActive(false);
 
         hudPresenter = new GameFlowHudPresenter(
             hud,
@@ -113,7 +110,6 @@ public class GameFlowController : MonoBehaviour
 
         SubscribeEvents();
         BindSettingsPanel();
-        RefreshPieceLayout();
         hudPresenter.RefreshPlayerPanels();
         ChangeState(GameFlowState.GameStart);
         if (gameSession is RemoteGameSession remoteSession) remoteSession.ReplayPendingMessages();
@@ -206,13 +202,14 @@ public class GameFlowController : MonoBehaviour
         foreach (PieceView view in pieceViews)
         {
             bool used = view.Team >= 0 && view.Team < setup.teamCount &&
-                        view.SlotIndex >= 0 && view.SlotIndex < setup.piecesPerTeam;
+                        view.SlotIndex >= 0 && view.SlotIndex < PieceCount(view.Team);
             view.gameObject.SetActive(used);
         }
 
         for (int team = 0; team < setup.teamCount; team++)
         {
-            for (int slot = 0; slot < setup.piecesPerTeam; slot++)
+            int count = PieceCount(team);
+            for (int slot = 0; slot < count; slot++)
             {
                 if (pieceViews.Exists(view => view.Team == team && view.SlotIndex == slot)) continue;
 
@@ -225,6 +222,7 @@ public class GameFlowController : MonoBehaviour
                 }
 
                 PieceView created = Instantiate(source, source.transform.parent);
+                created.gameObject.SetActive(true);
                 created.ConfigureRuntimeIdentity(team, slot, GameHudPanel.GetTeamColor(team));
                 pieceViews.Add(created);
             }
@@ -232,7 +230,10 @@ public class GameFlowController : MonoBehaviour
 
         pieceViews.RemoveAll(view => !view.gameObject.activeSelf);
     }
-    
+
+    // 팀의 말 수 (노장이면 1개 적게). 증강이 확정된 뒤에만 의미가 있다
+    private int PieceCount(int team) => VeteranAugment.PieceCountFor(boardState, team, setup.piecesPerTeam);
+
     private void CreateCoreState()
     {
         teamCount = setup.teamCount;
@@ -485,6 +486,7 @@ public class GameFlowController : MonoBehaviour
         if (team >= teamCount - 1)
         {
             augmentSelectionTeam = 0;
+            CreatePieces();
             ChangeState(GameFlowState.Throw);
         }
         else
@@ -648,6 +650,18 @@ public class GameFlowController : MonoBehaviour
         }
     }
 
+    // 모든 팀의 증강이 확정된 뒤 팀별 말 수로 말을 만든다. (노장 증강을 보유한 팀은 마지막 슬롯 제외)
+    private void CreatePieces()
+    {
+        if (piecesCreated) return;
+        piecesCreated = true;
+        EnsurePieceViewsForSetup();
+        BindPieces();
+        RefreshPieceLayout();
+        hudPresenter.RefreshPlayerPanels();
+        lastStateHash = StateHasher.HashHex(gameState, turnManager);
+    }
+
     private void OnRequestRejected(string reason)
     {
         Debug.LogWarning($"[GameFlow] 요청이 거절됐습니다. {reason}", this);
@@ -710,6 +724,7 @@ public class GameFlowController : MonoBehaviour
                 }
                 if (skipAugmentSelection)
                 {
+                    CreatePieces();
                     ChangeState(GameFlowState.Throw);
                 }
                 else
