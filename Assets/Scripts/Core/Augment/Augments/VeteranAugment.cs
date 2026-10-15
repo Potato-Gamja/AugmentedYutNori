@@ -1,4 +1,4 @@
-// 노장: 말이 하나 적은 대신 윷·모일 때 한 칸 덜 간다 (나머지는 그대로). 말 수는 GameFlowController가 처리
+// 노장: 말이 하나 적고 윷·모만 한 칸 덜 간다. 말 수는 GameFlowController가 처리
 public class VeteranAugment : Augment
 {
     public override string Id => "Veteran";

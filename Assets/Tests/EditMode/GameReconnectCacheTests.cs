@@ -56,6 +56,11 @@ public class GameReconnectCacheTests
     }
     [TestCase("PLAYING", 0, true, true)]
     [TestCase("AUGMENT_SELECT", 0, true, true)]
+    [TestCase("AUGMENT_SELECT", 0, false, true)]
+    [TestCase("AUGMENT_SELECT", 1, false, false)]
+    [TestCase("ENDED", 0, false, false)]
+    [TestCase("WAITING", 0, false, false)]
+    [TestCase(null, 0, false, false)]
     [TestCase("ENDED", 0, true, false)]
     [TestCase("PLAYING", 1, true, false)]
     [TestCase("PLAYING", 0, false, false)]
@@ -71,6 +76,49 @@ public class GameReconnectCacheTests
         }
         Assert.That(Call(data, "CanRestore", snapshot), Is.EqualTo(expected));
     }
+    [Test]
+    public void MissingSnapshotOrPieceListCannotRestore()
+    {
+        Assert.That(Call(data, "CanRestore", new object[] { null }), Is.False);
+        object snapshot = Activator.CreateInstance(RuntimeType("GameSnapshotMessage"));
+        Set(snapshot, "phase", "AUGMENT_SELECT");
+        Set(snapshot, "myTeam", 0);
+        Set(snapshot, "pieces", null);
+        Assert.That(Call(data, "CanRestore", snapshot), Is.False);
+    }
+
+    [Test]
+    public void EmptySelectionSnapshotCompletesReconnectAndKeepsCachedGame()
+    {
+        var owner = new GameObject("SelectionReconnectTest");
+        owner.SetActive(false);
+        try
+        {
+            Call(cache, "Save", data);
+            Component coordinator = owner.AddComponent(RuntimeType("LobbyNetworkCoordinator"));
+            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            coordinator.GetType().GetField("reconnecting", flags).SetValue(coordinator, true);
+            coordinator.GetType().GetField("reconnectData", flags).SetValue(coordinator, data);
+            coordinator.GetType().GetField("reconnectCache", flags).SetValue(coordinator, cache);
+            Type waiterType = typeof(System.Threading.Tasks.TaskCompletionSource<>).MakeGenericType(RuntimeType("WsEnvelope"));
+            object waiter = Activator.CreateInstance(waiterType);
+            coordinator.GetType().GetField("reconnectSnapshot", flags).SetValue(coordinator, waiter);
+            object envelope = RuntimeType("MessageSerializer").GetMethod("Deserialize").Invoke(null, new object[]
+            {
+                "{\"type\":\"GAME_SNAPSHOT\",\"seq\":0,\"payload\":{\"phase\":\"AUGMENT_SELECT\",\"myTeam\":0,\"pieces\":[]}}"
+            });
+            coordinator.GetType().GetMethod("OnMessageReceived", flags).Invoke(coordinator, new[] { envelope });
+            var task = (System.Threading.Tasks.Task)waiterType.GetProperty("Task").GetValue(waiter);
+            Assert.That(task.Status, Is.EqualTo(System.Threading.Tasks.TaskStatus.RanToCompletion));
+            Assert.That(coordinator.GetType().GetField("terminalReconnectFailure", flags).GetValue(coordinator), Is.False);
+            Assert.That(coordinator.GetType().GetField("waitingForGameSession", flags).GetValue(coordinator), Is.True);
+            var pending = (IList)coordinator.GetType().GetField("pendingGameMessages", flags).GetValue(coordinator);
+            Assert.That(pending.Count, Is.EqualTo(1));
+            Assert.That(Call(cache, "Load", "p1", "http://localhost:8080"), Is.Not.Null);
+        }
+        finally { UnityEngine.Object.DestroyImmediate(owner); }
+    }
+
     [Test]
     public void ClearAndMalformedCacheDoNotOfferGame()
     {

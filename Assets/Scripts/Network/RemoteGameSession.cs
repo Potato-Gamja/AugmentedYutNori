@@ -26,6 +26,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
 
     private bool commandPending;
     private bool hasReceivedSequence;
+    private bool hasAppliedSnapshot;
     private long lastSequence;
     private readonly Queue<WsEnvelope> pendingMessages;
     private bool receivingLiveMessages;
@@ -161,7 +162,14 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
         {
             try
             {
-                ApplySnapshot(MessageSerializer.ReadPayload<GameSnapshotMessage>(envelope));
+                GameSnapshotMessage snapshot = MessageSerializer.ReadPayload<GameSnapshotMessage>(envelope);
+                // 자동 복귀 스냅샷과 SYNC_REQUEST 응답이 중복될 수 있다.
+                // 이미 복원한 뒤의 과거·중복 상태로 진행 중인 이동 연출을 다시 취소하지 않는다.
+                // 직접 요청한 같은 seq의 스냅샷은 DESYNC 복구를 위해 적용한다.
+                if (snapshot != null && hasAppliedSnapshot &&
+                    (snapshot.lastSeq < lastSequence ||
+                     (snapshot.lastSeq == lastSequence && !awaitingSnapshot))) return;
+                ApplySnapshot(snapshot);
             }
             catch (Exception exception)
             {
@@ -558,6 +566,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
         syncRequested = false;
         awaitingSnapshot = false;
 
+        hasAppliedSnapshot = true;
         SnapshotApplied?.Invoke(snapshot);
     }
 

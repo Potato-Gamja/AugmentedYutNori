@@ -60,7 +60,11 @@ public class VeteranAugmentTests
         Assert.AreEqual(board.Node(2), piece.Node);
     }
 
+    [TestCase(YutResult.BackDo, -1)]
     [TestCase(YutResult.Do, 1)]
+    [TestCase(YutResult.Gae, 2)]
+    [TestCase(YutResult.Geol, 3)]
+    [TestCase(YutResult.Yut, 4)]
     [TestCase(YutResult.Mo, 5)]
     public void OtherPiece_Unchanged(YutResult rolled, int expected)
     {

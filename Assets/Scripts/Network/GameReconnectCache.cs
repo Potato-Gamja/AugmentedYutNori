@@ -26,7 +26,9 @@ public sealed class GameReconnectData
     public bool CanRestore(GameSnapshotMessage snapshot) => snapshot != null && setup != null &&
         (snapshot.phase == "PLAYING" || snapshot.phase == "AUGMENT_SELECT") &&
         snapshot.myTeam == setup.localTeam && snapshot.pieces != null &&
-        snapshot.pieces.Any(piece => piece != null && piece.team == snapshot.myTeam);
+        // 증강 선택 중에는 아직 말을 생성하지 않는다. 참가 여부·퇴장은 서버가 검증한다.
+        (snapshot.phase == "AUGMENT_SELECT" ||
+         snapshot.pieces.Any(piece => piece != null && piece.team == snapshot.myTeam));
 }
 
 public sealed class GameReconnectCache
