@@ -1,258 +1,512 @@
 using System;
+
 using System.Collections.Generic;
+
 using System.Linq;
+
 using UnityEngine;
 
+
+
 /// <summary>
+
 /// Core 상태를 HUD에 표시할 문자열과 집계 값으로 변환한다.
+
 /// GameFlowController가 UI 세부 형식과 증강 조회 방법을 알지 않도록 분리한 Presenter다.
+
 /// </summary>
+
 public sealed class GameFlowHudPresenter
+
 {
+
     private readonly GameHudPanel hud;
+
     private readonly BoardState boardState;
+
     private readonly GameState gameState;
+
     private readonly AugmentCatalog augmentCatalog;
+
     private readonly IReadOnlyList<PieceView> pieceViews;
+
     private readonly Func<int> currentTeamProvider;
+
     private readonly int configuredTeamCount;
 
-    public GameFlowHudPresenter(
-        GameHudPanel hud,
-        BoardState boardState,
-        GameState gameState,
-        AugmentCatalog augmentCatalog,
-        IReadOnlyList<PieceView> pieceViews,
-        Func<int> currentTeamProvider = null)
-        : this(hud, boardState, gameState, augmentCatalog, pieceViews, currentTeamProvider, 2)
-    {
-    }
+
 
     public GameFlowHudPresenter(
+
         GameHudPanel hud,
+
         BoardState boardState,
+
         GameState gameState,
+
         AugmentCatalog augmentCatalog,
+
         IReadOnlyList<PieceView> pieceViews,
-        Func<int> currentTeamProvider,
-        int configuredTeamCount)
+
+        Func<int> currentTeamProvider = null)
+
+        : this(hud, boardState, gameState, augmentCatalog, pieceViews, currentTeamProvider, 2)
+
     {
-        this.hud = hud;
-        this.boardState = boardState;
-        this.gameState = gameState;
-        this.augmentCatalog = augmentCatalog;
-        this.pieceViews = pieceViews;
-        this.currentTeamProvider = currentTeamProvider;
-        this.configuredTeamCount = Mathf.Clamp(configuredTeamCount, 2, 4);
+
     }
+
+
+
+    public GameFlowHudPresenter(
+
+        GameHudPanel hud,
+
+        BoardState boardState,
+
+        GameState gameState,
+
+        AugmentCatalog augmentCatalog,
+
+        IReadOnlyList<PieceView> pieceViews,
+
+        Func<int> currentTeamProvider,
+
+        int configuredTeamCount)
+
+    {
+
+        this.hud = hud;
+
+        this.boardState = boardState;
+
+        this.gameState = gameState;
+
+        this.augmentCatalog = augmentCatalog;
+
+        this.pieceViews = pieceViews;
+
+        this.currentTeamProvider = currentTeamProvider;
+
+        this.configuredTeamCount = Mathf.Clamp(configuredTeamCount, 2, 4);
+
+    }
+
+
 
     public void RefreshPlayerPanels()
+
     {
+
         if (gameState != null && !gameState.HasRethrownThisTurn) rethrowEffectShown = false;
+
         if (hud == null || boardState == null) return;
 
+
+
         int teamCount = configuredTeamCount;
+
         foreach (Piece piece in boardState.Pieces)
+
             teamCount = Mathf.Max(teamCount, piece.Team + 1);
+
         teamCount = Mathf.Min(teamCount, 4);
 
+
+
         for (int team = 0; team < teamCount; team++)
+
         {
+
             int waiting = 0;
+
             int onBoard = 0;
+
             int finished = 0;
+
             var waitingSlots = new List<int>();
 
+
+
             foreach (Piece piece in boardState.Pieces)
+
             {
+
                 if (piece.Team != team) continue;
+
                 if (piece.IsWaiting)
+
                 {
+
                     waiting++;
+
                     PieceView view = FindView(piece);
+
                     if (view != null) waitingSlots.Add(view.SlotIndex);
+
                 }
+
                 else if (piece.IsOnBoard) onBoard++;
+
                 else if (piece.IsFinished) finished++;
+
             }
 
+
+
             var augmentIds = new List<string>();
+
             foreach (IAugment augment in boardState.GetAugments(team))
+
                 augmentIds.Add(augment.Id);
 
+
+
             bool rethrowUsed = gameState != null && gameState.HasRethrownThisTurn &&
+
                                team == (currentTeamProvider?.Invoke() ?? team);
+
             hud.SetPlayerState(team, waiting, onBoard, finished, augmentIds, waitingSlots, rethrowUsed);
+
         }
+
     }
+
+
 
     private PieceView FindView(Piece piece)
+
     {
+
         if (pieceViews == null) return null;
+
         foreach (PieceView view in pieceViews)
+
             if (view != null && view.Piece == piece) return view;
+
         return null;
+
     }
+
+
 
     public void RefreshStoredResults(Piece contextPiece = null)
+
     {
+
         if (hud == null || gameState == null) return;
+
         if (gameState.StoredResults.Count == 0)
+
         {
+
             hud.SetResults("저장 결과: -");
+
             return;
+
         }
+
+
 
         var results = new List<string>();
+
         foreach (YutResult result in gameState.StoredResults)
+
         {
+
             int baseCount = result.Steps();
+
             int modified = contextPiece != null
+
                 ? boardState.GetModifiedMoveCount(contextPiece, baseCount)
+
                 : baseCount;
+
             int bonus = modified - baseCount;
+
             string bonusText = bonus != 0 ? $" ({bonus:+0;-0})" : "";
+
             results.Add($"{ResultLabel(result)} {baseCount}{bonusText}");
+
         }
+
+
 
         hud.SetResults($"저장: {string.Join("  ", results)}");
+
     }
+
+
 
     public bool CanUseRethrow(int team)
+
     {
+
         if (gameState == null) return false;
+
         RethrowAugment rethrow = GetRethrowAugment(team);
+
         return rethrow != null && rethrow.CanUse(gameState, team);
+
     }
+
+
 
     public bool DidGrantExtraThrow(YutThrowOutcome outcome, int team)
+
     {
+
         if (gameState == null) return false;
+
         if (outcome.IsResultChanged || !outcome.Result.GrantsExtraThrow()) return false;
 
+
+
         foreach (IAugment augment in gameState.Board.GetAugments(team))
+
         {
+
             if (augment is HunterAugment) return false;
+
         }
 
+
+
         return true;
+
     }
+
+
 
     private bool rethrowEffectShown;
 
+
+
     private static string EffectName(string id) => id switch
+
     {
-        "Contrarian" => "청개구리", "Monk" => "수행자", "Veteran" => "노장",
-        "Marathoner" => "마라토너", "Sprinter" => "스프린터", "Hunter" => "사냥꾼",
-        "Gambler" => "도박사", "Rethrow" => "야바위꾼", "Assassin" => "암살자",
-        "Pacifist" => "평화주의자", "Loner" => "외톨이", "FriendShield" => "프렌드쉴드", _ => id
+
+        "Contrarian" => "청개구리",
+        "Monk" => "수행자",
+        "Veteran" => "노장",
+
+        "Marathoner" => "마라토너",
+        "Sprinter" => "스프린터",
+        "Hunter" => "사냥꾼",
+
+        "Gambler" => "도박사",
+        "Rethrow" => "야바위꾼",
+        "Assassin" => "암살자",
+
+        "Pacifist" => "평화주의자",
+        "Loner" => "외톨이",
+        "FriendShield" => "경호원",
+        _ => id
+
     };
+
+
 
     private static void AddEffect(List<string> effects, string id)
+
     {
+
         string text = EffectName(id);
+
         if (!effects.Contains(text)) effects.Add(text);
+
     }
+
+
 
     public string DescribeThrowEffects(YutThrowOutcome outcome, int team, bool extraThrow)
+
     {
+
         var effects = new List<string>();
+
         bool canMove = boardState.Pieces.Any(piece => piece.Team == team &&
+
             !piece.IsFinished && boardState.GetMovePaths(piece, outcome.Result.Steps()).Count > 0);
+
         foreach (IAugment augment in boardState.GetAugments(team))
+
         {
+
             bool applies = augment.Id switch
+
             {
+
                 "Gambler" => outcome.IsResultChanged,
+
                 "Hunter" => !outcome.IsResultChanged && outcome.Result.GrantsExtraThrow() && !extraThrow,
+
                 "Contrarian" => canMove && outcome.Result == YutResult.BackDo,
+
                 "Monk" => canMove && (outcome.Result == YutResult.Do || outcome.Result == YutResult.Gae),
+
                 "Veteran" => canMove && outcome.Result.GrantsExtraThrow(),
+
                 "Marathoner" => canMove && outcome.Result.Steps() > 0,
+
                 "Rethrow" => gameState.HasRethrownThisTurn && !rethrowEffectShown,
+
                 "Loner" => outcome.Result.Steps() > 0 && boardState.Pieces.Any(p => p.Team == team && p.IsWaiting) &&
+
                     boardState.Pieces.Any(p => p.Team == team && p.IsOnBoard),
+
                 _ => false
+
             };
+
             if (applies) AddEffect(effects, augment.Id);
+
         }
+
         rethrowEffectShown = gameState.HasRethrownThisTurn;
+
         if (extraThrow) effects.Add("한 번 더");
+
         else if (outcome.IsResultChanged || effects.Contains("사냥꾼")) effects.Add("추가 던지기 없음");
+
         return string.Join("\n", effects);
+
     }
+
+
 
     public bool ShouldShowSkippedBackDo(YutThrowOutcome outcome, int team, bool hasStoredMove) =>
+
         outcome.Result == YutResult.BackDo && gameState.RemainingThrows == 0 && !hasStoredMove &&
+
         !CanUseRethrow(team) && !boardState.Pieces.Any(piece => piece.Team == team && piece.IsOnBoard);
 
+
+
     public string DescribeMoveEffects(MoveResult result)
+
     {
+
         var effects = new List<string>();
+
         int team = result.Piece.Team;
+
         var survivors = result.Path.IsFinished ? new List<Piece>() :
+
             boardState.GetPiecesAt(result.Path.Destination).Where(p => p.Team != team).ToList();
+
         bool assassin = boardState.GetAugments(team).Any(a => a.Id == "Assassin");
+
         foreach (IAugment augment in boardState.GetAugments(team))
+
         {
+
             bool applies = augment.Id switch
+
             {
+
                 "Monk" => result.MoveCount == 1 || result.MoveCount == 2,
+
                 "Veteran" => result.MoveCount == 4 || result.MoveCount == 5,
+
                 "Contrarian" => result.MoveCount == -1 && !result.Path.IsBackward,
+
                 "Marathoner" => result.MoveCount > 0,
+
                 "Sprinter" => result.MoveCount > 0 && result.Path.Start.Type == BoardNodeType.Start,
+
                 "Hunter" => result.CapturedPieces.Count > 0,
+
                 "Assassin" => result.CapturedPieces.Count > 0 || survivors.Count > 0,
+
                 "Pacifist" => !assassin && survivors.Count > 0,
+
                 _ => false
+
             };
+
             if (applies) AddEffect(effects, augment.Id);
+
         }
+
         foreach (Piece survivor in survivors)
+
             foreach (IAugment augment in boardState.GetAugments(survivor.Team))
+
                 if ((!assassin && (augment.Id == "Pacifist" || augment.Id == "Loner")) ||
+
                     (augment.Id == "FriendShield" && result.CapturedPieces.Any(p => p.Team == survivor.Team)))
+
                     AddEffect(effects, augment.Id);
+
         if (effects.Contains("사냥꾼")) effects.Add("추가 던지기 2회");
+
         return string.Join("\n", effects);
+
     }
 
-    public static string MoveOptionLabel(MoveOption option)
-    {
-        int baseCount = option.Result.Steps();
-        int bonus = option.ModifiedMoveCount - baseCount;
-        string bonusText = bonus != 0 ? $" ({bonus:+0;-0})" : "";
-        return $"{ResultLabel(option.Result)} {baseCount}{bonusText}";
-    }
+
+
+    public static string MoveOptionLabel(MoveOption option) => ResultLabel(option.Result);
+
+
 
     public static Color ResultColor(YutResult result) => result switch
+
     {
+
         YutResult.BackDo => new Color(1f, 0.25f, 1f),
+
         YutResult.Do => Color.yellow,
+
         YutResult.Gae => new Color(1f, 0.55f, 0.1f),
+
         YutResult.Geol => Color.red,
+
         YutResult.Yut => Color.green,
+
         YutResult.Mo => Color.cyan,
+
         _ => Color.white
+
     };
+
+
 
     public static string ResultLabel(YutResult result) => result switch
+
     {
+
         YutResult.BackDo => "빽도",
+
         YutResult.Do => "도",
+
         YutResult.Gae => "개",
+
         YutResult.Geol => "걸",
+
         YutResult.Yut => "윷",
+
         YutResult.Mo => "모",
+
         _ => "-"
+
     };
 
+
+
     private RethrowAugment GetRethrowAugment(int team)
+
     {
+
         if (boardState == null) return null;
+
         foreach (IAugment augment in boardState.GetAugments(team))
+
             if (augment is RethrowAugment rethrow) return rethrow;
+
         return null;
+
     }
+
 }
