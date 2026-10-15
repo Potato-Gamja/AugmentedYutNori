@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -17,6 +17,8 @@ public sealed class YutResultRevealView : MonoBehaviour
     private TMP_Text detail;
     private CanvasGroup canvasGroup;
     private Coroutine routine;
+    private Coroutine noticeRoutine;
+    private string currentDescription;
     private Sprite stickFlat;
     private Sprite stickRound;
     private Sprite stickBackdo;
@@ -38,6 +40,9 @@ public sealed class YutResultRevealView : MonoBehaviour
 
     public void Show(YutThrowOutcome outcome, bool grantedExtraThrow, int team)
     {
+        if (noticeRoutine != null) { StopCoroutine(noticeRoutine); noticeRoutine = null; }
+        if (revealRoot != null) revealRoot.SetActive(false);
+        currentDescription = EffectDescription(outcome, grantedExtraThrow);
         SoundManager.Play(SoundId.YutThrow);
 
         if (TryBindResultPanel())
@@ -52,7 +57,7 @@ public sealed class YutResultRevealView : MonoBehaviour
             : outcome.Result.DisplayName();
         title.color = TurnHudView.GetTeamColor(team);
 
-        detail.text = EffectDescription(outcome, grantedExtraThrow);
+        detail.text = currentDescription;
 
         if (routine != null) StopCoroutine(routine);
         revealRoot.SetActive(true);
@@ -96,7 +101,7 @@ public sealed class YutResultRevealView : MonoBehaviour
     {
         panelResult.text = outcome.OriginalResult.DisplayName();
         panelResult.color = TurnHudView.GetTeamColor(team);
-        panelSteps.text = EffectDescription(outcome, grantedExtraThrow);
+        panelSteps.text = currentDescription;
 
         for (int i = 0; i < panelSticks.Length; i++)
         {
@@ -114,10 +119,40 @@ public sealed class YutResultRevealView : MonoBehaviour
             : StartCoroutine(PulsePanelResult());
     }
 
+    public void ShowEffectDescription(string description)
+    {
+        currentDescription = description ?? string.Empty;
+        if (TryBindResultPanel())
+        {
+            panelSteps.text = currentDescription;
+            panelSteps.textWrappingMode = TextWrappingModes.Normal;
+            panelSteps.enableAutoSizing = true; panelSteps.fontSizeMin = 14; panelSteps.fontSizeMax = 22;
+        }
+        if (detail != null && noticeRoutine == null) detail.text = currentDescription;
+    }
+
+    public void ShowSkippedBackDo(int team)
+    {
+        EnsureCreated();
+        if (noticeRoutine != null) StopCoroutine(noticeRoutine);
+        title.text = "빽도 · 차례 종료";
+        title.enableAutoSizing = true; title.fontSizeMin = 28; title.fontSizeMax = 52;
+        title.color = TurnHudView.GetTeamColor(team);
+        detail.text = "판에 나온 말이 없어\n다음 차례로 넘어갑니다.";
+        revealRoot.SetActive(true);
+        noticeRoutine = StartCoroutine(PlaySkippedNotice());
+    }
+
+    private IEnumerator PlaySkippedNotice()
+    {
+        yield return Play();
+        noticeRoutine = null;
+    }
+
     private static string EffectDescription(YutThrowOutcome outcome, bool grantedExtraThrow)
     {
-        string effect = outcome.IsResultChanged ? "도박사 효과"
-            : outcome.Result.GrantsExtraThrow() && !grantedExtraThrow ? "사냥꾼 효과" : string.Empty;
+        string effect = outcome.IsResultChanged ? "도박사"
+            : outcome.Result.GrantsExtraThrow() && !grantedExtraThrow ? "사냥꾼" : string.Empty;
         string extraThrow = grantedExtraThrow ? "한 번 더"
             : !string.IsNullOrEmpty(effect) ? "추가 던지기 없음" : string.Empty;
         return string.IsNullOrEmpty(effect) ? extraThrow : $"{effect}\n{extraThrow}";
@@ -139,7 +174,7 @@ public sealed class YutResultRevealView : MonoBehaviour
         const float resultPause = 0.2f;
         float elapsed = 0f;
         Color effectColor = new Color32(255, 205, 82, 255);
-        panelSteps.text = "도박사 효과";
+        panelSteps.text = "도박사";
 
         Vector2[] originalPositions = new Vector2[panelSticks.Length];
         for (int i = 0; i < panelSticks.Length; i++)
@@ -173,7 +208,7 @@ public sealed class YutResultRevealView : MonoBehaviour
 
         yield return new WaitForSecondsRealtime(resultPause);
         panelResult.text = outcome.Result.DisplayName();
-        panelSteps.text = EffectDescription(outcome, grantedExtraThrow);
+        panelSteps.text = currentDescription;
         yield return PulsePanelResult();
     }
 

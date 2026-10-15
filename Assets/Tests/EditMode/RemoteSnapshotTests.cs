@@ -194,6 +194,27 @@ public class RemoteSnapshotTests
     }
 
     [Test]
+    public void BackDoWithoutAction_NotifiesThrowBeforeAdvancingTeam()
+    {
+        turn.ApplyServerTurn(0, 1);
+        ObserveSnapshots(_ => { });
+        int shownTeam = -1, shownThrows = -1, notifications = 0;
+        sessionType.GetEvent("Thrown").AddEventHandler(session, new Action<YutThrowOutcome>(_ =>
+        {
+            notifications++; shownTeam = turn.CurrentTeam; shownThrows = state.RemainingThrows;
+            Assert.That(state.StoredResults, Does.Contain(YutResult.BackDo));
+        }));
+        object message = Activator.CreateInstance(RuntimeType("ThrowResultMessage"));
+        Set(message, "team", 0); Set(message, "result", YutResult.BackDo);
+        Set(message, "sticks", new[] { true, false, false, false });
+        Receive(message, "THROW_RESULT", 1);
+        Assert.That(notifications, Is.EqualTo(1));
+        Assert.That(shownTeam, Is.Zero);
+        Assert.That(shownThrows, Is.Zero);
+        Assert.That(turn.CurrentTeam, Is.EqualTo(1));
+    }
+
+    [Test]
     public void RequestedSnapshotAtSameSequence_StillRepairsState()
     {
         int snapshots = 0; ObserveSnapshots(_ => snapshots++);

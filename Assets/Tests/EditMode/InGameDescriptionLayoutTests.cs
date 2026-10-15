@@ -14,8 +14,8 @@ public class InGameDescriptionLayoutTests
 
     [TestCase(YutResult.Do, YutResult.Do, false, "")]
     [TestCase(YutResult.Yut, YutResult.Yut, true, "한 번 더")]
-    [TestCase(YutResult.Yut, YutResult.Yut, false, "사냥꾼 효과\n추가 던지기 없음")]
-    [TestCase(YutResult.Geol, YutResult.Do, false, "도박사 효과\n추가 던지기 없음")]
+    [TestCase(YutResult.Yut, YutResult.Yut, false, "사냥꾼\n추가 던지기 없음")]
+    [TestCase(YutResult.Geol, YutResult.Do, false, "도박사\n추가 던지기 없음")]
     public void ResultDetailShowsEffectsWithoutMoveDistance(YutResult result, YutResult original, bool extra, string expected)
     {
         var outcome = new YutThrowOutcome(new bool[4], result, original);

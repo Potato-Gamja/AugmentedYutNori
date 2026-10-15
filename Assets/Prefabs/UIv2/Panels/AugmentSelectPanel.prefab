@@ -320,7 +320,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\uBE68\uAC15 \uD300, \uC99D\uAC15\uC744 \uACE0\uB974\uC138\uC694"
+  m_text: "\uBE68\uAC15 \uD300, \uC9C1\uC5C5\uC744 \uACE0\uB974\uC138\uC694"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 45d9c58909a014a45bd755a22aacd252, type: 2}
   m_sharedMaterial: {fileID: 5265966731666215521, guid: 45d9c58909a014a45bd755a22aacd252, type: 2}
@@ -533,7 +533,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_text: "\uCE74\uB4DC\uB97C \uB204\uB974\uBA74 \uBC14\uB85C \uC815\uD574\uC838\uC694.
-    \uACE0\uB978 \uC99D\uAC15\uC740 \uC774\uBC88 \uD310 \uB0B4\uB0B4 \uC801\uC6A9\uB3FC\uC694."
+    \uACE0\uB978 \uC9C1\uC5C5\uC740 \uC774\uBC88 \uD310 \uB0B4\uB0B4 \uC801\uC6A9\uB3FC\uC694."
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: c00c26cd6c87ed14dbcdaf534b5d8aad, type: 2}
   m_sharedMaterial: {fileID: -7389529962373955283, guid: c00c26cd6c87ed14dbcdaf534b5d8aad, type: 2}

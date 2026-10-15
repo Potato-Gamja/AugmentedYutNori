@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 /// <summary>
@@ -47,6 +48,7 @@ public sealed class GameFlowHudPresenter
 
     public void RefreshPlayerPanels()
     {
+        if (gameState != null && !gameState.HasRethrownThisTurn) rethrowEffectShown = false;
         if (hud == null || boardState == null) return;
 
         int teamCount = configuredTeamCount;
@@ -134,6 +136,86 @@ public sealed class GameFlowHudPresenter
         }
 
         return true;
+    }
+
+    private bool rethrowEffectShown;
+
+    private static string EffectName(string id) => id switch
+    {
+        "Contrarian" => "청개구리", "Monk" => "수행자", "Veteran" => "노장",
+        "Marathoner" => "마라토너", "Sprinter" => "스프린터", "Hunter" => "사냥꾼",
+        "Gambler" => "도박사", "Rethrow" => "야바위꾼", "Assassin" => "암살자",
+        "Pacifist" => "평화주의자", "Loner" => "외톨이", "FriendShield" => "프렌드쉴드", _ => id
+    };
+
+    private static void AddEffect(List<string> effects, string id)
+    {
+        string text = EffectName(id);
+        if (!effects.Contains(text)) effects.Add(text);
+    }
+
+    public string DescribeThrowEffects(YutThrowOutcome outcome, int team, bool extraThrow)
+    {
+        var effects = new List<string>();
+        bool canMove = boardState.Pieces.Any(piece => piece.Team == team &&
+            !piece.IsFinished && boardState.GetMovePaths(piece, outcome.Result.Steps()).Count > 0);
+        foreach (IAugment augment in boardState.GetAugments(team))
+        {
+            bool applies = augment.Id switch
+            {
+                "Gambler" => outcome.IsResultChanged,
+                "Hunter" => !outcome.IsResultChanged && outcome.Result.GrantsExtraThrow() && !extraThrow,
+                "Contrarian" => canMove && outcome.Result == YutResult.BackDo,
+                "Monk" => canMove && (outcome.Result == YutResult.Do || outcome.Result == YutResult.Gae),
+                "Veteran" => canMove && outcome.Result.GrantsExtraThrow(),
+                "Marathoner" => canMove && outcome.Result.Steps() > 0,
+                "Rethrow" => gameState.HasRethrownThisTurn && !rethrowEffectShown,
+                "Loner" => outcome.Result.Steps() > 0 && boardState.Pieces.Any(p => p.Team == team && p.IsWaiting) &&
+                    boardState.Pieces.Any(p => p.Team == team && p.IsOnBoard),
+                _ => false
+            };
+            if (applies) AddEffect(effects, augment.Id);
+        }
+        rethrowEffectShown = gameState.HasRethrownThisTurn;
+        if (extraThrow) effects.Add("한 번 더");
+        else if (outcome.IsResultChanged || effects.Contains("사냥꾼")) effects.Add("추가 던지기 없음");
+        return string.Join("\n", effects);
+    }
+
+    public bool ShouldShowSkippedBackDo(YutThrowOutcome outcome, int team, bool hasStoredMove) =>
+        outcome.Result == YutResult.BackDo && gameState.RemainingThrows == 0 && !hasStoredMove &&
+        !CanUseRethrow(team) && !boardState.Pieces.Any(piece => piece.Team == team && piece.IsOnBoard);
+
+    public string DescribeMoveEffects(MoveResult result)
+    {
+        var effects = new List<string>();
+        int team = result.Piece.Team;
+        var survivors = result.Path.IsFinished ? new List<Piece>() :
+            boardState.GetPiecesAt(result.Path.Destination).Where(p => p.Team != team).ToList();
+        bool assassin = boardState.GetAugments(team).Any(a => a.Id == "Assassin");
+        foreach (IAugment augment in boardState.GetAugments(team))
+        {
+            bool applies = augment.Id switch
+            {
+                "Monk" => result.MoveCount == 1 || result.MoveCount == 2,
+                "Veteran" => result.MoveCount == 4 || result.MoveCount == 5,
+                "Contrarian" => result.MoveCount == -1 && !result.Path.IsBackward,
+                "Marathoner" => result.MoveCount > 0,
+                "Sprinter" => result.MoveCount > 0 && result.Path.Start.Type == BoardNodeType.Start,
+                "Hunter" => result.CapturedPieces.Count > 0,
+                "Assassin" => result.CapturedPieces.Count > 0 || survivors.Count > 0,
+                "Pacifist" => !assassin && survivors.Count > 0,
+                _ => false
+            };
+            if (applies) AddEffect(effects, augment.Id);
+        }
+        foreach (Piece survivor in survivors)
+            foreach (IAugment augment in boardState.GetAugments(survivor.Team))
+                if ((!assassin && (augment.Id == "Pacifist" || augment.Id == "Loner")) ||
+                    (augment.Id == "FriendShield" && result.CapturedPieces.Any(p => p.Team == survivor.Team)))
+                    AddEffect(effects, augment.Id);
+        if (effects.Contains("사냥꾼")) effects.Add("추가 던지기 2회");
+        return string.Join("\n", effects);
     }
 
     public static string MoveOptionLabel(MoveOption option)

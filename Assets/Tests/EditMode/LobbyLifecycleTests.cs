@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Linq;
 using System.Reflection;
@@ -189,5 +189,28 @@ public class LobbyLifecycleTests
         // 로그인 객체를 만들지 않아 실제 네트워크 연결은 실행되지 않는다.
         Assert.That(socket.GetType().GetProperty("Url").GetValue(socket), Is.EqualTo("ws://localhost:8080/ws/rooms/NEXT"));
         Assert.That(Get(coordinator, "awaitingRoomJoin"), Is.False);
+    }
+    [Test]
+    public void FourPlayerActiveBordersUseTheirOwnTeamColors()
+    {
+        owner = UnityEngine.Object.Instantiate(UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(
+            "Assets/Prefabs/UI/GameHudPanel_3Col.prefab"));
+        Component hud = owner.GetComponent(RuntimeType("GameHudPanel"));
+        hud.GetType().GetMethod("Init").Invoke(hud, null);
+        hud.GetType().GetMethod("ConfigurePlayers").Invoke(hud, new object[] { 4, 4 });
+        Component view = owner.GetComponentInChildren(RuntimeType("PlayerStatusView"), true);
+        string[] names = { "PlayerPanel_Left", "PlayerPanel_Right", "PlayerPanel_3", "PlayerPanel_4" };
+        for (int activeTeam = 0; activeTeam < 4; activeTeam++)
+        {
+            view.GetType().GetMethod("SetActiveTeam").Invoke(view, new object[] { activeTeam });
+            for (int team = 0; team < 4; team++)
+            {
+                Transform border = view.transform.Find(names[team] + "/ActiveBorder");
+                Component image = border.GetComponent(RuntimeType("UnityEngine.UI.Image"));
+                Color expected = (Color32)RuntimeType("TurnHudView").GetMethod("GetTeamColor").Invoke(null, new object[] { team });
+                Assert.That(image.GetType().GetProperty("color").GetValue(image), Is.EqualTo(expected), names[team]);
+                Assert.That(border.gameObject.activeSelf, Is.EqualTo(team == activeTeam));
+            }
+        }
     }
 }

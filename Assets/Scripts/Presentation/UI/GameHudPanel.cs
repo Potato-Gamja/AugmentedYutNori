@@ -234,6 +234,9 @@ public class GameHudPanel : UIBase
         resultRevealView?.Show(outcome, grantedExtraThrow, team);
     }
 
+    public void ShowAugmentEffect(string description) => resultRevealView?.ShowEffectDescription(description);
+    public void ShowSkippedBackDo(int team) => resultRevealView?.ShowSkippedBackDo(team);
+
     public void ShowThrowResult(YutResult result, int remainingThrows, int team)
     {
         resultRevealView?.Show(result, remainingThrows, team);

@@ -251,6 +251,7 @@ public sealed class GameFlowSelectionController
 
     private void CreateLabel(NodeView destination, IReadOnlyList<MoveOption> options)
     {
+        if (options.Count > 1) return; // 복수 결과의 목적지는 노드 강조만 유지한다.
         if (destinationLabelPrefab == null)
         {
             Debug.LogError("[GameFlow] Resources/UI/DestinationResultLabel 프리팹이 없습니다.");
@@ -272,9 +273,7 @@ public sealed class GameFlowSelectionController
 
         TextMeshPro text = labelObject.GetComponentInChildren<TextMeshPro>();
 
-        text.text = options.Count > 1
-            ? "선택"
-            : GameFlowHudPresenter.ResultLabel(options[0].Result);
+        text.text = GameFlowHudPresenter.ResultLabel(options[0].Result);
         text.color = Color.white;
         MeshRenderer renderer = text.GetComponent<MeshRenderer>();
         if (source != null) renderer.sortingLayerID = source.sortingLayerID;

@@ -1,0 +1,21 @@
+html, body { width: 100%; height: 100%; overflow: hidden; background: #231f20; }
+#unity-container.yutnori-responsive {
+  position: fixed; inset: 0; box-sizing: border-box;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+    env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  padding-bottom: calc(38px + env(safe-area-inset-bottom, 0px));
+  display: grid; place-items: center;
+}
+#unity-canvas { display: block; touch-action: none; outline: none; }
+#unity-footer { position: absolute; bottom: 0; right: 0; left: 0; background: #fff; }
+#unity-fullscreen-button { touch-action: manipulation; }
+#unity-loading-bar, #unity-warning { z-index: 2; }
+@media (pointer: coarse), (max-height: 500px) {
+  #unity-footer { display: none; }
+  #unity-container.yutnori-responsive { padding-bottom: env(safe-area-inset-bottom, 0px); }
+}
+
+#unity-container.yutnori-responsive:fullscreen { padding-bottom: env(safe-area-inset-bottom, 0px); }
+#unity-container:fullscreen #unity-footer { display: none; }
+#unity-container.yutnori-responsive:-webkit-full-screen { padding-bottom: env(safe-area-inset-bottom, 0px); }
+#unity-container:-webkit-full-screen #unity-footer { display: none; }

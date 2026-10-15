@@ -243,20 +243,24 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
         if (message.team != turnManager.CurrentTeam)
             throw new InvalidOperationException($"현재 팀과 던진 팀이 다릅니다. Current={turnManager.CurrentTeam}, Server={message.team}");
 
-        YutThrowOutcome outcome;
-        if (message.isRethrow)
+        // Core가 빽도 무행동으로 다음 팀을 적용하기 전에 던진 팀의 화면에 알린다.
+        // 로컬 세션과 같은 Thrown 시점을 사용한다.
+        void NotifyThrown(YutThrowOutcome outcome)
         {
-            if (!rules.ApplyRethrow(message.sticks, message.result))
-                throw new InvalidOperationException("서버 재던지기 결과를 적용할 수 없습니다.");
-            outcome = new YutThrowOutcome(message.sticks, message.result);
+            commandPending = false;
+            Thrown?.Invoke(outcome);
         }
-        else
+        gameEvents.Thrown += NotifyThrown;
+        try
         {
-            outcome = rules.ApplyThrow(message.sticks, message.result);
+            if (message.isRethrow)
+            {
+                if (!rules.ApplyRethrow(message.sticks, message.result))
+                    throw new InvalidOperationException("서버 재던지기 결과를 적용할 수 없습니다.");
+            }
+            else rules.ApplyThrow(message.sticks, message.result);
         }
-
-        commandPending = false;
-        Thrown?.Invoke(outcome);
+        finally { gameEvents.Thrown -= NotifyThrown; }
     }
 
     // 서버가 확정한 이동을 내 이동·상대 이동 구분 없이 같은 방법으로 적용한다

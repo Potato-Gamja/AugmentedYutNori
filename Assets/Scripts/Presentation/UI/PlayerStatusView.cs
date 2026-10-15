@@ -329,7 +329,12 @@ public sealed class PlayerStatusView : MonoBehaviour
             if (panel == null) continue;
 
             Transform border = panel.Find("ActiveBorder");
-            if (border != null) border.gameObject.SetActive(team == activeTeam);
+            if (border != null)
+            {
+                Image borderImage = border.GetComponent<Image>();
+                if (borderImage != null) borderImage.color = TurnHudView.GetTeamColor(team);
+                border.gameObject.SetActive(team == activeTeam);
+            }
 
             Image header = panel.Find("Header")?.GetComponent<Image>();
             if (header != null)
