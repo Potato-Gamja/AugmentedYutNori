@@ -95,10 +95,29 @@ public static class UIPopupPrefabBuilder
     private static GameObject IconOption()
     {
         var root=Rect("ProfileIconOption",null,new Vector2(134,176));var paper=Image("Paper",root,Sprite("panel_paper"),raycast:true);var button=root.gameObject.AddComponent<Button>();button.targetGraphic=paper;button.transition=Selectable.Transition.None;button.navigation=new Navigation{mode=Navigation.Mode.None};
-        Pixel("Icon",root,"icon_001",67,62,96);var frame=Image("SelectedFrame",root,Sprite("profile_px_select"),"E0950F",false);Center(frame.rectTransform,67,62,108,108);frame.gameObject.SetActive(false);
+        Pixel("Icon",root,"icon_001",67,62,96);var frame=Image("SelectedFrame",root,Sprite("turn_banner_border"),"E0950F");ConfigureProfileSelectionFrame(frame);frame.gameObject.SetActive(false);
         var locked=Image("Lock",root,Sprite("badge_lock"),sliced:false);Center(locked.rectTransform,67,62,36,36);locked.gameObject.SetActive(false);
         var name=Text("IconName",root,"윷가락",Bold,18);Center(name.rectTransform,67,136,128,26);Fit(name,14);var state=Text("SelectionState",root,"선택",Medium,16,"7A5C3E");Center(state.rectTransform,67,158,128,24);
         root.gameObject.AddComponent<ProfileIconOptionPresentation>().Configure(frame,locked,state);return root.gameObject;
+    }
+    private static void ConfigureProfileSelectionFrame(Image frame)
+    {
+        frame.sprite=Sprite("turn_banner_border");frame.type=UnityEngine.UI.Image.Type.Sliced;
+        frame.color=Hex("E0950F");frame.raycastTarget=false;Stretch(frame.rectTransform);
+        frame.rectTransform.offsetMin=Vector2.one;frame.rectTransform.offsetMax=-Vector2.one;
+        var glow=frame.GetComponent<Outline>()??frame.gameObject.AddComponent<Outline>();
+        glow.effectColor=new Color32(246,199,100,150);glow.effectDistance=new Vector2(2,2);glow.useGraphicAlpha=true;
+    }
+    [MenuItem("Tools/Yutnori/UIv2/Update Profile Selection Border")]
+    public static void UpdateProfileSelectionBorder()
+    {
+        string path=Items+"ProfileIconOption.prefab";var root=PrefabUtility.LoadPrefabContents(path);
+        try
+        {
+            ConfigureProfileSelectionFrame(root.transform.Find("SelectedFrame").GetComponent<Image>());
+            PrefabUtility.SaveAsPrefabAsset(root,path);
+        }
+        finally{PrefabUtility.UnloadPrefabContents(root);}
     }
     private static GameObject Profile()
     {

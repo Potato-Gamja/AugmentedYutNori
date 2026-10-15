@@ -124,6 +124,110 @@ public class RemoteSnapshotTests
         Assert.That(board.State.Pieces.Count(), Is.EqualTo(3));
     }
 
+    private void Receive(object payload, string type, long seq = 0)
+    {
+        Type serializer = RuntimeType("MessageSerializer");
+        string json = (string)serializer.GetMethods().Single(method => method.Name == "Serialize" && method.IsGenericMethod)
+            .MakeGenericMethod(payload.GetType()).Invoke(null,
+                new[] { Enum.Parse(RuntimeType("MessageType"), type), payload, (object)seq });
+        object envelope = serializer.GetMethod("Deserialize").Invoke(null, new object[] { json });
+        sessionType.GetMethod("OnMessageReceived", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(session, new[] { envelope });
+    }
+
+    private void ObserveSnapshots(Action<object> handler)
+    {
+        Delegate callback = (Delegate)typeof(RemoteSnapshotTests).GetMethod("SnapshotHandler",
+            BindingFlags.Static | BindingFlags.NonPublic).MakeGenericMethod(RuntimeType("GameSnapshotMessage"))
+            .Invoke(null, new object[] { handler });
+        sessionType.GetEvent("SnapshotApplied").AddEventHandler(session, callback);
+        sessionType.GetMethod("ReplayPendingMessages").Invoke(session, null);
+    }
+
+    [TestCase(40L)]
+    [TestCase(41L)]
+    public void LateSnapshotAfterMove_DoesNotReplayRestoreOrCancelMovement(long snapshotSequence)
+    {
+        int snapshots = 0, moves = 0;
+        ObserveSnapshots(_ => snapshots++);
+        sessionType.GetEvent("Moved").AddEventHandler(session, new Action<MoveResult>(_ => moves++));
+        Receive(PopulatedSnapshot(), "GAME_SNAPSHOT");
+        object move = Activator.CreateInstance(RuntimeType("MoveAppliedMessage"));
+        Set(move, "team", 1); Set(move, "pieceId", 100); Set(move, "moveCount", 1);
+        Set(move, "destinationNodeId", 1);
+        Set(move, "movedPieceIds", new List<int> { 100 });
+        Set(move, "capturedPieceIds", new List<int>());
+        Receive(move, "MOVE_APPLIED", 41);
+        Assert.That(moves, Is.EqualTo(1));
+        object late = PopulatedSnapshot(); Set(late, "lastSeq", snapshotSequence);
+        Receive(late, "GAME_SNAPSHOT");
+        Assert.That(snapshots, Is.EqualTo(1), "중복 복원 이벤트가 이동 연출을 취소하면 안 된다.");
+        Assert.That(board.State.GetPiece(100).Node.Id, Is.EqualTo(1));
+        Assert.That(sessionType.GetField("lastSequence", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(session), Is.EqualTo(41L));
+    }
+
+    [TestCase(YutResult.BackDo, 2)]
+    [TestCase(YutResult.Do, 4)]
+    [TestCase(YutResult.Gae, 5)]
+    [TestCase(YutResult.Geol, 6)]
+    [TestCase(YutResult.Yut, 6)]
+    [TestCase(YutResult.Mo, 7)]
+    public void RestoredVeteran_AppliesServerMoveWithOnlyYutMoReduced(YutResult rolled, int destination)
+    {
+        int moves = 0, rejected = 0;
+        ObserveSnapshots(_ => { });
+        sessionType.GetEvent("Moved").AddEventHandler(session, new Action<MoveResult>(_ => moves++));
+        sessionType.GetEvent("RequestRejected").AddEventHandler(session, new Action<string>(_ => rejected++));
+        object snapshot = PopulatedSnapshot();
+        Set(snapshot, "currentTeam", 0);
+        Set(snapshot, "storedResults", new List<YutResult> { rolled });
+        Set(snapshot, "ownedAugments", new Dictionary<int, List<string>> { { 0, new List<string> { "Veteran" } } });
+        Receive(snapshot, "GAME_SNAPSHOT");
+        object move = Activator.CreateInstance(RuntimeType("MoveAppliedMessage"));
+        Set(move, "team", 0); Set(move, "pieceId", 0); Set(move, "moveCount", rolled.Steps());
+        Set(move, "destinationNodeId", destination);
+        Set(move, "movedPieceIds", new List<int> { 0 });
+        Set(move, "capturedPieceIds", destination == 5 ? new List<int> { 101 } : new List<int>());
+        Receive(move, "MOVE_APPLIED", 41);
+        Assert.That(moves, Is.EqualTo(1));
+        Assert.That(rejected, Is.Zero);
+        Assert.That(board.State.GetPiece(0).Node.Id, Is.EqualTo(destination));
+    }
+
+    [Test]
+    public void RequestedSnapshotAtSameSequence_StillRepairsState()
+    {
+        int snapshots = 0; ObserveSnapshots(_ => snapshots++);
+        Receive(PopulatedSnapshot(), "GAME_SNAPSHOT");
+        var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        sessionType.GetField("awaitingSnapshot", flags).SetValue(session, true);
+        sessionType.GetField("syncRequested", flags).SetValue(session, true);
+        Receive(PopulatedSnapshot(), "GAME_SNAPSHOT");
+        Assert.That(snapshots, Is.EqualTo(2));
+        Assert.That((bool)sessionType.GetProperty("IsCommandPending").GetValue(session), Is.False);
+    }
+
+    [Test]
+    public void FirstSnapshotAtObservedSequence_StillRestoresPieces()
+    {
+        int snapshots = 0; ObserveSnapshots(_ => snapshots++);
+        var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        sessionType.GetField("hasReceivedSequence", flags).SetValue(session, true);
+        sessionType.GetField("lastSequence", flags).SetValue(session, 40L);
+        Receive(PopulatedSnapshot(), "GAME_SNAPSHOT");
+        Assert.That(snapshots, Is.EqualTo(1));
+        Assert.That(board.State.GetPiece(0).Node.Id, Is.EqualTo(3));
+    }
+
+    [Test]
+    public void NewerSnapshot_StillRestoresServerState()
+    {
+        int snapshots = 0; ObserveSnapshots(_ => snapshots++);
+        Receive(PopulatedSnapshot(), "GAME_SNAPSHOT");
+        object newer = PopulatedSnapshot(); Set(newer, "lastSeq", 42L);
+        Receive(newer, "GAME_SNAPSHOT");
+        Assert.That(snapshots, Is.EqualTo(2));
+    }
+
     [Test]
     public void Snapshot_RestoresPiecesAugmentTurnAndResults_RemovesAbsentTeam()
     {

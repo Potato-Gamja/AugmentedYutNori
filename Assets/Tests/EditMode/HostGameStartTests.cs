@@ -161,6 +161,65 @@ public class HostGameStartTests
         Assert.That(profiles[2].GetType().GetField("team").GetValue(profiles[2]), Is.EqualTo(2));
     }
 
+    private string SlotName(int slot)
+    {
+        object text = ((Array)Get(panel, "playerNameTexts")).GetValue(slot);
+        return (string)text.GetType().GetProperty("text").GetValue(text);
+    }
+    private Color SlotColor(int slot)
+    {
+        object image = ((Array)Get(panel, "playerSlotBackgrounds")).GetValue(slot);
+        return (Color)image.GetType().GetProperty("color").GetValue(image);
+    }
+    private static Color ExpectedTeamColor(int team) => ((Color[])TypeOf("RoomPanel")
+        .GetField("TeamColors", BindingFlags.Static | BindingFlags.NonPublic).GetValue(null))[team];
+
+    [Test]
+    public void HostLeavesAndNewPlayerFillsOldTeam_PreviewMatchesGameStartWithoutChangingServerTeams()
+    {
+        object room = Room(4);
+        var members = (IList)room.GetType().GetField("members").GetValue(room);
+        members.RemoveAt(0);
+        room.GetType().GetField("hostPlayerId").SetValue(room, "p1");
+        Receive(room);
+        for (int i = 0; i < 3; i++)
+        {
+            Assert.That(SlotName(i), Is.EqualTo("참가자" + (i + 1)));
+            Assert.That(SlotColor(i), Is.EqualTo(ExpectedTeamColor(i)));
+            Assert.That(members[i].GetType().GetField("team").GetValue(members[i]), Is.EqualTo(i + 1));
+        }
+        object otherRoom = Room(1);
+        object newcomer = ((IList)otherRoom.GetType().GetField("members").GetValue(otherRoom))[0];
+        newcomer.GetType().GetField("playerId").SetValue(newcomer, "p4");
+        newcomer.GetType().GetField("nickname").SetValue(newcomer, "새 참가자");
+        members.Add(newcomer); // 서버는 비어 있는 team 0을 주지만, 시작할 때 마지막 team 3으로 배정한다.
+        Receive(room);
+        Assert.That(SlotName(0), Is.EqualTo("참가자1"));
+        Assert.That(SlotName(3), Is.EqualTo("새 참가자"));
+        Assert.That(SlotColor(3), Is.EqualTo(ExpectedTeamColor(3)));
+        Assert.That(newcomer.GetType().GetField("team").GetValue(newcomer), Is.EqualTo(0));
+        var names = Enumerable.Range(0, 4).Select(SlotName).ToArray();
+        var colors = Enumerable.Range(0, 4).Select(SlotColor).ToArray();
+        for (int i = 0; i < 4; i++) members[i].GetType().GetField("team").SetValue(members[i], i);
+        room.GetType().GetField("status").SetValue(room, "PLAYING");
+        Receive(room);
+        Assert.That(Enumerable.Range(0, 4).Select(SlotName), Is.EqualTo(names));
+        Assert.That(Enumerable.Range(0, 4).Select(SlotColor), Is.EqualTo(colors));
+    }
+
+    [Test]
+    public void PlayingRoomUsesActualPlayerColorsInsteadOfFixedSeatColors()
+    {
+        object room = Room(2, status: "PLAYING");
+        var members = (IList)room.GetType().GetField("members").GetValue(room);
+        members[0].GetType().GetField("team").SetValue(members[0], 3);
+        members[1].GetType().GetField("team").SetValue(members[1], 1);
+        Receive(room);
+        Assert.That(SlotName(0), Is.EqualTo("참가자1"));
+        Assert.That(SlotColor(0), Is.EqualTo(ExpectedTeamColor(1)));
+        Assert.That(SlotColor(1), Is.EqualTo(ExpectedTeamColor(3)));
+    }
+
     [Test]
     public void ProtocolReadsHostAndSerializesStartGameWithoutPayloadFields()
     {

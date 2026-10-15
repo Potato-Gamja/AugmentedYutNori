@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Collections.Generic;
 using TMPro;
@@ -21,7 +21,7 @@ public class RoomPanel : UIBase
     [SerializeField] private TMP_Text[] playerStatusTexts;
     [SerializeField] private Image[] playerSlotBackgrounds;
     [SerializeField] private Image[] playerProfileIcons;
-    [SerializeField] private GameObject[] emptyProfileIconIndicators;
+    //[SerializeField] private GameObject[] emptyProfileIconIndicators;
     [SerializeField] private List<Sprite> profileIcons = new();
     [SerializeField] private TMP_Text statusText;
     [SerializeField] private Button readyButton;
@@ -97,11 +97,17 @@ public class RoomPanel : UIBase
             roomCodeText.text = room.roomCode;
 
         localReady = false;
-        RoomPlayer[] members = room.members.OrderBy(player => player.team).ToArray();
+        // 서버 normalizeTeams는 게임 시작 직전 members 순서로 팀을 배정한다.
+        // 대기 중에는 그 배정을 미리 표시하되, 서버의 실제 team 값은 변경하지 않는다.
+        bool previewGameTeams = room.status == "WAITING";
+        RoomPlayer[] members = previewGameTeams
+            ? room.members.ToArray()
+            : room.members.OrderBy(player => player.team).ToArray();
         for (int i = 0; i < playerSlots.Length; i++)
         {
             bool occupied = i < members.Length;
             RoomPlayer player = occupied ? members[i] : null;
+            int displayTeam = previewGameTeams ? i : (player?.team ?? i);
             playerSlots[i]?.SetActive(true);
 
             if (playerNameTexts != null && i < playerNameTexts.Length && playerNameTexts[i] != null)
@@ -112,13 +118,13 @@ public class RoomPanel : UIBase
             if (playerProfileIcons != null && i < playerProfileIcons.Length && playerProfileIcons[i] != null)
             {
                 Image icon = playerProfileIcons[i];
-                icon.sprite = occupied ? PlayerProfileIconResolver.Resolve(profileIcons, player.iconId, player.team) : null;
+                icon.sprite = occupied ? PlayerProfileIconResolver.Resolve(profileIcons, player.iconId, displayTeam) : null;
                 icon.enabled = icon.sprite != null;
                 icon.preserveAspect = true;
             }
 
-            if (emptyProfileIconIndicators != null && i < emptyProfileIconIndicators.Length)
-                emptyProfileIconIndicators[i]?.SetActive(!occupied);
+            //if (emptyProfileIconIndicators != null && i < emptyProfileIconIndicators.Length)
+            //    emptyProfileIconIndicators[i]?.SetActive(!occupied);
 
             if (playerStatusTexts != null && i < playerStatusTexts.Length && playerStatusTexts[i] != null)
             {
@@ -136,7 +142,7 @@ public class RoomPanel : UIBase
 
             if (playerSlotBackgrounds != null && i < playerSlotBackgrounds.Length && playerSlotBackgrounds[i] != null)
                 playerSlotBackgrounds[i].color = occupied
-                    ? TeamColors[Mathf.Clamp(player.team, 0, TeamColors.Length - 1)]
+                    ? TeamColors[Mathf.Clamp(displayTeam, 0, TeamColors.Length - 1)]
                     : new Color32(235, 228, 211, 120);
 
             if (occupied && player.playerId == localPlayerId) localReady = player.ready;
