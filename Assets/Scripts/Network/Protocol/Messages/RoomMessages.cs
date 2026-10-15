@@ -27,6 +27,7 @@ public class ReadyRequest
 // S→C ROOM_STATE  방 인원·준비 상태가 바뀔 때마다 전체를 다시 보낸다
 public class RoomStateMessage
 {
+    public string hostPlayerId; // 서버가 지정한 현재 방장 (최초 입장자 또는 승계자)
     public string roomCode;
     public string status;
     public int currentPlayers;

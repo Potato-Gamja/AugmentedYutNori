@@ -30,6 +30,7 @@ public class LobbyController : MonoBehaviour
     public event Action<string, string> JoinRoomRequested;
     public event Action<string> QuickJoinRequested;
     public event Action<bool> ReadyRequested;
+    public event Action StartGameRequested;
     public event Action LeaveRoomRequested;
 
     private void Start()
@@ -216,6 +217,16 @@ public class LobbyController : MonoBehaviour
         ReadyRequested?.Invoke(ready);
     }
 
+    private void OnStartGameRequested()
+    {
+        if (StartGameRequested == null)
+        {
+            ReceiveError("게임 시작 요청 연결을 확인해 주세요.");
+            return;
+        }
+        StartGameRequested.Invoke();
+    }
+
     private void OnLeaveRequested()
     {
         roomPanel.SetInteraction(false);
@@ -236,6 +247,9 @@ public class LobbyController : MonoBehaviour
         uiManager.Close<LobbyPanel>();
         uiManager.Open<RoomPanel>();
         roomPanel.ShowRoom(room, localPlayerId);
+        roomPanel.ConfigureGameStart(
+            !string.IsNullOrEmpty(localPlayerId) && room?.hostPlayerId == localPlayerId,
+            OnStartGameRequested);
         roomPanel.SetInteraction(true);
         roomPanel.ShowStatus("다른 플레이어를 기다리는 중입니다.");
         LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();

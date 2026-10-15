@@ -35,5 +35,6 @@ public enum MessageType
     PLAYER_RECONNECTED, // S→C 끊겼던 플레이어 재접속
     PLAYER_REMOVED,     // S→C 플레이어 제거 (나가기·재접속 실패)
     GAME_SNAPSHOT,
-    SYNC_REQUEST
+    SYNC_REQUEST,
+    START_GAME          // C→S 방장의 수동 게임 시작 요청 (내용 없음)
 }
