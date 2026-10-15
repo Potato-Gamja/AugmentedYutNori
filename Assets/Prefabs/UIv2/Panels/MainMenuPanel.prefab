@@ -1587,7 +1587,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\uC99D\uAC15 \uB3C4\uAC10"
+  m_text: "\uC9C1\uC5C5 \uBAA9\uB85D"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: c00c26cd6c87ed14dbcdaf534b5d8aad, type: 2}
   m_sharedMaterial: {fileID: -7389529962373955283, guid: c00c26cd6c87ed14dbcdaf534b5d8aad, type: 2}
@@ -2513,7 +2513,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\uC99D\uAC15"
+  m_text: "\uC9C1\uC5C5"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 45d9c58909a014a45bd755a22aacd252, type: 2}
   m_sharedMaterial: {fileID: 5265966731666215521, guid: 45d9c58909a014a45bd755a22aacd252, type: 2}
@@ -2694,7 +2694,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 114, y: -12}
+  m_AnchoredPosition: {x: 114, y: -30.3}
   m_SizeDelta: {x: 290, y: 44}
   m_Pivot: {x: 0, y: 1}
 --- !u!222 &6981916804165501227

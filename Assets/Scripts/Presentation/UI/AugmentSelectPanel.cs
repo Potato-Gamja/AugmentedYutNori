@@ -46,7 +46,7 @@ public class AugmentSelectPanel : UIBase
         if (titleText != null)
         {
             string[] teamNames = { "빨강", "파랑", "초록", "노랑" };
-            titleText.text = online ? "증강을 고르세요" : $"{teamNames[selectionTeam]} 팀, 증강을 고르세요";
+            titleText.text = online ? "직업을 고르세요" : $"{teamNames[selectionTeam]} 팀, 직업을 고르세요";
             titleText.color = AugmentCardView.TeamColor(selectionTeam, true);
         }
         if (modalBorder != null) modalBorder.color = AugmentCardView.TeamColor(selectionTeam);
