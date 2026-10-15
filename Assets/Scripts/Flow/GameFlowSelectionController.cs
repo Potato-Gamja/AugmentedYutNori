@@ -219,6 +219,7 @@ public sealed class GameFlowSelectionController
     {
         NodeView best = null;
         float bestDistance = float.MaxValue;
+        bool bestIsTarget = false;
         foreach (BoardNode node in boardView.Graph.Nodes)
         {
             NodeView view = boardView.GetView(node);
@@ -226,11 +227,16 @@ public sealed class GameFlowSelectionController
 
             SpriteRenderer sprite = view.GetComponentInChildren<SpriteRenderer>();
             float distance = Vector2.Distance(world, view.Position);
-            if (ContainsNode(view, sprite, world) && distance < bestDistance)
-            {
-                best = view;
-                bestDistance = distance;
-            }
+            if (!ContainsNode(view, sprite, world)) continue;
+
+            // 출발·도착처럼 겹친 노드는 현재 이동 가능한 목적지를 먼저 고른다.
+            bool isTarget = targets.TryGetValue(view, out List<MoveOption> options) && options.Count > 0;
+            if (best != null && (bestIsTarget && !isTarget ||
+                bestIsTarget == isTarget && distance >= bestDistance)) continue;
+
+            best = view;
+            bestDistance = distance;
+            bestIsTarget = isTarget;
         }
         return best;
     }
@@ -309,7 +315,9 @@ public sealed class GameFlowSelectionController
         for (int i = 1; i < options.Count; i++)
         {
             MoveOption other = options[i];
-            if (other.Result != first.Result ||
+            // 같은 전진 이동은 결과 이름이 달라도 첫 결과를 사용한다.
+            // 빽도는 남겨둘 가치와 사용 경로가 다르므로 도와 따로 선택한다.
+            if ((other.Result == YutResult.BackDo) != (first.Result == YutResult.BackDo) ||
                 other.ModifiedMoveCount != first.ModifiedMoveCount ||
                 other.DestinationNodeId != first.DestinationNodeId ||
                 other.IsFinished != first.IsFinished)
