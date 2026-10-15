@@ -11,9 +11,9 @@ public class VeteranAugment : Augment
         if (!context.IsMine(this)) return moveCount;
 
         int rolled = context.RolledMoveCount;
-        bool far = rolled == YutResult.Yut.Steps() || rolled == YutResult.Mo.Steps();
-        // 서버와 동일하게 원래 윷·모였을 때만 보정한다. 빽도·도·개·걸은 그대로 둔다.
-        return far ? moveCount - 1 : moveCount;
+        // 윷·모만 1칸 덜 (윷 3, 모 4). 빽도·도·개·걸은 그대로
+        if (rolled == YutResult.Yut.Steps() || rolled == YutResult.Mo.Steps()) return moveCount - 1;
+        return moveCount;
     }
 
     // 팀의 말 수: 기본 말 수에서 노장이면 1개 적게 (서버도 같은 규칙)

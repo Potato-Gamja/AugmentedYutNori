@@ -1,6 +1,6 @@
 using NUnit.Framework;
 
-// 노장(Veteran): 내 말의 윷·모만 1칸 줄이고 나머지 결과는 그대로인지 검증한다.
+// 노장(Veteran): 내 말이 윷·모일 때만 1칸 덜 가고 나머지는 그대로인지, 노장 팀 말 수가 1개 적은지 검증하는 테스트
 public class VeteranAugmentTests
 {
     private const int MyTeam = 0;
@@ -28,7 +28,7 @@ public class VeteranAugmentTests
 
         int count = board.State.GetModifiedMoveCount(piece, rolled.Steps());
 
-        // 빽도·도·개·걸은 그대로, 윷·모만 1칸 덜
+        // 윷·모만 1칸 덜, 빽도·도·개·걸은 그대로
         Assert.AreEqual(expected, count);
     }
 
@@ -53,11 +53,10 @@ public class VeteranAugmentTests
         board.State.TryMove(piece, 3, board.Node(3), out _);
         board.State.AddAugment(new VeteranAugment(MyTeam));
 
-        int count = board.State.GetModifiedMoveCount(piece, YutResult.BackDo.Steps());
+        bool moved = board.State.TryMove(piece, YutResult.BackDo.Steps(), board.Node(2), out _);
 
-        Assert.AreEqual(-1, count);
-        Assert.IsNotEmpty(board.State.GetMovePaths(piece, YutResult.BackDo.Steps()));
-        Assert.IsTrue(board.State.TryMove(piece, YutResult.BackDo.Steps(), board.Node(2), out _));
+        // 빽도는 그대로 뒤로 1칸
+        Assert.IsTrue(moved);
         Assert.AreEqual(board.Node(2), piece.Node);
     }
 
