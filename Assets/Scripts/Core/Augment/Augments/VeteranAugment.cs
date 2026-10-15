@@ -1,4 +1,4 @@
-// 노장: 말이 하나 적은 대신 한 칸 덜 간다 (도는 그대로, 빽도는 움직이지 않음). 말 수는 GameFlowController가 처리
+// 노장: 말이 하나 적은 대신 윷·모일 때 한 칸 덜 간다 (나머지는 그대로). 말 수는 GameFlowController가 처리
 public class VeteranAugment : Augment
 {
     public override string Id => "Veteran";
@@ -11,12 +11,9 @@ public class VeteranAugment : Augment
         if (!context.IsMine(this)) return moveCount;
 
         int rolled = context.RolledMoveCount;
-        // 빽도는 움직이지 않는다 (0칸 → 이동 경로가 없어 쓸 수 없는 결과)
-        if (rolled == YutResult.BackDo.Steps()) return 0;
-        // 도는 그대로
-        if (rolled == YutResult.Do.Steps()) return moveCount;
-        // 개~모는 1칸 덜
-        return moveCount - 1;
+        // 윷·모만 1칸 덜 (윷 3, 모 4). 빽도·도·개·걸은 그대로
+        if (rolled == YutResult.Yut.Steps() || rolled == YutResult.Mo.Steps()) return moveCount - 1;
+        return moveCount;
     }
 
     // 팀의 말 수: 기본 말 수에서 노장이면 1개 적게 (서버도 같은 규칙)
