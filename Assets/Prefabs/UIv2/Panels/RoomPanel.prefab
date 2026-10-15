@@ -312,11 +312,6 @@ MonoBehaviour:
   - {fileID: 8832694382634937366}
   - {fileID: 4372256672022565234}
   - {fileID: 4301947694988874524}
-  emptyProfileIconIndicators:
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
   profileIcons:
   - {fileID: 21300000, guid: ee55b3bbb92dfce4b8c58e690074ae03, type: 3}
   - {fileID: 21300000, guid: 06e8d943d8f12a249ac0385f5dfa180c, type: 3}
@@ -3458,10 +3453,34 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 3826798679215338330}
     m_Modifications:
+    - target: {fileID: 597554873288538661, guid: ab336d48ff3a923468036e677512c527, type: 3}
+      propertyPath: m_SizeDelta.x
+      value: 40
+      objectReference: {fileID: 0}
+    - target: {fileID: 597554873288538661, guid: ab336d48ff3a923468036e677512c527, type: 3}
+      propertyPath: m_SizeDelta.y
+      value: 40
+      objectReference: {fileID: 0}
+    - target: {fileID: 597554873288538661, guid: ab336d48ff3a923468036e677512c527, type: 3}
+      propertyPath: m_AnchoredPosition.x
+      value: -0.000048637
+      objectReference: {fileID: 0}
+    - target: {fileID: 597554873288538661, guid: ab336d48ff3a923468036e677512c527, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: 2.9
+      objectReference: {fileID: 0}
     - target: {fileID: 3694839452832269347, guid: ab336d48ff3a923468036e677512c527, type: 3}
       propertyPath: m_Name
       value: SettingsButton
       objectReference: {fileID: 0}
+    - target: {fileID: 5198651415414942997, guid: ab336d48ff3a923468036e677512c527, type: 3}
+      propertyPath: m_Type
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 5198651415414942997, guid: ab336d48ff3a923468036e677512c527, type: 3}
+      propertyPath: m_Sprite
+      value: 
+      objectReference: {fileID: 21300000, guid: 62fdfd4d23c9c0b46bc33e2fd8f8451d, type: 3}
     - target: {fileID: 7847706237614188475, guid: ab336d48ff3a923468036e677512c527, type: 3}
       propertyPath: m_Pivot.x
       value: 0.5
@@ -3540,6 +3559,10 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7847706237614188475, guid: ab336d48ff3a923468036e677512c527, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9070991969363833486, guid: ab336d48ff3a923468036e677512c527, type: 3}
+      propertyPath: m_IsActive
       value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []

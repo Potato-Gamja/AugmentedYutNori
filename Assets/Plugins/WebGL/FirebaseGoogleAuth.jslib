@@ -9,7 +9,9 @@ mergeInto(LibraryManager.library, {
 
     var state = window.__yutFirebaseAuth = window.__yutFirebaseAuth || {};
     state.receiver = receiver;
-    state.send = function (method, value) { SendMessage(state.receiver, method, value || ""); };
+    state.send = function (method, value) {
+      SendMessage(state.receiver, method, value || "");
+    };
 
     if (state.auth) { state.send("OnFirebaseReady"); return; }
 

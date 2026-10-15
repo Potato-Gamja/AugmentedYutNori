@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -171,6 +171,7 @@ public static class UILoginPrefabBuilder
         Image("Dim",root,null,new Color(58/255f,38/255f,24/255f,0.59f),true);
         // 첫 설정에 닫기 버튼을 추가하지 않고 기존 OnOpen 입력 포커스를 유지한다.
         var paper = Common("PaperCard",root); paper.name = "Popup";
+        paper.SetActive(true);
         var body = paper.GetComponent<RectTransform>();
         body.anchorMin = body.anchorMax = new Vector2(0.5f,0.5f); body.anchoredPosition = new Vector2(0,15);
         body.sizeDelta = new Vector2(640,470); paper.transform.Find("Paper").GetComponent<Image>().raycastTarget = true;
