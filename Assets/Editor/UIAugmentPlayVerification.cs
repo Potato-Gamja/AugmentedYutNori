@@ -25,7 +25,7 @@ public static class UIAugmentPlayVerification
     {
         if(EditorApplication.isPlayingOrWillChangePlaymode)throw new InvalidOperationException("Play를 종료해 주세요.");
         var original=SceneManager.GetActiveScene();if(original.isDirty)throw new InvalidOperationException("현재 씬의 변경을 먼저 저장하거나 취소해 주세요.");
-        SessionState.SetBool(Key+"veteran",false);SessionState.SetInt(Key+"forcedTeam",-1);
+        SessionState.SetBool(Key+"feedback",false);SessionState.SetBool(Key+"veteran",false);SessionState.SetInt(Key+"forcedTeam",-1);
         SessionState.SetString(Key+"original",original.path);SessionState.SetString(Key+"report","");SessionState.SetInt(Key+"count",0);SessionState.SetInt(Key+"independentCount",0);SessionState.SetBool(Key+"restore",false);SessionState.SetBool(Key+"running",true);
         var game=EditorSceneManager.OpenScene("Assets/Scenes/Game.unity",OpenSceneMode.Single);var installer=UnityEngine.Object.FindFirstObjectByType<GameInstaller>();
         var so=new SerializedObject(installer);Require(so.FindProperty("defaultMode").enumValueIndex==(int)GameSessionMode.Local,"GameInstaller 기본 설정 Local");
@@ -38,6 +38,11 @@ public static class UIAugmentPlayVerification
     {
         Start();
         SessionState.SetBool(Key+"veteran",true);
+    }
+    [MenuItem("Tools/Yutnori/UIv2/Verify Game Effect Feedback")]
+    public static void StartFeedback()
+    {
+        StartVeteran();SessionState.SetBool(Key+"feedback",true);
     }
     private static T Private<T>(object owner,string name)
     {return (T)owner.GetType().GetField(name,BindingFlags.Instance|BindingFlags.NonPublic).GetValue(owner);}
@@ -118,7 +123,30 @@ public static class UIAugmentPlayVerification
                     Require(Private<int[]>(playerView,"pieceSlotCounts")[0]==3,"노장 HUD 슬롯 3개");
                     Pass("노장 실제 선택 → 말 3개 · 나머지 4개 · 중복 생성 차단 · HUD 3칸");
                 }
-                BeginIndependent();phase=4;
+                if(SessionState.GetBool(Key+"feedback",false))
+                {
+                    Private<GameRules>(flow,"gameRules").ApplyThrow(new[]{true,false,false,false},YutResult.BackDo);
+                    Require(flow.CurrentTeam==1,"빽도 처리 후 실제 다음 팀 진행");
+                    clickedAt=now;phase=9;deadline=now+15;
+                }
+                else {BeginIndependent();phase=4;}
+            }
+            else if(phase==9&&now-clickedAt>=0.3)
+            {
+                var hud=UnityEngine.Object.FindFirstObjectByType<UIManager>().Get<GameHudPanel>();
+                var reveal=Private<YutResultRevealView>(hud,"resultRevealView");
+                var root=Private<GameObject>(reveal,"revealRoot");
+                Require(root.activeSelf&&root.GetComponent<CanvasGroup>().alpha>0.95f,"빽도 안내 표시·페이드 인");
+                Require(!root.GetComponent<CanvasGroup>().blocksRaycasts,"안내가 다음 차례 입력을 막지 않음");
+                Require(Private<TMPro.TMP_Text>(reveal,"title").text.Contains("차례 종료"),"차례 종료 제목");
+                Pass("빽도 → 실제 다음 턴 진행 · 안내 페이드 인 · 클릭 통과");phase=10;
+            }
+            else if(phase==10&&now-clickedAt>=1.7)
+            {
+                var hud=UnityEngine.Object.FindFirstObjectByType<UIManager>().Get<GameHudPanel>();
+                var reveal=Private<YutResultRevealView>(hud,"resultRevealView");
+                Require(!Private<GameObject>(reveal,"revealRoot").activeSelf,"안내 자동 닫힘");
+                Pass("빽도 안내 자동 닫힘 · 게임 진행 유지");BeginIndependent();phase=4;
             }
             else if(phase==4&&now-clickedAt>=0.1){independent.Close();phase=5;}
             else if(phase==5&&now-clickedAt>=0.5)
@@ -143,7 +171,7 @@ public static class UIAugmentPlayVerification
     {
         if(session!=null)session.AugmentSelected-=OnConfirmed;
         string report=SessionState.GetString(Key+"report","")+(exception==null?"RESULT: PASS\n":"RESULT: FAIL · "+exception+"\n");
-        Directory.CreateDirectory(UIScreenPreparation.Reports);File.WriteAllText(UIScreenPreparation.Reports+(SessionState.GetBool(Key+"veteran",false)?"veteran_local_play_validation.txt":"stage6_local_play_validation.txt"),report);
+        Directory.CreateDirectory(UIScreenPreparation.Reports);File.WriteAllText(UIScreenPreparation.Reports+(SessionState.GetBool(Key+"feedback",false)?"game_effect_feedback_play_validation.txt":SessionState.GetBool(Key+"veteran",false)?"veteran_local_play_validation.txt":"stage6_local_play_validation.txt"),report);
         SessionState.SetBool(Key+"restore",true);EditorApplication.isPlaying=false;
         if(exception!=null)Debug.LogError(report);else Debug.Log(report);
     }

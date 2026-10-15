@@ -475,6 +475,9 @@ public class GameFlowController : MonoBehaviour
         if (leavingGame) return;
         bool grantedExtraThrow = hudPresenter.DidGrantExtraThrow(outcome, CurrentTeam);
         hud?.ShowThrowResult(outcome, grantedExtraThrow, CurrentTeam);
+        hud?.ShowAugmentEffect(hudPresenter.DescribeThrowEffects(outcome, CurrentTeam, grantedExtraThrow));
+        if (hudPresenter.ShouldShowSkippedBackDo(outcome, CurrentTeam, gameRules.HasAnyStoredMove()))
+            hud?.ShowSkippedBackDo(CurrentTeam);
         hudPresenter.RefreshStoredResults();
         hudPresenter.RefreshPlayerPanels();
 
@@ -925,6 +928,8 @@ public class GameFlowController : MonoBehaviour
     private void OnMoved(MoveResult result)
     {
         if (leavingGame) return;
+        string moveEffect = hudPresenter.DescribeMoveEffects(result);
+        if (!string.IsNullOrEmpty(moveEffect)) hud?.ShowAugmentEffect(moveEffect);
         var points = new List<Vector3>();
         foreach (BoardNode node in result.Path.Nodes)
         {
