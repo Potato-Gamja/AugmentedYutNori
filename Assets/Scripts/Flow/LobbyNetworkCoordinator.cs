@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -167,6 +168,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         lobbyController.JoinRoomRequested += OnJoinRoomRequested;
         lobbyController.QuickJoinRequested += OnQuickJoinRequested;
         lobbyController.ReadyRequested += OnReadyRequested;
+        lobbyController.StartGameRequested += OnStartGameRequested;
         lobbyController.LeaveRoomRequested += OnLeaveRoomRequested;
 
         if (!IsLoggedIn())
@@ -369,6 +371,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         lobbyController.JoinRoomRequested -= OnJoinRoomRequested;
         lobbyController.QuickJoinRequested -= OnQuickJoinRequested;
         lobbyController.ReadyRequested -= OnReadyRequested;
+        lobbyController.StartGameRequested -= OnStartGameRequested;
         lobbyController.LeaveRoomRequested -= OnLeaveRoomRequested;
         lobbyController = null;
     }
@@ -628,6 +631,28 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         }
         if (!webSocketClient.IsConnected ||
             !webSocketClient.Send(MessageType.READY, new ReadyRequest { ready = ready }))
+        {
+            ActiveLobbyController?.ReceiveError("서버에 연결되어 있지 않습니다.");
+        }
+    }
+
+    public bool CanStartGameInCurrentRoom => CanReadyInCurrentRoom && !leaveRequested &&
+        lastRoomState?.status == "WAITING" && !string.IsNullOrEmpty(LocalPlayerId) &&
+        lastRoomState.hostPlayerId == LocalPlayerId && lastRoomState.members != null &&
+        lastRoomState.members.Count >= 2 && lastRoomState.members.Count <= 4 &&
+        lastRoomState.members.Any(player => player != null && player.playerId == LocalPlayerId) &&
+        lastRoomState.members.All(player => player != null && player.ready &&
+            !reconnectingRoomPlayers.Contains(player.playerId));
+
+    private void OnStartGameRequested()
+    {
+        if (!CanStartGameInCurrentRoom)
+        {
+            ActiveLobbyController?.ReceiveError("방장과 참가자의 준비·연결 상태를 다시 확인해 주세요.");
+            return;
+        }
+        if (webSocketClient == null || !webSocketClient.IsConnected ||
+            !webSocketClient.Send(MessageType.START_GAME))
         {
             ActiveLobbyController?.ReceiveError("서버에 연결되어 있지 않습니다.");
         }

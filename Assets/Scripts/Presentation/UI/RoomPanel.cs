@@ -179,8 +179,8 @@ public class RoomPanel : UIBase
         RefreshStartGameButton();
     }
 
-    // ROOM_STATE表示後、서버가 확인한 방장 여부와 시작 요청 콜백을 연결한다.
-    // 기존 서버에는 이 정보가 없으므로 연결 전에는 시작 버튼을 숨긴다.
+    // ROOM_STATE 표시 후 서버의 hostPlayerId 판정과 시작 요청 콜백을 연결한다.
+    // 방장 정보가 없거나 요청이 연결되지 않으면 시작 버튼을 숨긴다.
     public void ConfigureGameStart(bool isHost, Action requestStart)
     {
         isRoomHost = isHost;
