@@ -24,6 +24,7 @@ public class SoundManager : MonoBehaviour
     private SoundId currentBgm = SoundId.None;
     private float currentBgmClipVolume = 1f;
     private bool initialized;
+    private bool started;
 
     // 어느 씬에서 시작해도 사운드가 동작하도록 자동 생성
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -68,6 +69,15 @@ public class SoundManager : MonoBehaviour
         if (library != null) Initialize(library);   // 씬에 직접 배치하고 Inspector에서 연결한 경우
     }
 
+    private void Start()
+    {
+        // AudioMixer.SetFloat는 Awake/AfterSceneLoad에서 적용하면 초기화 중 덮어써질 수 있다.
+        started = true;
+        if (!initialized) return;
+        ApplyVolume();
+        PlaySceneBgm(SceneManager.GetActiveScene().name);
+    }
+
     private void Initialize(SoundLibrarySO soundLibrary)
     {
         if (initialized) return;
@@ -77,17 +87,22 @@ public class SoundManager : MonoBehaviour
         bgmSource = gameObject.AddComponent<AudioSource>();
         bgmSource.loop = true;
         bgmSource.playOnAwake = false;
+        bgmSource.volume = 0f; // 저장된 믹서 음량 적용 전에는 재생하지 않는다.
         bgmSource.outputAudioMixerGroup = library.BgmGroup;
 
         sfxSource = gameObject.AddComponent<AudioSource>();
         sfxSource.playOnAwake = false;
+        sfxSource.volume = 0f;
         sfxSource.outputAudioMixerGroup = library.SfxGroup;
 
         AudioSettings.Changed += ApplyVolume;
         SceneManager.sceneLoaded += OnSceneLoaded;
 
-        ApplyVolume();
-        PlaySceneBgm(SceneManager.GetActiveScene().name);
+        if (started)
+        {
+            ApplyVolume();
+            PlaySceneBgm(SceneManager.GetActiveScene().name);
+        }
     }
 
     private void OnDestroy()
@@ -100,7 +115,7 @@ public class SoundManager : MonoBehaviour
 
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        if (mode == LoadSceneMode.Single) PlaySceneBgm(scene.name);
+        if (started && mode == LoadSceneMode.Single) PlaySceneBgm(scene.name);
     }
 
     private void PlaySceneBgm(string sceneName)
@@ -156,7 +171,8 @@ public class SoundManager : MonoBehaviour
 
     private void ApplyVolume()
     {
-        if (!initialized) return;
+        if (!initialized || !started) return;
+        sfxSource.volume = 1f;
 
         if (library.Mixer != null)
         {

@@ -1,9 +1,7 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
-using UnityEngine.EventSystems;
-using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 
 public enum GameFlowState { GameStart, AugmentSelect, Throw, Move, EndTurn, Finish }
@@ -438,11 +436,8 @@ public class GameFlowController : MonoBehaviour
     {
         if (leavingGame || gameState.WinnerTeam.HasValue || currentState != GameFlowState.Move || isMoving || gameSession == null ||
             gameSession.IsCommandPending || !setup.CanControl(CurrentTeam) ||
-            Mouse.current == null || mainCamera == null ||
-            !Mouse.current.leftButton.wasPressedThisFrame) return;
-        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
-
-        Vector2 screen = Mouse.current.position.ReadValue();
+            mainCamera == null || !GamePointerInput.TryGetPress(out Vector2 screen)) return;
+        if (!mainCamera.pixelRect.Contains(screen) || GamePointerInput.IsOverUI(screen)) return;
         Vector3 world = mainCamera.ScreenToWorldPoint(
             new Vector3(screen.x, screen.y, -mainCamera.transform.position.z));
         world.z = 0f;
