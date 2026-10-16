@@ -43,6 +43,33 @@ public class RoomPanel : UIBase
 #if UNITY_WEBGL && !UNITY_EDITOR
     [DllImport("__Internal")]
     private static extern void Yut_CopyRoomCode(string code, string receiverName);
+    [DllImport("__Internal")]
+    private static extern void Yut_CloseRoomCodeCopy();
+    private bool copyOwnsKeyboard;
+    private bool keyboardCaptureBeforeCopy;
+
+    [UnityEngine.Scripting.Preserve]
+    public void OnRoomCodeCopyFocus(string focused)
+    {
+        if (focused == "1" && !copyOwnsKeyboard)
+        {
+            keyboardCaptureBeforeCopy = WebGLInput.captureAllKeyboardInput;
+            WebGLInput.captureAllKeyboardInput = false;
+            copyOwnsKeyboard = true;
+        }
+        else if (focused != "1" && copyOwnsKeyboard)
+        {
+            WebGLInput.captureAllKeyboardInput = keyboardCaptureBeforeCopy;
+            copyOwnsKeyboard = false;
+        }
+    }
+
+    private void OnDisable()
+    {
+        Yut_CloseRoomCodeCopy();
+        OnRoomCodeCopyFocus("0");
+    }
+
 #endif
 
     private static readonly Color[] TeamColors =
@@ -118,7 +145,9 @@ public class RoomPanel : UIBase
             if (playerProfileIcons != null && i < playerProfileIcons.Length && playerProfileIcons[i] != null)
             {
                 Image icon = playerProfileIcons[i];
-                icon.sprite = occupied ? PlayerProfileIconResolver.Resolve(profileIcons, player.iconId, displayTeam) : null;
+                // 미착용 참가자의 기본 그림은 팀·자리 순서와 무관하게 윷가락이다.
+                string iconId = occupied && string.IsNullOrWhiteSpace(player.iconId) ? "icon_001" : player?.iconId;
+                icon.sprite = occupied ? PlayerProfileIconResolver.Resolve(profileIcons, iconId, displayTeam) : null;
                 icon.enabled = icon.sprite != null;
                 icon.preserveAspect = true;
             }
@@ -241,7 +270,12 @@ public class RoomPanel : UIBase
 #endif
     }
 
+    [UnityEngine.Scripting.Preserve]
+    public void OnRoomCodeCopyManual() => ShowStatus("복사 창에서 방 코드를 선택해 복사해 주세요.");
+
+    [UnityEngine.Scripting.Preserve]
     public void OnRoomCodeCopySucceeded() => ShowStatus("방 코드를 복사했습니다.");
+    [UnityEngine.Scripting.Preserve]
     public void OnRoomCodeCopyFailed() => ShowStatus("복사하지 못했습니다. 표시된 방 코드를 직접 입력해 주세요.");
 
     private void OnLeaveClicked() => LeaveRequested?.Invoke();

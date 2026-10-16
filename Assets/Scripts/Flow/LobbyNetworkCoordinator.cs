@@ -307,9 +307,17 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     public Task WaitForLoginAsync() => silentLoginTask;
 
-    public async Task<GachaResultResponse> DrawGachaAsync()
+    private async Task EnsureAccountFeaturesAsync()
     {
         await EnsurePlayer(LocalNickname);
+        if (!playerIdentity.IsGoogleLogin)
+            throw new InvalidOperationException("게스트는 현재 이 기능을 사용할 수 없습니다. Google 계정으로 로그인해 주세요.");
+    }
+
+
+    public async Task<GachaResultResponse> DrawGachaAsync()
+    {
+        await EnsureAccountFeaturesAsync();
         GachaResultResponse response = await gachaApi.DrawAsync();
         playerIdentity.ApplyGold(response.gold);
         LocalDisplayChanged?.Invoke();
@@ -318,20 +326,20 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     public async Task<OwnedIconsResponse> GetOwnedIconsAsync()
     {
-        await EnsurePlayer(LocalNickname);
+        await EnsureAccountFeaturesAsync();
         return await iconApi.GetOwnedAsync();
     }
 
     public async Task<AchievementListResponse> GetAchievementsAsync()
     {
-        await EnsurePlayer(LocalNickname);
+        await EnsureAccountFeaturesAsync();
         return await achievementApi.GetAsync();
     }
 
     // 업적 보상 받기. 받은 뒤 보유 골드를 저장한다
     public async Task<ClaimAchievementResponse> ClaimAchievementAsync(string achievementId)
     {
-        await EnsurePlayer(LocalNickname);
+        await EnsureAccountFeaturesAsync();
         ClaimAchievementResponse response = await achievementApi.ClaimAsync(achievementId);
         playerIdentity.ApplyGold(response.gold);
         LocalDisplayChanged?.Invoke();
@@ -340,7 +348,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     public async Task<PlayerProfileResponse> GetProfileAsync()
     {
-        await EnsurePlayer(LocalNickname);
+        await EnsureAccountFeaturesAsync();
         PlayerProfileResponse response = await iconApi.GetProfileAsync();
         playerIdentity.ApplyGold(response.gold);
         if (!string.IsNullOrWhiteSpace(response.nickname))

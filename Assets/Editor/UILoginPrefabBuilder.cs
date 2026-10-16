@@ -142,6 +142,7 @@ public static class UILoginPrefabBuilder
         Bind(panel,"continueLabel",resumeLabel); Bind(panel,"cancelButton",cancelButton); Bind(panel,"statusText",status);
         root.gameObject.AddComponent<LoginPanelPresentation>().Configure(google,googleGroup,resumeButton,
             resume.transform.Find("Button/Border").GetComponent<Image>(),resumeLabel,status,version);
+        UIAccountButtonsBuilder.ConfigureLogin(root.gameObject);
         return root.gameObject;
     }
     private static void Decoration(Transform parent,string name,string key,float x,float y,float size,string tint,float phase)

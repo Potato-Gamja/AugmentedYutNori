@@ -25,6 +25,8 @@ public class LoginController : MonoBehaviour
     private FirebaseTokenRefresher tokenRefresher;
     private PlayerIdentity playerIdentity;
     private bool signingIn;
+    private bool creatingGuest;
+    private bool savingNickname;
     private CancellationTokenSource signInCancel;
 
     private async void Start()
@@ -42,6 +44,7 @@ public class LoginController : MonoBehaviour
         loginPanel.GoogleLoginRequested += OnGoogleLoginRequested;
         loginPanel.CancelRequested += OnCancelRequested;
         loginPanel.ContinueRequested += OnContinueRequested;
+        loginPanel.GuestLoginRequested += OnGuestLoginRequested;
 
         apiClient = new ApiClient(apiBaseUrl);
         authApi = new AuthApi(apiClient);
@@ -63,7 +66,11 @@ public class LoginController : MonoBehaviour
         catch (Exception exception)
         {
             Debug.LogException(exception, this);
-            if (this != null) loginPanel.ShowStatus(ToUserMessage(exception));
+            if (this != null)
+            {
+                loginPanel.ShowStatus(ToUserMessage(exception));
+                loginPanel.SetBusy(false);
+            }
         }
     }
 
@@ -76,6 +83,7 @@ public class LoginController : MonoBehaviour
         loginPanel.GoogleLoginRequested -= OnGoogleLoginRequested;
         loginPanel.CancelRequested -= OnCancelRequested;
         loginPanel.ContinueRequested -= OnContinueRequested;
+        loginPanel.GuestLoginRequested -= OnGuestLoginRequested;
     }
 
     private void OnGoogleLoginPressed()
@@ -88,15 +96,21 @@ public class LoginController : MonoBehaviour
         if (googleSignIn != null && !googleSignIn.StartOnPointerDown) SignIn();
     }
 
-    // 이 기기에 저장된 구글 로그인이 있는지 (게스트 토큰은 제외). 갱신 토큰이 있어야 다시 로그인할 수 있다
+    // Google 계정은 갱신 토큰, 게스트는 저장된 플레이어 토큰과 닉네임으로 계속한다.
     private bool HasSavedLogin() =>
-        playerIdentity.IsGoogleLogin && !string.IsNullOrEmpty(playerIdentity.FirebaseRefreshToken);
+        playerIdentity.IsGoogleLogin ? !string.IsNullOrEmpty(playerIdentity.FirebaseRefreshToken)
+            : playerIdentity.HasToken && !string.IsNullOrWhiteSpace(playerIdentity.Nickname);
 
     // 저장된 Firebase 갱신 토큰으로 브라우저 없이 다시 로그인한다.
     // 새 Firebase ID 토큰 → 서버 /auth/firebase → 새 게임 토큰이라, 서버를 재시작해 예전 게임 토큰이 무효가 돼도 들어갈 수 있다
     private async void OnContinueRequested()
     {
         if (signingIn || !HasSavedLogin()) return;
+        if (!playerIdentity.IsGoogleLogin)
+        {
+            SceneManager.LoadScene(nextSceneName);
+            return;
+        }
         signingIn = true;
         loginPanel.SetBusy(true);
         loginPanel.ShowStatus("이전 계정으로 로그인하는 중입니다.");
@@ -131,6 +145,19 @@ public class LoginController : MonoBehaviour
         }
     }
 
+    private void OnGuestLoginRequested()
+    {
+        if (signingIn) return;
+        if (playerIdentity.HasToken && !playerIdentity.IsGoogleLogin &&
+            !string.IsNullOrWhiteSpace(playerIdentity.Nickname))
+        {
+            SceneManager.LoadScene(nextSceneName);
+            return;
+        }
+        creatingGuest = true;
+        OpenNicknamePanel();
+    }
+
     // 브라우저 창을 그냥 닫으면 게임은 결과를 알 수 없으므로, 취소 버튼으로 기다림을 끝내고 다시 시도하게 한다
     private void OnCancelRequested()
     {
@@ -139,7 +166,8 @@ public class LoginController : MonoBehaviour
 
     private async void SignIn()
     {
-        if (signingIn) return;
+        if (signingIn || googleSignIn == null) return;
+        creatingGuest = false;
         signingIn = true;
         signInCancel = CancellationTokenSource.CreateLinkedTokenSource(destroyCancellationToken);
         loginPanel.SetBusy(true);
@@ -218,8 +246,31 @@ public class LoginController : MonoBehaviour
 
     private async void OnNicknameSubmitted(string nickname)
     {
+        if (savingNickname) return;
+        savingNickname = true;
         nicknamePanel.SetBusy(true);
-        nicknamePanel.ShowStatus("닉네임을 저장하는 중입니다.");
+        nicknamePanel.ShowStatus(creatingGuest ? "게스트로 시작하는 중입니다." : "닉네임을 저장하는 중입니다.");
+        if (creatingGuest)
+        {
+            try
+            {
+                GuestLoginResponse response = await authApi.CreateGuestAsync(nickname);
+                if (this == null) return;
+                playerIdentity.ApplyGuest(response);
+                apiClient.Token = playerIdentity.Token;
+                SceneManager.LoadScene(nextSceneName);
+            }
+            catch (Exception exception)
+            {
+                if (this != null)
+                {
+                    nicknamePanel.ShowStatus(ToNicknameMessage(exception));
+                    nicknamePanel.SetBusy(false);
+                }
+            }
+            finally { savingNickname = false; }
+            return;
+        }
 
         try
         {
@@ -237,9 +288,11 @@ public class LoginController : MonoBehaviour
             if (this == null) return;
             nicknamePanel.ShowStatus(ToNicknameMessage(exception));
             nicknamePanel.SetBusy(false);
+            savingNickname = false;
             return;
         }
 
+        savingNickname = false;
         if (this == null) return;
         Debug.Log($"[Login] 닉네임 설정: {playerIdentity.Nickname}");
         SceneManager.LoadScene(nextSceneName);

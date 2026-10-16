@@ -87,6 +87,18 @@ public class PlayerIdentity
         PlayerPrefs.Save();
     }
 
+    public void ApplyGuest(GuestLoginResponse response)
+    {
+        if (response == null || string.IsNullOrWhiteSpace(response.playerId) ||
+            string.IsNullOrWhiteSpace(response.guestToken))
+            throw new System.InvalidOperationException("게스트 로그인 응답이 올바르지 않습니다.");
+
+        // 생성 성공 후에만 이전 계정의 표시·인증·재접속 정보를 정리한다.
+        Clear();
+        PlayerPrefs.DeleteKey(ReconnectCacheKey);
+        Save(response.playerId, response.guestToken, response.nickname, AuthTypeGuest);
+    }
+
     // 게임 결과(GAME_ENDED rankings)에서 내 보상을 보유 골드에 더한다. 더한 금액을 돌려준다
     public int ApplyGameReward(RankingEntry[] rankings)
     {
