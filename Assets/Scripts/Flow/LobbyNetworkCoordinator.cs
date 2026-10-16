@@ -60,6 +60,11 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     // GAME_ENDED가 재전송돼도 보상을 한 번만 더하도록 (GAME_START마다 초기화)
     private bool rewardAppliedThisGame;
     private Task silentLoginTask = Task.CompletedTask;
+    private bool silentLoginRunning;
+    private bool recoveringFromUnauthorized;
+    private int loginRedirectCount;   // GoToLogin 호출 횟수. 다시 로그인 도중 이미 로그인 화면으로 보냈는지 확인용
+    // 서버 토큰(JWT) 만료가 이만큼 남으면 요청 전에 미리 새로 받는다 (게임 도중 만료 방지)
+    private static readonly TimeSpan TokenRefreshMargin = TimeSpan.FromHours(1);
     private bool waitingForGameSession;
     private bool logoutRequested;
     private bool returnToRoomRequested;
@@ -183,16 +188,13 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         }
     }
 
-    // Lobby 직접 실행 시 저장된 Firebase 갱신 토큰으로 서버 토큰을 새로 받는다.
-    private async Task SilentLoginAsync()
+    // Lobby 직접 실행, 토큰 만료 임박, 401을 받았을 때 저장된 Firebase 갱신 토큰으로 서버 토큰을 새로 받는다.
+    // 새 토큰을 저장했으면 true
+    private async Task<bool> SilentLoginAsync()
     {
-        if (!playerIdentity.IsGoogleLogin || string.IsNullOrEmpty(playerIdentity.FirebaseRefreshToken)) return;
-        if (authSettings == null)
-        {
-            Debug.LogWarning("[LobbyNetwork] FirebaseAuthSettings가 없어 자동 재로그인을 건너뜁니다.", this);
-            return;
-        }
+        if (!CanSilentLogin()) return false;
 
+        silentLoginRunning = true;
         try
         {
             FirebaseSignInResult firebaseUser = await new FirebaseTokenRefresher(authSettings)
@@ -203,23 +205,48 @@ public class LobbyNetworkCoordinator : MonoBehaviour
             if (string.IsNullOrWhiteSpace(login.nickname))
             {
                 GoToLogin();
-                return;
+                return false;
             }
 
             playerIdentity.ApplyLogin(login, firebaseUser.RefreshToken);
             apiClient.Token = playerIdentity.Token;
             ActiveLobbyController?.SetLocalPlayer(playerIdentity.PlayerId, playerIdentity.Nickname);
+            return true;
         }
         catch (RefreshFailedException exception) when (exception.Expired)
         {
             playerIdentity.Clear();
             apiClient.Token = null;
             GoToLogin();
+            return false;
         }
         catch (Exception exception)
         {
             Debug.LogWarning($"[LobbyNetwork] 자동 재로그인 실패, 저장된 로그인으로 계속합니다: {exception.Message}");
+            return false;
         }
+        finally
+        {
+            silentLoginRunning = false;
+        }
+    }
+
+    private bool CanSilentLogin()
+    {
+        if (!playerIdentity.IsGoogleLogin || string.IsNullOrEmpty(playerIdentity.FirebaseRefreshToken)) return false;
+        if (authSettings != null) return true;
+
+        Debug.LogWarning("[LobbyNetwork] FirebaseAuthSettings가 없어 자동 재로그인을 건너뜁니다.", this);
+        return false;
+    }
+
+    // 서버 토큰(JWT)이 곧 만료되면 요청을 보내기 전에 새로 받는다. 이미 다시 로그인 중이면 그걸 기다린다
+    private async Task RefreshTokenIfExpiringAsync()
+    {
+        if (!JwtToken.IsExpiringWithin(playerIdentity.Token, TokenRefreshMargin)) return;
+
+        if (silentLoginTask.IsCompleted) silentLoginTask = SilentLoginAsync();
+        await silentLoginTask;
     }
 
     public async void OfferReconnect(LobbyController controller)
@@ -446,6 +473,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     private async System.Threading.Tasks.Task EnsurePlayer(string nickname)
     {
         await silentLoginTask;
+        await RefreshTokenIfExpiringAsync();
         if (!IsLoggedIn())
         {
             if (!allowGuestLogin)
@@ -514,8 +542,31 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         }
     }
 
-    private void OnUnauthorized()
+    // 서버가 토큰을 거절(401: 만료·서버 키 변경 등)하면, 구글 로그인이면 먼저 조용히 새 토큰을 받아 본다.
+    // 성공하면 로그인 화면으로 보내지 않는다 (실패했던 요청은 다시 시도하면 된다). 실패하면 로그인 화면으로
+    private async void OnUnauthorized()
     {
+        // 다시 로그인하는 요청 자체가 401이면 아래에서 또 다시 로그인하지 않는다 (SilentLoginAsync가 실패로 처리)
+        if (silentLoginRunning || recoveringFromUnauthorized) return;
+
+        if (CanSilentLogin())
+        {
+            int redirectsBefore = loginRedirectCount;
+            recoveringFromUnauthorized = true;
+            try
+            {
+                Task<bool> relogin = SilentLoginAsync();
+                silentLoginTask = relogin;
+                if (await relogin) return;
+            }
+            finally
+            {
+                recoveringFromUnauthorized = false;
+            }
+            // 갱신 토큰 만료, 서버에 닉네임 없음 → SilentLoginAsync가 이미 로그인 화면으로 보냄
+            if (loginRedirectCount != redirectsBefore) return;
+        }
+
         playerIdentity.Clear();
         apiClient.Token = null;
         GoToLogin();
@@ -523,6 +574,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     private void GoToLogin()
     {
+        ++loginRedirectCount;
         ++roomJoinVersion;
         awaitingRoomJoin = false;
         UnbindLobbyController();
