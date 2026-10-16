@@ -2,6 +2,9 @@ using System;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+#if UNITY_WEBGL && !UNITY_EDITOR
+using System.Runtime.InteropServices;
+#endif
 
 /// <summary>
 /// 계정 닉네임 입력 화면 (첫 설정·변경 공용). 입력 검사와 표시만 하고, 서버 저장은 이 패널을 연 쪽이 처리한다.
@@ -30,7 +33,13 @@ public class NicknamePanel : UIBase
         if (nicknameInput != null)
         {
             nicknameInput.characterLimit = MaxLength;
+#if UNITY_WEBGL && !UNITY_EDITOR
+            // Web에서는 HTML input이 조합 입력과 캐럿을 담당한다.
+            nicknameInput.readOnly = true;
+            nicknameInput.shouldHideSoftKeyboard = true;
+#else
             nicknameInput.onSubmit.AddListener(OnInputSubmitted);
+#endif
         }
     }
 
@@ -44,19 +53,29 @@ public class NicknamePanel : UIBase
     {
         ShowStatus(string.Empty);
         SetBusy(false);
+#if UNITY_WEBGL && !UNITY_EDITOR
+        OpenBrowserInput();
+#else
         nicknameInput?.ActivateInputField();
+#endif
     }
 
     // 변경 화면으로 열 때 지금 닉네임을 미리 채운다
     public void SetNickname(string nickname)
     {
         if (nicknameInput != null) nicknameInput.text = nickname ?? string.Empty;
+#if UNITY_WEBGL && !UNITY_EDITOR
+        if (browserInputOpen) Yut_NicknameSetValue(nicknameInput.text);
+#endif
     }
 
     public void SetBusy(bool busy)
     {
         if (confirmButton != null) confirmButton.interactable = !busy;
         if (nicknameInput != null) nicknameInput.interactable = !busy;
+#if UNITY_WEBGL && !UNITY_EDITOR
+        if (browserInputOpen) Yut_NicknameSetEnabled(busy ? 0 : 1);
+#endif
     }
 
     public void ShowStatus(string message)
@@ -77,6 +96,9 @@ public class NicknamePanel : UIBase
 
     private void OnConfirmClicked()
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        if (browserComposing) return;
+#endif
         if (confirmButton != null && !confirmButton.interactable) return;
 
         string nickname = nicknameInput != null ? nicknameInput.text.Trim() : string.Empty;
@@ -89,4 +111,97 @@ public class NicknamePanel : UIBase
 
         Submitted?.Invoke(nickname);
     }
+#if UNITY_WEBGL && !UNITY_EDITOR
+    [DllImport("__Internal")] private static extern void Yut_NicknameOpen(string receiver, string value, string placeholder, int limit);
+    [DllImport("__Internal")] private static extern void Yut_NicknameRect(float x, float y, float width, float height, float fontSize);
+    [DllImport("__Internal")] private static extern void Yut_NicknameSetValue(string value);
+    [DllImport("__Internal")] private static extern void Yut_NicknameSetEnabled(int enabled);
+    [DllImport("__Internal")] private static extern void Yut_NicknameClose();
+
+    private bool browserInputOpen;
+    private bool browserComposing;
+    private bool browserOwnsKeyboard;
+    private bool previousKeyboardCapture;
+    private bool previousTextEnabled;
+    private bool previousPlaceholderEnabled;
+    private readonly Vector3[] browserCorners = new Vector3[4];
+
+    private void OpenBrowserInput()
+    {
+        if (nicknameInput == null || browserInputOpen) return;
+        browserInputOpen = true;
+        previousTextEnabled = nicknameInput.textComponent.enabled;
+        previousPlaceholderEnabled = nicknameInput.placeholder != null && nicknameInput.placeholder.enabled;
+        nicknameInput.textComponent.enabled = false;
+        if (nicknameInput.placeholder != null) nicknameInput.placeholder.enabled = false;
+        var placeholder = nicknameInput.placeholder as TMP_Text;
+        Yut_NicknameOpen(gameObject.name, nicknameInput.text, placeholder != null ? placeholder.text : "", MaxLength);
+        Canvas.ForceUpdateCanvases();
+        UpdateBrowserRect();
+    }
+
+    private void LateUpdate()
+    {
+        if (browserInputOpen) UpdateBrowserRect();
+    }
+
+    private void UpdateBrowserRect()
+    {
+        if (Screen.width <= 0 || Screen.height <= 0) return;
+        var rect = nicknameInput.textViewport != null ? nicknameInput.textViewport : nicknameInput.GetComponent<RectTransform>();
+        rect.GetWorldCorners(browserCorners);
+        var canvas = nicknameInput.GetComponentInParent<Canvas>();
+        var camera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+        var min = RectTransformUtility.WorldToScreenPoint(camera, browserCorners[0]);
+        var max = RectTransformUtility.WorldToScreenPoint(camera, browserCorners[2]);
+        Yut_NicknameRect(min.x / Screen.width, 1 - max.y / Screen.height,
+            (max.x - min.x) / Screen.width, (max.y - min.y) / Screen.height,
+            nicknameInput.textComponent.fontSize * (canvas != null ? canvas.scaleFactor : 1) / Screen.height);
+    }
+
+    [UnityEngine.Scripting.Preserve]
+    public void OnBrowserNicknameChanged(string value)
+    {
+        if (browserInputOpen) nicknameInput.text = value;
+    }
+
+    [UnityEngine.Scripting.Preserve]
+    public void OnBrowserNicknameComposition(string value) => browserComposing = value == "1";
+
+    [UnityEngine.Scripting.Preserve]
+    public void OnBrowserNicknameSubmit(string value)
+    {
+        if (!browserInputOpen || browserComposing) return;
+        nicknameInput.text = value;
+        OnConfirmClicked();
+    }
+
+    [UnityEngine.Scripting.Preserve]
+    public void OnBrowserNicknameFocus(string value)
+    {
+        if (value == "1" && !browserOwnsKeyboard)
+        {
+            previousKeyboardCapture = WebGLInput.captureAllKeyboardInput;
+            WebGLInput.captureAllKeyboardInput = false;
+            browserOwnsKeyboard = true;
+        }
+        else if (value != "1" && browserOwnsKeyboard)
+        {
+            WebGLInput.captureAllKeyboardInput = previousKeyboardCapture;
+            browserOwnsKeyboard = false;
+        }
+    }
+
+    private void OnDisable()
+    {
+        if (!browserInputOpen) return;
+        Yut_NicknameClose();
+        OnBrowserNicknameFocus("0");
+        browserInputOpen = false;
+        browserComposing = false;
+        nicknameInput.textComponent.enabled = previousTextEnabled;
+        if (nicknameInput.placeholder != null) nicknameInput.placeholder.enabled = previousPlaceholderEnabled;
+    }
+#endif
+
 }
