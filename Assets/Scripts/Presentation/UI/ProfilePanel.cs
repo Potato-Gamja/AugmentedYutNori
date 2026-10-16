@@ -41,6 +41,12 @@ public sealed class ProfilePanel : UIBase
     private int requestVersion;
 
     public event Action LogoutRequested;
+    // 탈퇴 버튼을 두 번(확인) 눌렀을 때
+    public event Action WithdrawRequested;
+
+    // 탈퇴는 되돌릴 수 없어서, 첫 번째 누름은 경고만 보여 주고 이 시간 안에 한 번 더 눌러야 탈퇴한다
+    private const float WithdrawConfirmSeconds = 5f;
+    private float withdrawArmedUntil = -1f;
 
     public override void Init()
     {
@@ -98,6 +104,7 @@ public sealed class ProfilePanel : UIBase
 
     protected override async void OnOpen()
     {
+        withdrawArmedUntil = -1f;
         if (iconScrollRect != null) iconScrollRect.verticalNormalizedPosition = 1f;
         int version = ++requestVersion;
         coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
@@ -227,7 +234,22 @@ public sealed class ProfilePanel : UIBase
     private void OnWithdrawClicked()
     {
         if (busy) return;
-        ShowStatus("회원 탈퇴 기능은 서버 연결 준비 중입니다. 계정은 삭제되지 않았습니다.");
+
+        if (Time.unscaledTime > withdrawArmedUntil)
+        {
+            withdrawArmedUntil = Time.unscaledTime + WithdrawConfirmSeconds;
+            ShowStatus("탈퇴하면 닉네임·골드·아이콘·업적이 모두 삭제되고 되돌릴 수 없어요. 계속하려면 탈퇴하기를 한 번 더 눌러 주세요.");
+            return;
+        }
+
+        withdrawArmedUntil = -1f;
+        WithdrawRequested?.Invoke();
+    }
+
+    // 탈퇴 요청 중 버튼 잠금 (로그아웃과 같은 처리)
+    public void SetWithdrawBusy(bool value)
+    {
+        SetBusy(value);
     }
 
     private void OnLogoutClicked() => LogoutRequested?.Invoke();

@@ -527,6 +527,22 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     {
         if (logoutRequested) return;
         logoutRequested = true;
+        await ClearSessionAndGoToLoginAsync();
+    }
+
+    // 회원 탈퇴: 서버가 계정 데이터와 Firebase 계정을 완전히 삭제한 뒤, 이 기기의 로그인 정보도 지우고 로그인 화면으로 간다.
+    // 방·게임 참가 중(409 IN_ROOM) 등 서버가 거절하면 아무것도 지우지 않고 예외를 그대로 던진다
+    public async Task WithdrawAsync()
+    {
+        if (logoutRequested) return;
+        await EnsurePlayer(LocalNickname);
+        await authApi.WithdrawAsync();
+        logoutRequested = true;
+        await ClearSessionAndGoToLoginAsync();
+    }
+
+    private async Task ClearSessionAndGoToLoginAsync()
+    {
         try
         {
             // 진행 중인 자동 로그인이 로그아웃 후 토큰을 다시 저장하지 않도록 완료를 기다린다.

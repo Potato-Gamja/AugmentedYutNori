@@ -103,7 +103,10 @@ public class LobbyController : MonoBehaviour
             mainMenuPanel.TutorialRequested -= OnTutorialRequested;
         }
         if (profilePanel != null)
+        {
             profilePanel.LogoutRequested -= OnLogoutRequested;
+            profilePanel.WithdrawRequested -= OnWithdrawRequested;
+        }
     }
 
     public void ShowReconnectFailure(string reason)
@@ -156,6 +159,8 @@ public class LobbyController : MonoBehaviour
 
         profilePanel.LogoutRequested -= OnLogoutRequested;
         profilePanel.LogoutRequested += OnLogoutRequested;
+        profilePanel.WithdrawRequested -= OnWithdrawRequested;
+        profilePanel.WithdrawRequested += OnWithdrawRequested;
 
     }
     private async void OnLogoutRequested()
@@ -184,6 +189,45 @@ public class LobbyController : MonoBehaviour
             if (profilePanel != null) profilePanel.SetLogoutBusy(false);
         }
     }
+    // 회원 탈퇴. 성공하면 코디네이터가 로그인 화면으로 보낸다
+    private async void OnWithdrawRequested()
+    {
+        if (profilePanel == null) return;
+
+        LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
+        if (coordinator == null)
+        {
+            profilePanel.ShowStatus("로그인 정보를 찾을 수 없습니다.");
+            return;
+        }
+
+        profilePanel.SetWithdrawBusy(true);
+        profilePanel.ShowStatus("탈퇴 처리 중입니다.");
+        try
+        {
+            await coordinator.WithdrawAsync();
+        }
+        catch (Exception exception)
+        {
+            if (profilePanel != null) profilePanel.ShowStatus(ToWithdrawMessage(exception));
+        }
+        finally
+        {
+            if (profilePanel != null) profilePanel.SetWithdrawBusy(false);
+        }
+    }
+
+    private static string ToWithdrawMessage(Exception exception)
+    {
+        if (exception is not ApiException api) return $"탈퇴하지 못했습니다: {exception.Message}";
+        return api.StatusCode switch
+        {
+            0 => "서버에 연결할 수 없어 탈퇴하지 못했습니다.",
+            409 => "방이나 게임에 참가 중에는 탈퇴할 수 없어요. 방에서 나간 뒤 다시 시도해 주세요.",
+            _ => $"탈퇴하지 못했습니다. ({api.StatusCode})",
+        };
+    }
+
     private void OnAchievementRequested() => uiManager?.Open<AchievementPanel>();
 
     private void OnCreateRoomRequested(string nickname)

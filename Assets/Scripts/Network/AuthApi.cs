@@ -47,6 +47,13 @@ public class AuthApi
         // 응답 본문이 비어 있어도 성공이면 보낸 닉네임으로 저장한다
         return response ?? new ChangeNicknameResponse { nickname = nickname };
     }
+
+    // 회원 탈퇴 (로그인 토큰 필요). 서버가 계정 데이터와 Firebase 계정을 완전히 삭제한다 → 204
+    // 서버 오류: 409 IN_ROOM(방·게임 참가 중), 401 토큰 무효, 404 이미 없는 계정
+    public Task WithdrawAsync()
+    {
+        return api.Delete<object>("/players/me");
+    }
 }
 
 // POST /players 요청/응답. 서버 REST 명세가 정해지면 필드 이름을 맞출 것
