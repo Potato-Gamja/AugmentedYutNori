@@ -43,4 +43,29 @@ public class LoginNicknameFlowTests
         Assert.That(nickname.GetComponentInParent<Canvas>().enabled, Is.True);
         Debug.Log("[Login UI verification] Nickname panel, input and confirm active; Login panel closed.");
     }
+    [TestCase(true)]
+    [TestCase(false)]
+    public void BrowserPlaceholderStaysHiddenAfterTypingAndClearing(bool initiallyActive)
+    {
+        preview = EditorSceneManager.OpenPreviewScene("Assets/Scenes/Login.unity");
+        var manager = Find("UIManager");
+        manager.GetType().GetMethod("Awake", Private).Invoke(manager, null);
+        var nickname = (Component)Open(manager, "NicknamePanel");
+        var input = (Component)nickname.GetType().GetField("nicknameInput", Private).GetValue(nickname);
+        var placeholder = (Component)input.GetType().GetProperty("placeholder").GetValue(input);
+        placeholder.gameObject.SetActive(initiallyActive);
+        var hide = nickname.GetType().GetMethod("SetBrowserPlaceholderHidden", Private);
+        hide.Invoke(nickname, new object[] { true });
+        for (int i = 0; i < 3; i++)
+        {
+            input.GetType().GetProperty("text").SetValue(input, "감자");
+            input.GetType().GetProperty("text").SetValue(input, "");
+            input.GetType().GetMethod("ForceLabelUpdate").Invoke(input, null);
+            Assert.That(placeholder.gameObject.activeInHierarchy, Is.False,
+                "Clearing text must not reveal Unity's placeholder under the browser input.");
+        }
+        hide.Invoke(nickname, new object[] { false });
+        Assert.That(placeholder.gameObject.activeSelf, Is.EqualTo(initiallyActive));
+    }
+
 }
