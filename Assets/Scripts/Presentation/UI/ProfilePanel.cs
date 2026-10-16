@@ -15,6 +15,7 @@ public sealed class ProfilePanel : UIBase
     [SerializeField] private TMP_Text playerIdText;
     [SerializeField] private TMP_Text statusText;
     [SerializeField] private Button logoutButton;
+    [SerializeField] private Button withdrawButton;
     [SerializeField] private TMP_Text goldText;
     [SerializeField] private TextAsset profileIconsJson;
     [SerializeField] private Button iconOptionTemplate;
@@ -46,6 +47,7 @@ public sealed class ProfilePanel : UIBase
         BuildIconOptions();
         closeButton?.onClick.AddListener(Close);
         logoutButton?.onClick.AddListener(OnLogoutClicked);
+        withdrawButton?.onClick.AddListener(OnWithdrawClicked);
         foreach (ProfileIconOption option in iconOptions)
         {
             if (option.icon != null)
@@ -89,6 +91,7 @@ public sealed class ProfilePanel : UIBase
     {
         closeButton?.onClick.RemoveListener(Close);
         logoutButton?.onClick.RemoveListener(OnLogoutClicked);
+        withdrawButton?.onClick.RemoveListener(OnWithdrawClicked);
         foreach (ProfileIconOption option in iconOptions)
             if (option.listener != null) option.button?.onClick.RemoveListener(option.listener);
     }
@@ -188,6 +191,7 @@ public sealed class ProfilePanel : UIBase
         busy = value;
         if (closeButton != null) closeButton.interactable = !value;
         if (logoutButton != null) logoutButton.interactable = !value;
+        if (withdrawButton != null) withdrawButton.interactable = !value;
         RefreshIconOptions();
     }
 
@@ -218,6 +222,12 @@ public sealed class ProfilePanel : UIBase
     public void ShowStatus(string message)
     {
         if (statusText != null) statusText.text = message ?? string.Empty;
+    }
+
+    private void OnWithdrawClicked()
+    {
+        if (busy) return;
+        ShowStatus("회원 탈퇴 기능은 서버 연결 준비 중입니다. 계정은 삭제되지 않았습니다.");
     }
 
     private void OnLogoutClicked() => LogoutRequested?.Invoke();

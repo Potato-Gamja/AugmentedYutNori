@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -129,7 +129,7 @@ public static class UIPopupPrefabBuilder
         var title=Text("GridTitle",body,"프로필 아이콘 선택",Jua,32);Top(title.rectTransform,516,130,800,44);title.alignment=TextAlignmentOptions.MidlineLeft;
         RectTransform content;var scroll=Scroll("IconScroll",body,516,194,1000,620,out content);var grid=content.gameObject.AddComponent<GridLayoutGroup>();grid.cellSize=new Vector2(134,176);grid.spacing=new Vector2(10,14);grid.constraint=GridLayoutGroup.Constraint.FixedColumnCount;grid.constraintCount=7;
         Bind(panel,"iconScrollRect",scroll);Bind(panel,"iconOptionContainer",content);Bind(panel,"iconOptionTemplate",AssetDatabase.LoadAssetAtPath<GameObject>(Items+"ProfileIconOption.prefab").GetComponent<Button>());Bind(panel,"profileIconsJson",AssetDatabase.LoadAssetAtPath<TextAsset>("Assets/Data/profile_icons.json"));
-        var hint=Text("Hint",body,"아이콘을 누르면 바로 바뀌어요",Medium,20,"A88E6E");Center(hint.rectTransform,1016,834,980,26);Status(panel,body,1016,870,980);return root;
+        var hint=Text("Hint",body,"아이콘을 누르면 바로 바뀌어요",Medium,20,"A88E6E");Center(hint.rectTransform,1016,834,980,26);Status(panel,body,1016,870,980);UIAccountButtonsBuilder.ConfigureProfile(root);return root;
     }
     private static GameObject AchievementItem()
     {

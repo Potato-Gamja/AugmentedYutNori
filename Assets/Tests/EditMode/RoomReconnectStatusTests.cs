@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -36,7 +36,7 @@ public class RoomReconnectStatusTests
     [SetUp]
     public void SetUp()
     {
-        var go = UnityEngine.Object.Instantiate(UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/UI/RoomPanel.prefab"));
+        var go = UnityEngine.Object.Instantiate(UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/UIv2/Panels/RoomPanel.prefab"));
         owners.Add(go); panel = go.GetComponent(RuntimeType("RoomPanel"));
         coordinator = Create("LobbyNetworkCoordinator");
         Component controller = Create("LobbyController"); Set(controller, "roomPanel", panel);
@@ -100,4 +100,39 @@ public class RoomReconnectStatusTests
         Message("PLAYER_DISCONNECTED", "{\"playerId\":\"p1\",\"graceSec\":30}");
         Assert.That(Status(1), Is.EqualTo("준비 완료"));
     }
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("   ")]
+    public void UnequippedPlayersUseYutIconRegardlessOfSeat(string iconId)
+    {
+        var members = (IList)room.GetType().GetField("members").GetValue(room);
+        members.Clear();
+        room.GetType().GetField("status").SetValue(room, "WAITING");
+        for (int seat = 0; seat < 4; seat++)
+        {
+            var player = Activator.CreateInstance(RuntimeType("RoomPlayer"));
+            player.GetType().GetField("playerId").SetValue(player, "p" + seat);
+            player.GetType().GetField("nickname").SetValue(player, "참가자" + seat);
+            player.GetType().GetField("team").SetValue(player, 3 - seat);
+            player.GetType().GetField("iconId").SetValue(player, iconId);
+            members.Add(player);
+        }
+        ShowRoom();
+        var icons = (UnityEngine.UI.Image[])Get(panel, "playerProfileIcons");
+        var defaultIcon = Resources.Load<Sprite>("ProfileIcons/icon_001");
+        Assert.That(defaultIcon, Is.Not.Null);
+        foreach (var icon in icons)
+        {
+            Assert.That(icon.sprite, Is.EqualTo(defaultIcon));
+            Assert.That(icon.enabled, Is.True);
+        }
+        members[1].GetType().GetField("iconId").SetValue(members[1], "icon_002");
+        members.RemoveAt(3);
+        ShowRoom();
+        Assert.That(icons[1].sprite, Is.EqualTo(Resources.Load<Sprite>("ProfileIcons/icon_002")));
+        Assert.That(icons[3].sprite, Is.Null);
+        Assert.That(icons[3].enabled, Is.False);
+    }
+
 }
+

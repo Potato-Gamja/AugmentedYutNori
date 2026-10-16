@@ -12,6 +12,7 @@ public sealed class MainMenuPanel : UIBase
     [SerializeField] private Button profileButton;
     [SerializeField] private Button achievementButton;
     [SerializeField] private Button settingsButton;
+    [SerializeField] private Button tutorialButton;
     [SerializeField] private TMP_Text statusText;
 
     [Header("프로필 표시")]
@@ -44,6 +45,7 @@ public sealed class MainMenuPanel : UIBase
     public event Action ProfileRequested;
     public event Action AchievementRequested;
     public event Action SettingsRequested;
+    public event Action TutorialRequested;
 
     public override void Init()
     {
@@ -54,6 +56,7 @@ public sealed class MainMenuPanel : UIBase
         profileButton?.onClick.AddListener(OnProfileClicked);
         achievementButton?.onClick.AddListener(OnAchievementClicked);
         settingsButton?.onClick.AddListener(OnSettingsClicked);
+        tutorialButton?.onClick.AddListener(OnTutorialClicked);
     }
 
     private void OnDestroy()
@@ -66,6 +69,7 @@ public sealed class MainMenuPanel : UIBase
         profileButton?.onClick.RemoveListener(OnProfileClicked);
         achievementButton?.onClick.RemoveListener(OnAchievementClicked);
         settingsButton?.onClick.RemoveListener(OnSettingsClicked);
+        tutorialButton?.onClick.RemoveListener(OnTutorialClicked);
     }
 
     protected override async void OnOpen()
@@ -115,5 +119,6 @@ public sealed class MainMenuPanel : UIBase
     private void OnCollectionClicked() => CollectionRequested?.Invoke();
     private void OnProfileClicked() => ProfileRequested?.Invoke();
     private void OnAchievementClicked() => AchievementRequested?.Invoke();
+    private void OnTutorialClicked() => TutorialRequested?.Invoke();
     private void OnSettingsClicked() => SettingsRequested?.Invoke();
 }

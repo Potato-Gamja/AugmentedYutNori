@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -94,6 +94,7 @@ public static class UIOutgamePrefabBuilder
         Bind(panel,"profileButton",Card(grid,"ProfileCard","내 정보","프로필 아이콘 · 닉네임","menu_profile_icon"));
         Bind(panel,"settingsButton",settings.GetComponentInChildren<Button>());Bind(panel,"statusText",status);
         Bind(panel,"profileIcon",portrait);Bind(panel,"nicknameText",nickname);Bind(panel,"goldText",amount);
+        UITutorialBuilder.ConfigureMenu(root.gameObject);
         return root.gameObject;
     }
     private static Button ActionButton(string commonName,string name,Transform parent,float x,float y,float width,float height,string label,float fontSize,bool glow)

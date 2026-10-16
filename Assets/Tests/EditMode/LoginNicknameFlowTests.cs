@@ -68,4 +68,33 @@ public class LoginNicknameFlowTests
         Assert.That(placeholder.gameObject.activeSelf, Is.EqualTo(initiallyActive));
     }
 
+    [Test]
+    public void GuestRequestOpensNicknameWithoutReplacingCurrentAccount()
+    {
+        string prefix = "GuestFlowTest." + Guid.NewGuid() + ".";
+        try
+        {
+            PlayerPrefs.SetString(prefix + "player.playerId", "saved-account");
+            PlayerPrefs.SetString(prefix + "player.token", "saved-token");
+            PlayerPrefs.SetString(prefix + "player.authType", "google");
+            var identity = Activator.CreateInstance(Runtime("PlayerIdentity"), prefix);
+            preview = EditorSceneManager.OpenPreviewScene("Assets/Scenes/Login.unity");
+            var manager = Find("UIManager");
+            manager.GetType().GetMethod("Awake", Private).Invoke(manager, null);
+            Open(manager, "LoginPanel");
+            var controller = Find("LoginController");
+            controller.GetType().GetField("playerIdentity", Private).SetValue(controller, identity);
+            controller.GetType().GetMethod("OnGuestLoginRequested", Private).Invoke(controller, null);
+            var nickname = (Component)controller.GetType().GetField("nicknamePanel", Private).GetValue(controller);
+            Assert.That(nickname.gameObject.activeInHierarchy, Is.True);
+            Assert.That(controller.GetType().GetField("creatingGuest", Private).GetValue(controller), Is.EqualTo(true));
+            Assert.That(identity.GetType().GetProperty("Token").GetValue(identity), Is.EqualTo("saved-token"));
+        }
+        finally
+        {
+            foreach (string name in new[] { "playerId", "token", "authType" })
+                PlayerPrefs.DeleteKey(prefix + "player." + name);
+        }
+    }
+
 }

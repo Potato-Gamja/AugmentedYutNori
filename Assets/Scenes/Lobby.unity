@@ -129,7 +129,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 828511336472889071, guid: e44c14272cc20f148b45da5696d1af57, type: 3}
       propertyPath: prefabs.Array.size
-      value: 13
+      value: 14
       objectReference: {fileID: 0}
     - target: {fileID: 828511336472889071, guid: e44c14272cc20f148b45da5696d1af57, type: 3}
       propertyPath: 'prefabs.Array.data[9]'
@@ -147,6 +147,10 @@ PrefabInstance:
       propertyPath: 'prefabs.Array.data[12]'
       value: 
       objectReference: {fileID: 6425206499993899876, guid: 1cdc264886b7d3b40a4efe37cbbaacfe, type: 3}
+    - target: {fileID: 828511336472889071, guid: e44c14272cc20f148b45da5696d1af57, type: 3}
+      propertyPath: 'prefabs.Array.data[13]'
+      value: 
+      objectReference: {fileID: 1115378787080685569, guid: cb0c65a06cb21bc448336afe83727aeb, type: 3}
     - target: {fileID: 2638968591324394123, guid: e44c14272cc20f148b45da5696d1af57, type: 3}
       propertyPath: m_Name
       value: UIRoot
@@ -430,7 +434,7 @@ MonoBehaviour:
   createRoomTimeLimitSec: 30
   loginSceneName: Login
   lobbySceneName: Lobby
-  allowGuestLogin: 0
+  allowGuestLogin: 1
   authSettings: {fileID: 11400000, guid: d8ddffe073f3d63459a7170891b2570f, type: 2}
 --- !u!114 &2094785097
 MonoBehaviour:

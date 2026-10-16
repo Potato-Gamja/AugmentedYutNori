@@ -26,6 +26,7 @@ public class LoginController : MonoBehaviour
     private FirebaseAnonymousSignIn anonymousSignIn;
     private PlayerIdentity playerIdentity;
     private bool signingIn;
+    private bool savingNickname;
     private CancellationTokenSource signInCancel;
 
     private async void Start()
@@ -68,7 +69,11 @@ public class LoginController : MonoBehaviour
         catch (Exception exception)
         {
             Debug.LogException(exception, this);
-            if (this != null) loginPanel.ShowStatus(ToUserMessage(exception));
+            if (this != null)
+            {
+                loginPanel.ShowStatus(ToUserMessage(exception));
+                loginPanel.SetBusy(false);
+            }
         }
     }
 
@@ -181,7 +186,7 @@ public class LoginController : MonoBehaviour
 
     private async void SignIn()
     {
-        if (signingIn) return;
+        if (signingIn || googleSignIn == null) return;
         signingIn = true;
         signInCancel = CancellationTokenSource.CreateLinkedTokenSource(destroyCancellationToken);
         loginPanel.SetBusy(true);
@@ -260,6 +265,8 @@ public class LoginController : MonoBehaviour
 
     private async void OnNicknameSubmitted(string nickname)
     {
+        if (savingNickname) return;
+        savingNickname = true;
         nicknamePanel.SetBusy(true);
         nicknamePanel.ShowStatus("닉네임을 저장하는 중입니다.");
 
@@ -279,9 +286,11 @@ public class LoginController : MonoBehaviour
             if (this == null) return;
             nicknamePanel.ShowStatus(ToNicknameMessage(exception));
             nicknamePanel.SetBusy(false);
+            savingNickname = false;
             return;
         }
 
+        savingNickname = false;
         if (this == null) return;
         Debug.Log($"[Login] 닉네임 설정: {playerIdentity.Nickname}");
         SceneManager.LoadScene(nextSceneName);

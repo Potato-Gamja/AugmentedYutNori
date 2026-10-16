@@ -334,9 +334,18 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     public Task WaitForLoginAsync() => silentLoginTask;
 
-    public async Task<GachaResultResponse> DrawGachaAsync()
+    private async Task EnsureAccountFeaturesAsync()
     {
         await EnsurePlayer(LocalNickname);
+        // Firebase 계정(구글·게스트)은 서버 토큰(JWT)으로 모든 기능을 쓴다. 예전 에디터 테스트용 게스트 토큰만 서버 API가 받지 않는다
+        if (!playerIdentity.IsGoogleLogin && !playerIdentity.IsGuest)
+            throw new InvalidOperationException("이 계정으로는 이 기능을 사용할 수 없습니다. Google 계정 또는 게스트로 로그인해 주세요.");
+    }
+
+
+    public async Task<GachaResultResponse> DrawGachaAsync()
+    {
+        await EnsureAccountFeaturesAsync();
         GachaResultResponse response = await gachaApi.DrawAsync();
         playerIdentity.ApplyGold(response.gold);
         LocalDisplayChanged?.Invoke();
@@ -345,20 +354,20 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     public async Task<OwnedIconsResponse> GetOwnedIconsAsync()
     {
-        await EnsurePlayer(LocalNickname);
+        await EnsureAccountFeaturesAsync();
         return await iconApi.GetOwnedAsync();
     }
 
     public async Task<AchievementListResponse> GetAchievementsAsync()
     {
-        await EnsurePlayer(LocalNickname);
+        await EnsureAccountFeaturesAsync();
         return await achievementApi.GetAsync();
     }
 
     // 업적 보상 받기. 받은 뒤 보유 골드를 저장한다
     public async Task<ClaimAchievementResponse> ClaimAchievementAsync(string achievementId)
     {
-        await EnsurePlayer(LocalNickname);
+        await EnsureAccountFeaturesAsync();
         ClaimAchievementResponse response = await achievementApi.ClaimAsync(achievementId);
         playerIdentity.ApplyGold(response.gold);
         LocalDisplayChanged?.Invoke();
@@ -367,7 +376,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     public async Task<PlayerProfileResponse> GetProfileAsync()
     {
-        await EnsurePlayer(LocalNickname);
+        await EnsureAccountFeaturesAsync();
         PlayerProfileResponse response = await iconApi.GetProfileAsync();
         playerIdentity.ApplyGold(response.gold);
         if (!string.IsNullOrWhiteSpace(response.nickname))
