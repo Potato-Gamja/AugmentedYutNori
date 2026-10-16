@@ -233,7 +233,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     private bool CanSilentLogin()
     {
-        if (!playerIdentity.IsGoogleLogin || string.IsNullOrEmpty(playerIdentity.FirebaseRefreshToken)) return false;
+        if (!playerIdentity.HasFirebaseLogin) return false;
         if (authSettings != null) return true;
 
         Debug.LogWarning("[LobbyNetwork] FirebaseAuthSettings가 없어 자동 재로그인을 건너뜁니다.", this);
@@ -507,10 +507,11 @@ public class LobbyNetworkCoordinator : MonoBehaviour
         return updatedNickname;
     }
 
-    // 게스트를 허용하지 않으면 구글 로그인 토큰만 로그인으로 친다 (예전에 만든 게스트 토큰이 남아 있어도 로그인 씬으로 보낸다)
+    // 에디터 테스트용 게스트를 허용하지 않으면 Firebase 로그인(구글·게스트) 토큰만 로그인으로 친다
+    // (예전에 만든 에디터 테스트용 게스트 토큰이 남아 있어도 로그인 씬으로 보낸다)
     private bool IsLoggedIn()
     {
-        return playerIdentity.HasToken && (allowGuestLogin || playerIdentity.IsGoogleLogin);
+        return playerIdentity.HasToken && (allowGuestLogin || playerIdentity.IsGoogleLogin || playerIdentity.IsGuest);
     }
 
     public async Task LogoutAsync()

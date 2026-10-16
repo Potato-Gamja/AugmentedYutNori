@@ -11,6 +11,7 @@ public class LoginPanel : UIBase
 {
     [Header("버튼")]
     [SerializeField] private Button googleLoginButton;
+    [SerializeField] private Button guestLoginButton;
     // 이 기기에 저장된 로그인으로 바로 들어간다. 저장된 로그인이 있을 때만 누를 수 있다
     [SerializeField] private Button continueButton;
     [SerializeField] private TMP_Text continueLabel;
@@ -27,6 +28,7 @@ public class LoginPanel : UIBase
     public event Action GoogleLoginPressed;
     // 버튼 클릭 (누르고 뗐을 때)
     public event Action GoogleLoginRequested;
+    public event Action GuestLoginRequested;
     public event Action ContinueRequested;
     public event Action CancelRequested;
 
@@ -38,6 +40,7 @@ public class LoginPanel : UIBase
             cancelButton.gameObject.SetActive(false);
         }
 
+        guestLoginButton?.onClick.AddListener(OnGuestLoginClicked);
         continueButton?.onClick.AddListener(OnContinueClicked);
         SetContinueAvailable(false, null);
 
@@ -54,6 +57,7 @@ public class LoginPanel : UIBase
     private void OnDestroy()
     {
         googleLoginButton?.onClick.RemoveListener(OnGoogleLoginClicked);
+        guestLoginButton?.onClick.RemoveListener(OnGuestLoginClicked);
         continueButton?.onClick.RemoveListener(OnContinueClicked);
         cancelButton?.onClick.RemoveListener(OnCancelClicked);
     }
@@ -62,6 +66,7 @@ public class LoginPanel : UIBase
     {
         busy = isBusy;
         if (googleLoginButton != null) googleLoginButton.interactable = !busy;
+        if (guestLoginButton != null) guestLoginButton.interactable = !busy;
         RefreshContinue();
     }
 
@@ -103,6 +108,11 @@ public class LoginPanel : UIBase
     private void OnGoogleLoginClicked()
     {
         GoogleLoginRequested?.Invoke();
+    }
+
+    private void OnGuestLoginClicked()
+    {
+        if (!busy) GuestLoginRequested?.Invoke();
     }
 
     private void OnContinueClicked()
