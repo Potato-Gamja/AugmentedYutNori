@@ -343,10 +343,10 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     }
 
 
-    public async Task<GachaResultResponse> DrawGachaAsync()
+    public async Task<GachaResultResponse> DrawGachaAsync(int count = 1)
     {
         await EnsureAccountFeaturesAsync();
-        GachaResultResponse response = await gachaApi.DrawAsync();
+        GachaResultResponse response = await gachaApi.DrawAsync(count);
         playerIdentity.ApplyGold(response.gold);
         LocalDisplayChanged?.Invoke();
         return response;
