@@ -83,7 +83,7 @@ public class NicknamePanel : UIBase
         if (statusText != null) statusText.text = message ?? string.Empty;
     }
 
-    // 빈 값·길이만 검사한다. 중복 여부는 서버가 409로 알려 준다
+    // 빈 값·길이만 검사한다. 닉네임 중복은 허용한다.
     public static string Validate(string nickname)
     {
         if (string.IsNullOrWhiteSpace(nickname)) return "닉네임을 입력해 주세요.";

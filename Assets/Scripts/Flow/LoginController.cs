@@ -63,7 +63,7 @@ public class LoginController : MonoBehaviour
 
             loginPanel.SetBusy(false);
             loginPanel.ShowStatus(playerIdentity.IsGuest
-                ? "게스트 기록은 이 기기에만 남아요. Google로 로그인하면 게스트 기록은 이어지지 않아요."
+                ? "게스트 로그인 정보는 이 기기에 저장돼요. Google 계정으로는 게스트 기록이 이어지지 않아요."
                 : string.Empty);
         }
         catch (Exception exception)
@@ -304,7 +304,6 @@ public class LoginController : MonoBehaviour
             {
                 case 0: return "서버에 연결할 수 없습니다. 서버가 켜져 있는지 확인해 주세요.";
                 case 400: return "사용할 수 없는 닉네임입니다.";
-                case 409: return "이미 사용 중인 닉네임입니다.";
                 case 401: return "로그인이 만료되었습니다. 다시 로그인해 주세요.";
             }
             return $"닉네임 저장에 실패했습니다. ({apiException.StatusCode})";
