@@ -1,8 +1,8 @@
 using System.Threading.Tasks;
 
 // 가입·로그인 REST 호출. 받은 결과의 저장은 PlayerIdentity가 맡는다.
-//   게스트:      POST /players         { nickname } → { playerId, nickname, guestToken }
-//   구글 로그인: POST /auth/firebase   { idToken }  → { playerId, nickname, token }
+//   구글·Firebase 익명 로그인: POST /auth/firebase { idToken } → { playerId, nickname, token, guest }
+//   예전 에디터 테스트용 게스트: POST /players { nickname } → { playerId, nickname, guestToken }
 // 서버 명세: docs/google-login-server-spec.md
 public class AuthApi
 {
@@ -25,7 +25,7 @@ public class AuthApi
     }
 
     // Firebase ID 토큰을 서버에 보내 플레이어 토큰으로 바꾼다.
-    // 서버는 토큰을 검증해 같은 구글 계정이면 같은 playerId를 돌려준다
+    // 서버는 토큰을 검증해 같은 Firebase 계정이면 같은 playerId를 돌려준다
     public async Task<FirebaseLoginResponse> LoginWithFirebaseAsync(string firebaseIdToken)
     {
         FirebaseLoginResponse response = await api.Post<FirebaseLoginRequest, FirebaseLoginResponse>(
@@ -37,8 +37,7 @@ public class AuthApi
         return response;
     }
 
-    // 계정 닉네임 설정·변경 (로그인 토큰 필요). 서버 오류: 400 형식 오류, 409 중복 닉네임, 401 토큰 무효
-    // ⚠ 서버 API 미구현 상태의 제안 형식. 서버 담당과 주소·필드를 맞출 것
+    // 계정 닉네임 설정·변경 (로그인 토큰 필요). 닉네임 중복 허용. 서버 오류: 400 형식 오류, 401 토큰 무효
     public async Task<ChangeNicknameResponse> ChangeNicknameAsync(string nickname)
     {
         ChangeNicknameResponse response = await api.Patch<ChangeNicknameRequest, ChangeNicknameResponse>(
@@ -47,9 +46,16 @@ public class AuthApi
         // 응답 본문이 비어 있어도 성공이면 보낸 닉네임으로 저장한다
         return response ?? new ChangeNicknameResponse { nickname = nickname };
     }
+
+    // 회원 탈퇴 (로그인 토큰 필요). 서버가 계정 데이터와 Firebase 계정을 완전히 삭제한다 → 204
+    // 서버 오류: 409 IN_ROOM(방·게임 참가 중), 401 토큰 무효, 404 이미 없는 계정
+    public Task WithdrawAsync()
+    {
+        return api.Delete<object>("/players/me");
+    }
 }
 
-// POST /players 요청/응답. 서버 REST 명세가 정해지면 필드 이름을 맞출 것
+// POST /players 요청/응답 (예전 에디터 테스트용 게스트)
 public class GuestLoginRequest
 {
     public string nickname;
@@ -62,7 +68,7 @@ public class GuestLoginResponse
     public string guestToken;
 }
 
-// POST /auth/firebase 요청/응답. 서버 구현 시 이 필드 이름에 맞출 것
+// POST /auth/firebase 요청/응답
 public class FirebaseLoginRequest
 {
     public string idToken;
@@ -74,9 +80,10 @@ public class FirebaseLoginResponse
     public string nickname;
     public string token;
     public int? gold;   // 보유 골드. 서버 LoginResponse에 아직 없음 (없으면 null → 기기 캐시 유지)
+    public bool guest;  // 게스트(Firebase 익명 로그인) 계정이면 true
 }
 
-// PATCH /players/me/nickname 요청/응답 (제안 형식)
+// PATCH /players/me/nickname 요청/응답
 public class ChangeNicknameRequest
 {
     public string nickname;

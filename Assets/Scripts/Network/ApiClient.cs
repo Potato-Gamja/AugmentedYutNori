@@ -40,6 +40,11 @@ public class ApiClient
         return Send<TResponse>("PATCH", path, JsonConvert.SerializeObject(body, MessageSerializer.Settings));
     }
 
+    public Task<TResponse> Delete<TResponse>(string path)
+    {
+        return Send<TResponse>(UnityWebRequest.kHttpVerbDELETE, path, null);
+    }
+
     private async Task<TResponse> Send<TResponse>(string method, string path, string json)
     {
         using var request = new UnityWebRequest(BaseUrl + path, method)

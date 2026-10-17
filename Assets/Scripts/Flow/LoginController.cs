@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 
 /// <summary>
-/// 로그인 화면 흐름. 구글(Firebase) 로그인 → 서버 POST /auth/firebase → 플레이어 토큰 저장
+/// 로그인 화면 흐름. 구글(Firebase) 로그인 또는 게스트(Firebase 익명 로그인) → 서버 POST /auth/firebase → 플레이어 토큰 저장
 /// → (계정 닉네임이 없으면) 닉네임 설정 → 로비 씬으로 이동.
 /// 토큰은 PlayerIdentity가 PlayerPrefs에 저장하므로 로비의 LobbyNetworkCoordinator가 같은 키 접두어로 그대로 이어 쓴다.
 /// </summary>
@@ -23,9 +23,9 @@ public class LoginController : MonoBehaviour
     private IGoogleSignIn googleSignIn;
     private AuthApi authApi;
     private FirebaseTokenRefresher tokenRefresher;
+    private FirebaseAnonymousSignIn anonymousSignIn;
     private PlayerIdentity playerIdentity;
     private bool signingIn;
-    private bool creatingGuest;
     private bool savingNickname;
     private CancellationTokenSource signInCancel;
 
@@ -49,6 +49,7 @@ public class LoginController : MonoBehaviour
         apiClient = new ApiClient(apiBaseUrl);
         authApi = new AuthApi(apiClient);
         tokenRefresher = new FirebaseTokenRefresher(authSettings);
+        anonymousSignIn = new FirebaseAnonymousSignIn(authSettings);
         playerIdentity = new PlayerIdentity(playerPrefsKeyPrefix);
         loginPanel.SetContinueAvailable(HasSavedLogin(), playerIdentity.Nickname);
 
@@ -61,7 +62,9 @@ public class LoginController : MonoBehaviour
             if (this == null) return;
 
             loginPanel.SetBusy(false);
-            loginPanel.ShowStatus(string.Empty);
+            loginPanel.ShowStatus(playerIdentity.IsGuest
+                ? "게스트 로그인 정보는 이 기기에 저장돼요. Google 계정으로는 게스트 기록이 이어지지 않아요."
+                : string.Empty);
         }
         catch (Exception exception)
         {
@@ -96,21 +99,51 @@ public class LoginController : MonoBehaviour
         if (googleSignIn != null && !googleSignIn.StartOnPointerDown) SignIn();
     }
 
-    // Google 계정은 갱신 토큰, 게스트는 저장된 플레이어 토큰과 닉네임으로 계속한다.
-    private bool HasSavedLogin() =>
-        playerIdentity.IsGoogleLogin ? !string.IsNullOrEmpty(playerIdentity.FirebaseRefreshToken)
-            : playerIdentity.HasToken && !string.IsNullOrWhiteSpace(playerIdentity.Nickname);
+    // 이 기기에 저장된 Firebase 로그인(구글 또는 게스트)이 있는지. 갱신 토큰이 있어야 다시 로그인할 수 있다
+    // (예전 에디터 테스트용 게스트 토큰은 제외)
+    private bool HasSavedLogin() => playerIdentity.HasFirebaseLogin;
+
+    // "게스트로 시작": 이 기기에 게스트 계정이 있으면 그 계정으로 다시 들어가고(새로 만들지 않음),
+    // 없으면 Firebase 익명 계정을 새로 만든다. 이후 흐름(서버 로그인 → 닉네임 → 로비)은 구글 로그인과 같다
+    private async void OnGuestLoginRequested()
+    {
+        if (signingIn) return;
+        if (playerIdentity.IsGuest && playerIdentity.HasFirebaseLogin)
+        {
+            OnContinueRequested();
+            return;
+        }
+
+        signingIn = true;
+        loginPanel.SetBusy(true);
+        loginPanel.ShowStatus("게스트 계정을 만드는 중입니다.");
+
+        try
+        {
+            FirebaseSignInResult firebaseUser = await anonymousSignIn.SignUpAsync();
+            if (this == null) return;
+            Debug.Log($"[Login] 게스트 계정 생성: uid={firebaseUser.Uid}");
+
+            await CompleteServerLogin(firebaseUser);
+        }
+        catch (Exception exception)
+        {
+            if (this == null) return;
+            Debug.LogException(exception, this);
+            loginPanel.ShowStatus(ToUserMessage(exception));
+            loginPanel.SetBusy(false);
+        }
+        finally
+        {
+            signingIn = false;
+        }
+    }
 
     // 저장된 Firebase 갱신 토큰으로 브라우저 없이 다시 로그인한다.
     // 새 Firebase ID 토큰 → 서버 /auth/firebase → 새 게임 토큰이라, 서버를 재시작해 예전 게임 토큰이 무효가 돼도 들어갈 수 있다
     private async void OnContinueRequested()
     {
         if (signingIn || !HasSavedLogin()) return;
-        if (!playerIdentity.IsGoogleLogin)
-        {
-            SceneManager.LoadScene(nextSceneName);
-            return;
-        }
         signingIn = true;
         loginPanel.SetBusy(true);
         loginPanel.ShowStatus("이전 계정으로 로그인하는 중입니다.");
@@ -145,19 +178,6 @@ public class LoginController : MonoBehaviour
         }
     }
 
-    private void OnGuestLoginRequested()
-    {
-        if (signingIn) return;
-        if (playerIdentity.HasToken && !playerIdentity.IsGoogleLogin &&
-            !string.IsNullOrWhiteSpace(playerIdentity.Nickname))
-        {
-            SceneManager.LoadScene(nextSceneName);
-            return;
-        }
-        creatingGuest = true;
-        OpenNicknamePanel();
-    }
-
     // 브라우저 창을 그냥 닫으면 게임은 결과를 알 수 없으므로, 취소 버튼으로 기다림을 끝내고 다시 시도하게 한다
     private void OnCancelRequested()
     {
@@ -167,7 +187,6 @@ public class LoginController : MonoBehaviour
     private async void SignIn()
     {
         if (signingIn || googleSignIn == null) return;
-        creatingGuest = false;
         signingIn = true;
         signInCancel = CancellationTokenSource.CreateLinkedTokenSource(destroyCancellationToken);
         loginPanel.SetBusy(true);
@@ -249,28 +268,7 @@ public class LoginController : MonoBehaviour
         if (savingNickname) return;
         savingNickname = true;
         nicknamePanel.SetBusy(true);
-        nicknamePanel.ShowStatus(creatingGuest ? "게스트로 시작하는 중입니다." : "닉네임을 저장하는 중입니다.");
-        if (creatingGuest)
-        {
-            try
-            {
-                GuestLoginResponse response = await authApi.CreateGuestAsync(nickname);
-                if (this == null) return;
-                playerIdentity.ApplyGuest(response);
-                apiClient.Token = playerIdentity.Token;
-                SceneManager.LoadScene(nextSceneName);
-            }
-            catch (Exception exception)
-            {
-                if (this != null)
-                {
-                    nicknamePanel.ShowStatus(ToNicknameMessage(exception));
-                    nicknamePanel.SetBusy(false);
-                }
-            }
-            finally { savingNickname = false; }
-            return;
-        }
+        nicknamePanel.ShowStatus("닉네임을 저장하는 중입니다.");
 
         try
         {
@@ -306,7 +304,6 @@ public class LoginController : MonoBehaviour
             {
                 case 0: return "서버에 연결할 수 없습니다. 서버가 켜져 있는지 확인해 주세요.";
                 case 400: return "사용할 수 없는 닉네임입니다.";
-                case 409: return "이미 사용 중인 닉네임입니다.";
                 case 401: return "로그인이 만료되었습니다. 다시 로그인해 주세요.";
             }
             return $"닉네임 저장에 실패했습니다. ({apiException.StatusCode})";
