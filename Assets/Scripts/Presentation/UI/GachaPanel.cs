@@ -13,6 +13,7 @@ public sealed class GachaPanel : UIBase
 {
     // 화면을 처음 열 때 보여 줄 가격. 뽑은 뒤에는 서버 응답의 price로 맞춘다 (서버 GachaService.PRICE)
     private const int DefaultPrice = 200;
+    private const string DrawingLabel = "뽑는 중...";
 
     [SerializeField] private TextAsset profileIconsJson;
     [SerializeField] private Button closeButton;
@@ -28,6 +29,7 @@ public sealed class GachaPanel : UIBase
     private int price = DefaultPrice;
     private int gold;
     private bool busy;
+    private int drawingCount;   // 지금 기다리는 뽑기 횟수 (0이면 없음). 누른 버튼에 "뽑는 중..."을 보여 준다
 
     public override void Init()
     {
@@ -80,6 +82,7 @@ public sealed class GachaPanel : UIBase
     {
         if (busy || coordinator == null) return;
 
+        drawingCount = count;
         SetBusy(true);
         ShowStatus(string.Empty);
         try
@@ -95,6 +98,17 @@ public sealed class GachaPanel : UIBase
             GachaResultView view = uiManager != null ? uiManager.Open<GachaResultView>() : null;
             view?.Show(result, FindName, LoadSprite);
         }
+        catch (ApiException exception) when (exception.StatusCode == 0)
+        {
+            // 시간 초과·연결 끊김: 서버에서는 뽑기가 끝났을 수도 있어서 골드를 다시 받아 오고 크게 안내한다
+            if (this == null) return;
+            ShowStatus(string.Empty);
+            UIManager uiManager = FindFirstObjectByType<UIManager>();
+            GachaResultView view = uiManager != null ? uiManager.Open<GachaResultView>() : null;
+            view?.ShowNotice("결과를 확인하지 못했어요", "도감에서 확인해 주세요");
+            if (view == null) ShowStatus("결과를 확인하지 못했어요. 도감에서 확인해 주세요.");
+            await RefreshGoldAsync();
+        }
         catch (Exception exception)
         {
             if (this == null) return;
@@ -102,7 +116,23 @@ public sealed class GachaPanel : UIBase
         }
         finally
         {
+            drawingCount = 0;
             if (this != null) SetBusy(false);
+        }
+    }
+
+    // 서버의 보유 골드로 다시 맞춘다. 이것도 실패하면 화면 골드는 그대로 둔다
+    private async System.Threading.Tasks.Task RefreshGoldAsync()
+    {
+        if (coordinator == null) return;
+        try
+        {
+            await coordinator.GetProfileAsync();
+            if (this != null) ShowGold(coordinator.LocalGold);
+        }
+        catch (Exception exception)
+        {
+            Debug.LogWarning($"[Gacha] 골드를 다시 받아 오지 못했습니다: {exception.Message}");
         }
     }
 
@@ -110,11 +140,13 @@ public sealed class GachaPanel : UIBase
     {
         busy = value;
         if (drawButton != null) drawButton.interactable = !value && coordinator != null;
-        if (drawButtonLabel != null) drawButtonLabel.text = $"뽑기 ({price}골드)";
+        if (drawButtonLabel != null)
+            drawButtonLabel.text = value && drawingCount == 1 ? DrawingLabel : $"뽑기 ({price}골드)";
 
         int tenPrice = price * GachaApi.TenDrawCount;
         if (drawTenButton != null) drawTenButton.interactable = !value && coordinator != null && gold >= tenPrice;
-        if (drawTenButtonLabel != null) drawTenButtonLabel.text = $"10연차 ({tenPrice:N0}골드)";
+        if (drawTenButtonLabel != null)
+            drawTenButtonLabel.text = value && drawingCount == GachaApi.TenDrawCount ? DrawingLabel : $"10연차 ({tenPrice:N0}골드)";
     }
 
     private void ShowGold(int value)

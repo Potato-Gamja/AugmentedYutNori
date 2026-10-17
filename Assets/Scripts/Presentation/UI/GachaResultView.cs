@@ -8,6 +8,7 @@ using UnityEngine.UI;
 /// <summary>
 /// 뽑기 결과 팝업. 1회는 아이콘 하나를 크게, 10연차는 칸 10개를 한 화면에 보여 준다.
 /// 아이콘은 작게 시작해 튀어나오듯 커지고, 10연차는 칸마다 조금씩 늦게 나온다. 새 아이콘은 NEW로 강조한다.
+/// 결과를 받지 못했을 때(시간 초과 등)는 ShowNotice로 아이콘 없이 안내 문구만 크게 보여 준다.
 /// </summary>
 public sealed class GachaResultView : UIBase
 {
@@ -29,10 +30,16 @@ public sealed class GachaResultView : UIBase
     [SerializeField] private Vector2 multiPopupSize = new Vector2(1000f, 700f);
     [SerializeField] private float slotRevealDelay = 0.08f;
 
+    [Header("안내 (결과를 받지 못했을 때)")]
+    [SerializeField] private float noticeNameY = -270f;
+    [SerializeField] private float noticePillY = -340f;
+
     private Coroutine reveal;
     private Vector2 singlePopupSize;
     private Vector2 singleConfirmPosition;
     private string singleDescription;
+    private Vector2 singleNamePosition;
+    private Vector2 singlePillPosition;
     private bool layoutSaved;
 
     public override void Init()
@@ -66,6 +73,29 @@ public sealed class GachaResultView : UIBase
     {
         ShowSingle(new GachaDrawResult { iconId = result.iconId, duplicate = result.duplicate, count = result.count },
             iconName, icon);
+    }
+
+    // 아이콘 없이 큰 글씨(message)와 작은 설명(detail)만 보여 준다
+    public void ShowNotice(string message, string detail)
+    {
+        ApplyLayout(multi: false);
+
+        GameObject nameObject = nameText != null ? nameText.gameObject : null;
+        GameObject pillObject = resultPill != null ? resultPill.gameObject : null;
+        foreach (GameObject target in singleOnly ?? Array.Empty<GameObject>())
+            if (target != null) target.SetActive(target == nameObject || target == pillObject);
+
+        if (nameText != null)
+        {
+            nameText.text = message;
+            ((RectTransform)nameText.transform).anchoredPosition = new Vector2(singleNamePosition.x, noticeNameY);
+        }
+        if (resultText != null) resultText.text = detail;
+        if (resultPill != null)
+        {
+            resultPill.color = new Color32(243, 230, 207, 255);
+            resultPill.rectTransform.anchoredPosition = new Vector2(singlePillPosition.x, noticePillY);
+        }
     }
 
     private void ShowSingle(GachaDrawResult result, string iconName, Sprite icon)
@@ -129,6 +159,8 @@ public sealed class GachaResultView : UIBase
         if (popup != null) singlePopupSize = popup.sizeDelta;
         if (confirmRoot != null) singleConfirmPosition = confirmRoot.anchoredPosition;
         if (descriptionText != null) singleDescription = descriptionText.text;
+        if (nameText != null) singleNamePosition = ((RectTransform)nameText.transform).anchoredPosition;
+        if (resultPill != null) singlePillPosition = resultPill.rectTransform.anchoredPosition;
     }
 
     // 10연차는 팝업을 넓히고 확인 버튼을 가운데로 옮긴다. 1회는 프리팹 그대로
@@ -148,6 +180,10 @@ public sealed class GachaResultView : UIBase
             confirmRoot.anchoredPosition = singleConfirmPosition + new Vector2(widthGrowth / 2f, -heightGrowth);
         }
         if (!multi && descriptionText != null) descriptionText.text = singleDescription;
+
+        // ShowNotice가 옮겨 둔 위치를 되돌린다
+        if (nameText != null) ((RectTransform)nameText.transform).anchoredPosition = singleNamePosition;
+        if (resultPill != null) resultPill.rectTransform.anchoredPosition = singlePillPosition;
     }
 
     private void StartReveal(IEnumerator routine)
