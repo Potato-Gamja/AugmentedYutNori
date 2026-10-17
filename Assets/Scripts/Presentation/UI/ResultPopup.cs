@@ -68,7 +68,7 @@ public class ResultPopup : UIBase
     // 순위 목록 표시 (등수 → 팀 순)
     //  iconResolver: (iconId, team) → 프로필 아이콘 스프라이트 (HUD의 ResolveProfileIcon 사용)
     //  localTeam: 내 팀 (내 줄 강조용, -1이면 강조 안 함)
-    // 나간 플레이어: 보상 0 (서버 규칙상 1~4등은 모두 골드를 받으므로 0이면 나간 것)
+    // 나간 플레이어: 서버가 보내는 leftGame (남아 있어도 보상이 0일 수 있어서 금액으로 판단하지 않는다)
     public ResultPopup SetRankings(
         IReadOnlyList<RankingEntry> rankings,
         IReadOnlyList<PlayerDisplayInfo> profiles,
@@ -93,7 +93,7 @@ public class ResultPopup : UIBase
             PlayerDisplayInfo profile = FindProfile(profiles, entry);
             string name = DisplayName(profile, entry);
             Sprite icon = iconResolver?.Invoke(profile?.iconId, entry.team);
-            bool left = entry.rewardGold <= 0;
+            bool left = entry.leftGame;
 
             ResultRankRowView row = Instantiate(rankRowPrefab, rankRowContainer);
             row.Init();
