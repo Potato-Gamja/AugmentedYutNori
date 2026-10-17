@@ -68,15 +68,19 @@ public class LoginNicknameFlowTests
         Assert.That(placeholder.gameObject.activeSelf, Is.EqualTo(initiallyActive));
     }
 
-    [Test]
-    public void GuestRequestOpensNicknameWithoutReplacingCurrentAccount()
+    [TestCase("anonymous", "saved-refresh", true)]
+    [TestCase("google", "saved-refresh", true)]
+    [TestCase("anonymous", "", false)]
+    [TestCase("guest", "saved-refresh", false)]
+    public void SavedLoginRequiresFirebaseAccountAndRefreshToken(string authType, string refreshToken, bool expected)
     {
         string prefix = "GuestFlowTest." + Guid.NewGuid() + ".";
         try
         {
             PlayerPrefs.SetString(prefix + "player.playerId", "saved-account");
             PlayerPrefs.SetString(prefix + "player.token", "saved-token");
-            PlayerPrefs.SetString(prefix + "player.authType", "google");
+            PlayerPrefs.SetString(prefix + "player.authType", authType);
+            PlayerPrefs.SetString(prefix + "player.refreshToken", refreshToken);
             var identity = Activator.CreateInstance(Runtime("PlayerIdentity"), prefix);
             preview = EditorSceneManager.OpenPreviewScene("Assets/Scenes/Login.unity");
             var manager = Find("UIManager");
@@ -84,15 +88,16 @@ public class LoginNicknameFlowTests
             Open(manager, "LoginPanel");
             var controller = Find("LoginController");
             controller.GetType().GetField("playerIdentity", Private).SetValue(controller, identity);
+            Assert.That(controller.GetType().GetMethod("HasSavedLogin", Private).Invoke(controller, null), Is.EqualTo(expected));
+            // Duplicate guest clicks during authentication must not start another request or open nickname entry early.
+            controller.GetType().GetField("signingIn", Private).SetValue(controller, true);
             controller.GetType().GetMethod("OnGuestLoginRequested", Private).Invoke(controller, null);
-            var nickname = (Component)controller.GetType().GetField("nicknamePanel", Private).GetValue(controller);
-            Assert.That(nickname.gameObject.activeInHierarchy, Is.True);
-            Assert.That(controller.GetType().GetField("creatingGuest", Private).GetValue(controller), Is.EqualTo(true));
+            Assert.That(controller.GetType().GetField("nicknamePanel", Private).GetValue(controller), Is.Null);
             Assert.That(identity.GetType().GetProperty("Token").GetValue(identity), Is.EqualTo("saved-token"));
         }
         finally
         {
-            foreach (string name in new[] { "playerId", "token", "authType" })
+            foreach (string name in new[] { "playerId", "token", "authType", "refreshToken" })
                 PlayerPrefs.DeleteKey(prefix + "player." + name);
         }
     }
