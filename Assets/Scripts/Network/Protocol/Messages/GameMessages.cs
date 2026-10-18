@@ -76,13 +76,15 @@ public class GameEndedMessage
 }
 
 // GAME_ENDED 순위 한 줄 (플레이어 = 팀). rank는 1부터, 같은 등수 다음은 건너뜀
-// 기권·끊김으로 나간 플레이어는 꼴찌 등수 + rewardGold 0
+// 기권·끊김으로 나간 플레이어는 꼴찌 등수 + rewardGold 0 + leftGame true
+// 남아 있어도 rewardGold가 0일 수 있다 (보상 인원 1명 이하 등). 나갔는지는 leftGame으로 판단할 것
 public class RankingEntry
 {
     public string playerId;
     public int team;
     public int rank;
     public int rewardGold;
+    public bool leftGame;   // 기권·끊김으로 나간 플레이어
 }
 
 public enum GameEndReason

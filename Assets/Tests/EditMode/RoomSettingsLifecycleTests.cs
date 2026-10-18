@@ -54,7 +54,7 @@ public class RoomSettingsLifecycleTests
     {
         Component coordinator = Create("LobbyNetworkCoordinator");
         Component controller = Create("LobbyController");
-        GameObject room = UnityEngine.Object.Instantiate(UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/UI/RoomPanel.prefab"));
+        GameObject room = UnityEngine.Object.Instantiate(UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/UIv2/Panels/RoomPanel.prefab"));
         objects.Add(room);
         Component panel = room.GetComponent(RuntimeType("RoomPanel"));
         Set(controller, "roomPanel", panel);
@@ -92,7 +92,7 @@ public class RoomSettingsLifecycleTests
     [TestCase(4, true)]
     public void StartButtonRequiresHostAndTwoToFourReadyPlayers(int count, bool expected)
     {
-        GameObject roomOwner = UnityEngine.Object.Instantiate(UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/UI/RoomPanel.prefab"));
+        GameObject roomOwner = UnityEngine.Object.Instantiate(UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/UIv2/Panels/RoomPanel.prefab"));
         objects.Add(roomOwner);
         Component panel = roomOwner.GetComponent(RuntimeType("RoomPanel"));
         panel.GetType().GetMethod("Init").Invoke(panel, null);

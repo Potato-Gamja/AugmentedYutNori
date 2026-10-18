@@ -174,6 +174,124 @@ public class LobbyLifecycleTests
     }
 
     [Test]
+    public void QuickJoinFullRoomRetriesTwiceThenStops()
+    {
+        Component coordinator = CreateJoinCoordinator();
+        var login = new System.Threading.Tasks.TaskCompletionSource<bool>();
+        Set(coordinator, "silentLoginTask", login.Task);
+        Set(coordinator, "quickJoinInProgress", true);
+        object full = JoinEnvelope("ERROR", "{\"code\":\"ROOM_FULL\",\"message\":\"방이 가득 찼습니다.\"}");
+        for (int retry = 1; retry <= 2; retry++)
+        {
+            Set(coordinator, "awaitingRoomJoin", true);
+            Set(coordinator, "pendingRoomCode", "FULL" + retry);
+            Set(coordinator, "lastRoomState", Activator.CreateInstance(RuntimeType("RoomStateMessage")));
+            Invoke(coordinator, "OnMessageReceived", full);
+            Assert.That(Get(coordinator, "quickJoinRetryCount"), Is.EqualTo(retry));
+            Assert.That(Get(coordinator, "quickJoinInProgress"), Is.True);
+            Assert.That(Get(coordinator, "awaitingRoomJoin"), Is.False);
+            Assert.That(Get(coordinator, "pendingRoomCode"), Is.Null);
+            Assert.That(Get(coordinator, "lastRoomState"), Is.Null);
+            Assert.That(Get(coordinator, "changingRoomSocket"), Is.False);
+        }
+        Set(coordinator, "awaitingRoomJoin", true);
+        Set(coordinator, "pendingRoomCode", "FULL3");
+        Invoke(coordinator, "OnMessageReceived", full);
+        Assert.That(Get(coordinator, "quickJoinInProgress"), Is.False);
+        Assert.That(Get(coordinator, "awaitingRoomJoin"), Is.False);
+        Assert.That(Get(coordinator, "pendingRoomCode"), Is.Null);
+        login.SetResult(true);
+    }
+
+    [TestCase(false, "ROOM_FULL")]
+    [TestCase(true, "ROOM_NOT_FOUND")]
+    [TestCase(true, "UNAUTHORIZED")]
+    public void OnlyQuickJoinRoomFullIsRetried(bool quickJoin, string code)
+    {
+        Component coordinator = CreateJoinCoordinator();
+        Set(coordinator, "quickJoinInProgress", quickJoin);
+        Set(coordinator, "awaitingRoomJoin", true);
+        Set(coordinator, "pendingRoomCode", "BAD");
+        Invoke(coordinator, "OnMessageReceived", JoinEnvelope("ERROR", "{\"code\":\"" + code + "\"}"));
+        Assert.That(Get(coordinator, "quickJoinInProgress"), Is.False);
+        Assert.That(Get(coordinator, "roomJoinVersion"), Is.EqualTo(1));
+        Assert.That(Get(coordinator, "pendingRoomCode"), Is.Null);
+    }
+
+    [Test]
+    public void DuplicateOldSocketCallbacksDoNotInterruptQuickJoinRetry()
+    {
+        Component coordinator = CreateJoinCoordinator();
+        var closing = new System.Threading.Tasks.TaskCompletionSource<bool>();
+        Set(coordinator, "roomSocketCleanupTask", closing.Task);
+        Set(coordinator, "quickJoinInProgress", true);
+        Set(coordinator, "awaitingRoomJoin", true);
+        Set(coordinator, "pendingRoomCode", "FULL");
+        object full = JoinEnvelope("ERROR", "{\"code\":\"ROOM_FULL\"}");
+        Invoke(coordinator, "OnMessageReceived", full);
+        Invoke(coordinator, "OnMessageReceived", full);
+        Invoke(coordinator, "OnMessageReceived", JoinEnvelope("ROOM_STATE", "{\"roomCode\":\"FULL\",\"members\":[]}"));
+        Invoke(coordinator, "OnSocketError", "late error");
+        Invoke(coordinator, "OnDisconnected", true);
+        Assert.That(Get(coordinator, "quickJoinRetryCount"), Is.EqualTo(1));
+        Assert.That(Get(coordinator, "quickJoinInProgress"), Is.True);
+        Assert.That(Get(coordinator, "lastRoomState"), Is.Null);
+        Invoke(coordinator, "CancelQuickJoin");
+        closing.SetResult(true);
+    }
+
+    [Test]
+    public async System.Threading.Tasks.Task LeavingCancelsQuickJoinBeforeLookupCanContinue()
+    {
+        Component coordinator = CreateJoinCoordinator();
+        var login = new System.Threading.Tasks.TaskCompletionSource<bool>();
+        Set(coordinator, "silentLoginTask", login.Task);
+        Invoke(coordinator, "OnQuickJoinRequested", "감자");
+        int version = (int)Get(coordinator, "quickJoinVersion");
+        Invoke(coordinator, "OnQuickJoinRequested", "중복");
+        Invoke(coordinator, "OnJoinRoomRequested", "중복", "OTHER");
+        Invoke(coordinator, "OnCreateRoomRequested", "중복");
+        Assert.That(Get(coordinator, "quickJoinVersion"), Is.EqualTo(version));
+        Invoke(coordinator, "OnLeaveRoomRequested");
+        login.SetResult(true);
+        await System.Threading.Tasks.Task.Yield();
+        await System.Threading.Tasks.Task.Yield();
+        Assert.That(Get(coordinator, "quickJoinInProgress"), Is.False);
+        Assert.That(Get(coordinator, "awaitingRoomJoin"), Is.False);
+        Assert.That(Get(coordinator, "pendingRoomCode"), Is.Null);
+    }
+
+    [Test]
+    public void AcceptedQuickJoinRoomStateEndsRetryMode()
+    {
+        Component coordinator = CreateJoinCoordinator();
+        // Identity 미설정 상태의 LocalPlayerId는 빈 문자열이다. 실제 소켓/계정 없이 수락 경로를 확인한다.
+        Set(coordinator, "quickJoinInProgress", true);
+        Set(coordinator, "quickJoinRetryCount", 1);
+        Set(coordinator, "awaitingRoomJoin", true);
+        Set(coordinator, "pendingRoomCode", "NEXT");
+        object room = JoinEnvelope("ROOM_STATE", "{\"roomCode\":\"NEXT\",\"status\":\"WAITING\",\"members\":[{\"playerId\":\"\",\"nickname\":\"감자\",\"team\":0}]}");
+        Invoke(coordinator, "OnMessageReceived", room);
+        Assert.That(Get(coordinator, "quickJoinInProgress"), Is.False);
+        Assert.That(Get(coordinator, "awaitingRoomJoin"), Is.False);
+        Assert.That(Get(coordinator, "quickJoinRetryCount"), Is.Zero);
+        Assert.That(Get(coordinator, "lastRoomState"), Is.Not.Null);
+    }
+
+    [Test]
+    public void SocketFailureDuringQuickJoinDoesNotRetry()
+    {
+        Component coordinator = CreateJoinCoordinator();
+        Set(coordinator, "quickJoinInProgress", true);
+        Set(coordinator, "awaitingRoomJoin", true);
+        Set(coordinator, "pendingRoomCode", "BAD");
+        Invoke(coordinator, "OnSocketError", "connection failed");
+        Assert.That(Get(coordinator, "quickJoinInProgress"), Is.False);
+        Assert.That(Get(coordinator, "roomJoinVersion"), Is.EqualTo(1));
+        Assert.That(Get(coordinator, "pendingRoomCode"), Is.Null);
+    }
+
+    [Test]
     public async System.Threading.Tasks.Task LatestJoinWaitsForCleanupAndUsesItsOwnUrl()
     {
         Component coordinator = CreateJoinCoordinator();
