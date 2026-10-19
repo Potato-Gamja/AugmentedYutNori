@@ -135,6 +135,7 @@ public sealed class YutResultRevealView : MonoBehaviour
     {
         EnsureCreated();
         if (noticeRoutine != null) StopCoroutine(noticeRoutine);
+        revealRoot.transform.SetAsLastSibling();
         title.text = "빽도 · 차례 종료";
         title.enableAutoSizing = true; title.fontSizeMin = 28; title.fontSizeMax = 52;
         title.color = TurnHudView.GetTeamColor(team);
@@ -233,13 +234,14 @@ public sealed class YutResultRevealView : MonoBehaviour
     {
         if (revealRoot != null) return;
 
-        revealRoot = new GameObject("YutResultReveal", typeof(RectTransform), typeof(CanvasGroup), typeof(Image));
+        revealRoot = new GameObject("YutResultReveal", typeof(RectTransform), typeof(CanvasGroup), typeof(Image), typeof(LayoutElement));
         RectTransform rootRect = revealRoot.GetComponent<RectTransform>();
         rootRect.SetParent(transform, false);
+        revealRoot.GetComponent<LayoutElement>().ignoreLayout = true;
         rootRect.anchorMin = new Vector2(0.5f, 0.5f);
         rootRect.anchorMax = new Vector2(0.5f, 0.5f);
         rootRect.pivot = new Vector2(0.5f, 0.5f);
-        rootRect.anchoredPosition = new Vector2(0f, 55f);
+        rootRect.anchoredPosition = Vector2.zero;
         rootRect.sizeDelta = new Vector2(420f, 176f);
         rootRect.SetAsLastSibling();
 
