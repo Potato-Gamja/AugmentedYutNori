@@ -103,7 +103,7 @@ public class RoomReconnectStatusTests
     [TestCase(null)]
     [TestCase("")]
     [TestCase("   ")]
-    public void UnequippedPlayersUseYutIconRegardlessOfSeat(string iconId)
+    public void UnequippedPlayersUseLockedIconRegardlessOfSeat(string iconId)
     {
         var members = (IList)room.GetType().GetField("members").GetValue(room);
         members.Clear();
@@ -119,7 +119,7 @@ public class RoomReconnectStatusTests
         }
         ShowRoom();
         var icons = (UnityEngine.UI.Image[])Get(panel, "playerProfileIcons");
-        var defaultIcon = Resources.Load<Sprite>("ProfileIcons/icon_001");
+        var defaultIcon = Resources.Load<Sprite>("ProfileIcons/profile_px_locked");
         Assert.That(defaultIcon, Is.Not.Null);
         foreach (var icon in icons)
         {

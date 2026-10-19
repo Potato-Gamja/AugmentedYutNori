@@ -19,19 +19,18 @@ public static class PlayerProfileIconResolver
         {
             Sprite resourceIcon = Resources.Load<Sprite>(ProfileIconCatalog.SpritePath(iconId));
             if (resourceIcon != null) return resourceIcon;
-        }
-        if (icons == null || icons.Count == 0) return null;
-
-        if (!string.IsNullOrWhiteSpace(iconId))
-        {
             string normalized = Normalize(iconId);
-            foreach (Sprite icon in icons)
+            if (icons != null)
             {
-                if (icon != null && Normalize(icon.name) == normalized) return icon;
+                foreach (Sprite icon in icons)
+                {
+                    if (icon != null && Normalize(icon.name) == normalized) return icon;
+                }
             }
         }
 
-        return icons[Mathf.Abs(team) % icons.Count];
+        // 미설정·찾을 수 없는 아이콘은 팀과 무관하게 같은 물음표 이미지로 표시한다.
+        return Resources.Load<Sprite>("ProfileIcons/profile_px_locked");
     }
 
     private static string Normalize(string value)

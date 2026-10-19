@@ -45,8 +45,13 @@ public class LobbyLifecycleTests
         Assert.That(flow.GetType().GetMethod("PlayerName", Private).Invoke(flow, new object[] { 2 }), Is.EqualTo("감자"));
     }
 
-    [Test]
-    public void GameHudBindsAllFourHeaderProfileIcons()
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("   ")]
+    [TestCase("icon_001")]
+    [TestCase("icon_009")]
+    [TestCase("missing_icon")]
+    public void GameHudUsesLockedForUnequippedPlayersAndPreservesSelectedIcons(string iconId)
     {
         owner = UnityEngine.Object.Instantiate(UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(
             "Assets/Prefabs/UI/GameHudPanel_3Col.prefab"));
@@ -60,7 +65,7 @@ public class LobbyLifecycleTests
             object profile = Activator.CreateInstance(profileType);
             profileType.GetField("team").SetValue(profile, team);
             profileType.GetField("nickname").SetValue(profile, "닉네임" + team);
-            profileType.GetField("iconId").SetValue(profile, "icon_001");
+            profileType.GetField("iconId").SetValue(profile, iconId);
             profiles.Add(profile);
         }
         hud.GetType().GetMethod("ConfigurePlayerProfiles").Invoke(hud, new object[] { profiles });
@@ -68,12 +73,65 @@ public class LobbyLifecycleTests
             .Where(component => component != null && component.name == "ProfileIcon" &&
                 component.GetType().FullName == "UnityEngine.UI.Image").ToArray();
         Assert.That(icons.Length, Is.EqualTo(4));
+        Sprite expected = Resources.Load<Sprite>("ProfileIcons/" + (string.IsNullOrWhiteSpace(iconId) || iconId == "missing_icon" ? "profile_px_locked" : iconId));
+        Assert.That(expected, Is.Not.Null);
+        for (int team = 0; team < 4; team++)
+            Assert.That(hud.GetType().GetMethod("ResolveProfileIcon").Invoke(hud, new object[] { iconId, team }),
+                Is.EqualTo(expected), "Result popup and HUD must use the same fallback for every team.");
         foreach (Component icon in icons)
         {
-            Assert.That(icon.GetType().GetProperty("sprite").GetValue(icon), Is.Not.Null);
+            Assert.That(icon.GetType().GetProperty("sprite").GetValue(icon), Is.EqualTo(expected));
             Assert.That(icon.GetType().GetProperty("enabled").GetValue(icon), Is.True);
             Assert.That(icon.gameObject.activeInHierarchy, Is.True);
         }
+    }
+
+    [Test]
+    public void ProfileFramesFollowIconsWhenPlayerCountChanges()
+    {
+        owner = UnityEngine.Object.Instantiate(UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(
+            "Assets/Prefabs/UI/GameHudPanel_3Col.prefab"));
+        Component hud = owner.GetComponent(RuntimeType("GameHudPanel"));
+        hud.GetType().GetMethod("Init").Invoke(hud, null);
+        string[] panels = { "PlayerPanel_Left", "PlayerPanel_Right", "PlayerPanel_3", "PlayerPanel_4" };
+        foreach (int count in new[] { 2, 4, 3, 2 })
+        {
+            hud.GetType().GetMethod("ConfigurePlayers").Invoke(hud, new object[] { count, 4 });
+            for (int team = 0; team < panels.Length; team++)
+            {
+                Transform header = owner.transform.Find(panels[team] + "/Header");
+                var icon = header.Find("ProfileIcon").GetComponent<UnityEngine.UI.Image>();
+                Transform frame = header.Find("ProfileFrame");
+                Assert.That(frame, Is.Not.Null, panels[team]);
+                Assert.That(icon.enabled, Is.EqualTo(team < count), panels[team]);
+                Assert.That(frame.gameObject.activeSelf, Is.EqualTo(icon.enabled), panels[team]);
+                var frameImage = frame.GetComponent<UnityEngine.UI.Image>();
+                Assert.That(frameImage, Is.Not.Null, panels[team]);
+                Assert.That(frameImage.enabled, Is.EqualTo(icon.enabled), panels[team]);
+            }
+        }
+    }
+
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("   ")]
+    [TestCase("missing_icon")]
+    [TestCase("icon_001")]
+    [TestCase("icon_009")]
+    public void MainMenuUsesLockedForUnsetIconsAndPreservesSelectedIcons(string iconId)
+    {
+        owner = UnityEngine.Object.Instantiate(UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(
+            "Assets/Prefabs/UIv2/Panels/MainMenuPanel.prefab"));
+        Component menu = owner.GetComponent(RuntimeType("MainMenuPanel"));
+        menu.GetType().GetMethod("Init").Invoke(menu, null);
+        var setProfile = menu.GetType().GetMethod("SetProfile");
+        setProfile.Invoke(menu, new object[] { "감자", "icon_002" });
+        setProfile.Invoke(menu, new object[] { "감자", iconId });
+        var icon = (UnityEngine.UI.Image)Get(menu, "profileIcon");
+        string expectedId = string.IsNullOrWhiteSpace(iconId) || iconId == "missing_icon" ? "profile_px_locked" : iconId;
+        Assert.That(icon.sprite, Is.EqualTo(Resources.Load<Sprite>("ProfileIcons/" + expectedId)));
+        Assert.That(icon.sprite, Is.Not.Null);
+        Assert.That(icon.enabled, Is.True);
     }
 
     [Test]
