@@ -89,7 +89,7 @@ public static class UIPopupPrefabBuilder
     }
     private static GameObject Collection()
     {
-        var root=Frame<CollectionPanel>(1680,940,"증강 도감","직업 12종의 효과를 확인하세요");var panel=root.GetComponent<CollectionPanel>();var body=root.transform.Find("Popup");var grid=Rect("Grid",body,new Vector2(1568,744));Top(grid,56,160,1568,744);var layout=grid.gameObject.AddComponent<GridLayoutGroup>();layout.cellSize=new Vector2(250,360);layout.spacing=new Vector2(16,24);layout.constraint=GridLayoutGroup.Constraint.FixedColumnCount;layout.constraintCount=6;
+        var root=Frame<CollectionPanel>(1680,940,"직업 도감","직업의 효과를 확인하세요");var panel=root.GetComponent<CollectionPanel>();var body=root.transform.Find("Popup");var grid=Rect("Grid",body,new Vector2(1568,744));Top(grid,56,160,1568,744);var layout=grid.gameObject.AddComponent<GridLayoutGroup>();layout.cellSize=new Vector2(250,360);layout.spacing=new Vector2(16,24);layout.constraint=GridLayoutGroup.Constraint.FixedColumnCount;layout.constraintCount=6;
         Bind(panel,"augmentsJson",AssetDatabase.LoadAssetAtPath<TextAsset>("Assets/Data/augments.json"));Bind(panel,"augmentCardViewPrefab",AssetDatabase.LoadAssetAtPath<GameObject>(Items+"AugmentCardView_Compact.prefab").GetComponent<AugmentCardView>());Bind(panel,"augmentCardContainer",grid);return root;
     }
     private static GameObject IconOption()

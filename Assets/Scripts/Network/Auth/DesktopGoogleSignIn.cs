@@ -118,7 +118,7 @@ public class DesktopGoogleSignIn : IGoogleSignIn
 
         string sdk = $"https://www.gstatic.com/firebasejs/{FirebaseSdkVersion}";
         return $@"<!doctype html>
-<html lang=""ko""><head><meta charset=""utf-8""><title>증강 윷놀이 로그인</title>
+<html lang=""ko""><head><meta charset=""utf-8""><title>직업 윷놀이 로그인</title>
 <style>
   body {{ font-family: sans-serif; background: #304c7a; color: #3a2418; margin: 0; }}
   .card {{ background: #fff8ec; max-width: 420px; margin: 120px auto; padding: 40px; text-align: center; border-radius: 12px; }}
@@ -128,7 +128,7 @@ public class DesktopGoogleSignIn : IGoogleSignIn
   div#status {{ min-height: 24px; margin-top: 16px; }}
 </style></head>
 <body><div class=""card"">
-  <h2>증강 윷놀이</h2>
+  <h2>직업 윷놀이</h2>
   <p>구글 계정으로 로그인하세요</p>
   <button id=""login"" disabled>Google로 로그인</button><br>
   <button id=""cancel"">취소</button>

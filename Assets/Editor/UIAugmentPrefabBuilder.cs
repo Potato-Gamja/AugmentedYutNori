@@ -9,7 +9,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
-/// <summary>명세 5장 UIv2 증강 선택 화면을 생성한다. 미리보기 후보는 Editor 전용이다.</summary>
+/// <summary>명세 5장 UIv2 직업 선택 화면을 생성한다. 미리보기 후보는 Editor 전용이다.</summary>
 public static class UIAugmentPrefabBuilder
 {
     public const string PanelPath="Assets/Prefabs/UIv2/Panels/AugmentSelectPanel.prefab";
@@ -71,7 +71,7 @@ public static class UIAugmentPrefabBuilder
         var modal=Common("PaperCard",root);modal.name="Modal";modal.GetComponent<RectTransform>().sizeDelta=new Vector2(1200,700);modal.transform.Find("Paper").GetComponent<Image>().raycastTarget=true;
         var border=modal.transform.Find("EmphasisBorder").GetComponent<Image>();border.gameObject.SetActive(true);Bind(panel,"modalBorder",border);
         var title=Text("Title",modal.transform,"빨강 팀, 직업을 고르세요",Jua,46,"922A26");Center(title.rectTransform,510,66,900,64);title.alignment=TextAlignmentOptions.MidlineLeft;Bind(panel,"titleText",title);
-        var sub=Text("Description",modal.transform,"카드를 누르면 바로 정해져요. 고른 증강은 이번 판 내내 적용돼요.",Medium,22,"7A5C3E");Center(sub.rectTransform,560,114,1000,40);sub.alignment=TextAlignmentOptions.MidlineLeft;
+        var sub=Text("Description",modal.transform,"카드를 누르면 바로 정해져요. 고른 직업은 이번 판 내내 적용돼요.",Medium,22,"7A5C3E");Center(sub.rectTransform,560,114,1000,40);sub.alignment=TextAlignmentOptions.MidlineLeft;
         var cards=Rect("Cards",modal.transform,new Vector2(1060,440));Top(cards,70,180,1060,440);var layout=cards.gameObject.AddComponent<HorizontalLayoutGroup>();layout.spacing=20;layout.childAlignment=TextAnchor.MiddleCenter;layout.childControlWidth=layout.childControlHeight=true;layout.childForceExpandWidth=layout.childForceExpandHeight=false;
         var footer=Text("Footer",modal.transform,"남은 시간은 위쪽 타이머에서 확인하세요",Medium,19,"A88E6E");Center(footer.rectTransform,600,666,1050,32);
         Bind(panel,"augumentCardViewPrefab",AssetDatabase.LoadAssetAtPath<GameObject>(CardPath));Bind(panel,"augmentCardContainer",cards);return root.gameObject;
@@ -87,7 +87,7 @@ public static class UIAugmentPrefabBuilder
     {
         var so=new SerializedObject(manager);var list=so.FindProperty("prefabs");int count=0;
         for(int i=0;i<list.arraySize;i++){var item=list.GetArrayElementAtIndex(i);if(!(item.objectReferenceValue is AugmentSelectPanel))continue;rows.Add("| "+file+" | "+manager.name+" · prefabs["+i+"] | "+AssetDatabase.GetAssetPath(item.objectReferenceValue)+" | "+PanelPath+" |");item.objectReferenceValue=AssetDatabase.LoadAssetAtPath<GameObject>(PanelPath).GetComponent<AugmentSelectPanel>();count++;}
-        if(count!=1)throw new InvalidOperationException("증강 패널 등록 수: "+count);so.ApplyModifiedPropertiesWithoutUndo();PrefabUtility.RecordPrefabInstancePropertyModifications(manager);
+        if(count!=1)throw new InvalidOperationException("직업 패널 등록 수: "+count);so.ApplyModifiedPropertiesWithoutUndo();PrefabUtility.RecordPrefabInstancePropertyModifications(manager);
     }
     [MenuItem("Tools/Yutnori/UIv2/Replace Augment References")]
     public static void ReplaceReferences()
@@ -113,7 +113,7 @@ public static class UIAugmentPrefabBuilder
             var background=Image("Background",root.transform,Sprite("bg_hanji_tile"),Color.white);background.type=UnityEngine.UI.Image.Type.Tiled;
             // 서버 없는 캡처에서 Dim 상단 130이 비어 있는지 확인하는 표시용 배너/시간 샘플.
             var banner=Common("PaperCard",root.transform);banner.name="BannerSample";Top(banner.GetComponent<RectTransform>(),412,20,1040,100);
-            var turn=Text("Title",banner.transform,new[]{"빨강","파랑","초록","노랑"}[team]+" 팀 증강 선택",Jua,30,"3A2618");Center(turn.rectTransform,480,40,850,44);
+            var turn=Text("Title",banner.transform,new[]{"빨강","파랑","초록","노랑"}[team]+" 팀 직업 선택",Jua,30,"3A2618");Center(turn.rectTransform,480,40,850,44);
             var timer=Text("TimerSample",banner.transform,"29",Jua,36,"3A2618");Center(timer.rectTransform,990,50,70,56);
             Panel=UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(PanelPath),root.transform).GetComponent<AugmentSelectPanel>();Panel.Setup(Choices(),id=>{},team,online);Panel.Open();
             if(picked){var cards=Panel.GetComponentsInChildren<AugmentCardView>();foreach(var card in cards)card.SetInput(false);cards[1].SetSelected(true);Field<RectTransform>(cards[1],"visual").anchoredPosition=Vector2.up*8;}
