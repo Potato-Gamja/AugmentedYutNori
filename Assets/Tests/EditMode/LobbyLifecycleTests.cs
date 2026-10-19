@@ -45,8 +45,13 @@ public class LobbyLifecycleTests
         Assert.That(flow.GetType().GetMethod("PlayerName", Private).Invoke(flow, new object[] { 2 }), Is.EqualTo("감자"));
     }
 
-    [Test]
-    public void GameHudBindsAllFourHeaderProfileIcons()
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("   ")]
+    [TestCase("icon_001")]
+    [TestCase("icon_009")]
+    [TestCase("missing_icon")]
+    public void GameHudUsesLockedForUnequippedPlayersAndPreservesSelectedIcons(string iconId)
     {
         owner = UnityEngine.Object.Instantiate(UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(
             "Assets/Prefabs/UI/GameHudPanel_3Col.prefab"));
@@ -60,7 +65,7 @@ public class LobbyLifecycleTests
             object profile = Activator.CreateInstance(profileType);
             profileType.GetField("team").SetValue(profile, team);
             profileType.GetField("nickname").SetValue(profile, "닉네임" + team);
-            profileType.GetField("iconId").SetValue(profile, "icon_001");
+            profileType.GetField("iconId").SetValue(profile, iconId);
             profiles.Add(profile);
         }
         hud.GetType().GetMethod("ConfigurePlayerProfiles").Invoke(hud, new object[] { profiles });
@@ -68,12 +73,65 @@ public class LobbyLifecycleTests
             .Where(component => component != null && component.name == "ProfileIcon" &&
                 component.GetType().FullName == "UnityEngine.UI.Image").ToArray();
         Assert.That(icons.Length, Is.EqualTo(4));
+        Sprite expected = Resources.Load<Sprite>("ProfileIcons/" + (string.IsNullOrWhiteSpace(iconId) || iconId == "missing_icon" ? "profile_px_locked" : iconId));
+        Assert.That(expected, Is.Not.Null);
+        for (int team = 0; team < 4; team++)
+            Assert.That(hud.GetType().GetMethod("ResolveProfileIcon").Invoke(hud, new object[] { iconId, team }),
+                Is.EqualTo(expected), "Result popup and HUD must use the same fallback for every team.");
         foreach (Component icon in icons)
         {
-            Assert.That(icon.GetType().GetProperty("sprite").GetValue(icon), Is.Not.Null);
+            Assert.That(icon.GetType().GetProperty("sprite").GetValue(icon), Is.EqualTo(expected));
             Assert.That(icon.GetType().GetProperty("enabled").GetValue(icon), Is.True);
             Assert.That(icon.gameObject.activeInHierarchy, Is.True);
         }
+    }
+
+    [Test]
+    public void ProfileFramesFollowIconsWhenPlayerCountChanges()
+    {
+        owner = UnityEngine.Object.Instantiate(UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(
+            "Assets/Prefabs/UI/GameHudPanel_3Col.prefab"));
+        Component hud = owner.GetComponent(RuntimeType("GameHudPanel"));
+        hud.GetType().GetMethod("Init").Invoke(hud, null);
+        string[] panels = { "PlayerPanel_Left", "PlayerPanel_Right", "PlayerPanel_3", "PlayerPanel_4" };
+        foreach (int count in new[] { 2, 4, 3, 2 })
+        {
+            hud.GetType().GetMethod("ConfigurePlayers").Invoke(hud, new object[] { count, 4 });
+            for (int team = 0; team < panels.Length; team++)
+            {
+                Transform header = owner.transform.Find(panels[team] + "/Header");
+                var icon = header.Find("ProfileIcon").GetComponent<UnityEngine.UI.Image>();
+                Transform frame = header.Find("ProfileFrame");
+                Assert.That(frame, Is.Not.Null, panels[team]);
+                Assert.That(icon.enabled, Is.EqualTo(team < count), panels[team]);
+                Assert.That(frame.gameObject.activeSelf, Is.EqualTo(icon.enabled), panels[team]);
+                var frameImage = frame.GetComponent<UnityEngine.UI.Image>();
+                Assert.That(frameImage, Is.Not.Null, panels[team]);
+                Assert.That(frameImage.enabled, Is.EqualTo(icon.enabled), panels[team]);
+            }
+        }
+    }
+
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("   ")]
+    [TestCase("missing_icon")]
+    [TestCase("icon_001")]
+    [TestCase("icon_009")]
+    public void MainMenuUsesLockedForUnsetIconsAndPreservesSelectedIcons(string iconId)
+    {
+        owner = UnityEngine.Object.Instantiate(UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(
+            "Assets/Prefabs/UIv2/Panels/MainMenuPanel.prefab"));
+        Component menu = owner.GetComponent(RuntimeType("MainMenuPanel"));
+        menu.GetType().GetMethod("Init").Invoke(menu, null);
+        var setProfile = menu.GetType().GetMethod("SetProfile");
+        setProfile.Invoke(menu, new object[] { "감자", "icon_002" });
+        setProfile.Invoke(menu, new object[] { "감자", iconId });
+        var icon = (UnityEngine.UI.Image)Get(menu, "profileIcon");
+        string expectedId = string.IsNullOrWhiteSpace(iconId) || iconId == "missing_icon" ? "profile_px_locked" : iconId;
+        Assert.That(icon.sprite, Is.EqualTo(Resources.Load<Sprite>("ProfileIcons/" + expectedId)));
+        Assert.That(icon.sprite, Is.Not.Null);
+        Assert.That(icon.enabled, Is.True);
     }
 
     [Test]
@@ -170,6 +228,124 @@ public class LobbyLifecycleTests
         Set(coordinator, "pendingRoomCode", "BAD");
         Invoke(coordinator, "OnSocketError", "connection failed");
         Assert.That(Get(coordinator, "awaitingRoomJoin"), Is.False);
+        Assert.That(Get(coordinator, "pendingRoomCode"), Is.Null);
+    }
+
+    [Test]
+    public void QuickJoinFullRoomRetriesTwiceThenStops()
+    {
+        Component coordinator = CreateJoinCoordinator();
+        var login = new System.Threading.Tasks.TaskCompletionSource<bool>();
+        Set(coordinator, "silentLoginTask", login.Task);
+        Set(coordinator, "quickJoinInProgress", true);
+        object full = JoinEnvelope("ERROR", "{\"code\":\"ROOM_FULL\",\"message\":\"방이 가득 찼습니다.\"}");
+        for (int retry = 1; retry <= 2; retry++)
+        {
+            Set(coordinator, "awaitingRoomJoin", true);
+            Set(coordinator, "pendingRoomCode", "FULL" + retry);
+            Set(coordinator, "lastRoomState", Activator.CreateInstance(RuntimeType("RoomStateMessage")));
+            Invoke(coordinator, "OnMessageReceived", full);
+            Assert.That(Get(coordinator, "quickJoinRetryCount"), Is.EqualTo(retry));
+            Assert.That(Get(coordinator, "quickJoinInProgress"), Is.True);
+            Assert.That(Get(coordinator, "awaitingRoomJoin"), Is.False);
+            Assert.That(Get(coordinator, "pendingRoomCode"), Is.Null);
+            Assert.That(Get(coordinator, "lastRoomState"), Is.Null);
+            Assert.That(Get(coordinator, "changingRoomSocket"), Is.False);
+        }
+        Set(coordinator, "awaitingRoomJoin", true);
+        Set(coordinator, "pendingRoomCode", "FULL3");
+        Invoke(coordinator, "OnMessageReceived", full);
+        Assert.That(Get(coordinator, "quickJoinInProgress"), Is.False);
+        Assert.That(Get(coordinator, "awaitingRoomJoin"), Is.False);
+        Assert.That(Get(coordinator, "pendingRoomCode"), Is.Null);
+        login.SetResult(true);
+    }
+
+    [TestCase(false, "ROOM_FULL")]
+    [TestCase(true, "ROOM_NOT_FOUND")]
+    [TestCase(true, "UNAUTHORIZED")]
+    public void OnlyQuickJoinRoomFullIsRetried(bool quickJoin, string code)
+    {
+        Component coordinator = CreateJoinCoordinator();
+        Set(coordinator, "quickJoinInProgress", quickJoin);
+        Set(coordinator, "awaitingRoomJoin", true);
+        Set(coordinator, "pendingRoomCode", "BAD");
+        Invoke(coordinator, "OnMessageReceived", JoinEnvelope("ERROR", "{\"code\":\"" + code + "\"}"));
+        Assert.That(Get(coordinator, "quickJoinInProgress"), Is.False);
+        Assert.That(Get(coordinator, "roomJoinVersion"), Is.EqualTo(1));
+        Assert.That(Get(coordinator, "pendingRoomCode"), Is.Null);
+    }
+
+    [Test]
+    public void DuplicateOldSocketCallbacksDoNotInterruptQuickJoinRetry()
+    {
+        Component coordinator = CreateJoinCoordinator();
+        var closing = new System.Threading.Tasks.TaskCompletionSource<bool>();
+        Set(coordinator, "roomSocketCleanupTask", closing.Task);
+        Set(coordinator, "quickJoinInProgress", true);
+        Set(coordinator, "awaitingRoomJoin", true);
+        Set(coordinator, "pendingRoomCode", "FULL");
+        object full = JoinEnvelope("ERROR", "{\"code\":\"ROOM_FULL\"}");
+        Invoke(coordinator, "OnMessageReceived", full);
+        Invoke(coordinator, "OnMessageReceived", full);
+        Invoke(coordinator, "OnMessageReceived", JoinEnvelope("ROOM_STATE", "{\"roomCode\":\"FULL\",\"members\":[]}"));
+        Invoke(coordinator, "OnSocketError", "late error");
+        Invoke(coordinator, "OnDisconnected", true);
+        Assert.That(Get(coordinator, "quickJoinRetryCount"), Is.EqualTo(1));
+        Assert.That(Get(coordinator, "quickJoinInProgress"), Is.True);
+        Assert.That(Get(coordinator, "lastRoomState"), Is.Null);
+        Invoke(coordinator, "CancelQuickJoin");
+        closing.SetResult(true);
+    }
+
+    [Test]
+    public async System.Threading.Tasks.Task LeavingCancelsQuickJoinBeforeLookupCanContinue()
+    {
+        Component coordinator = CreateJoinCoordinator();
+        var login = new System.Threading.Tasks.TaskCompletionSource<bool>();
+        Set(coordinator, "silentLoginTask", login.Task);
+        Invoke(coordinator, "OnQuickJoinRequested", "감자");
+        int version = (int)Get(coordinator, "quickJoinVersion");
+        Invoke(coordinator, "OnQuickJoinRequested", "중복");
+        Invoke(coordinator, "OnJoinRoomRequested", "중복", "OTHER");
+        Invoke(coordinator, "OnCreateRoomRequested", "중복");
+        Assert.That(Get(coordinator, "quickJoinVersion"), Is.EqualTo(version));
+        Invoke(coordinator, "OnLeaveRoomRequested");
+        login.SetResult(true);
+        await System.Threading.Tasks.Task.Yield();
+        await System.Threading.Tasks.Task.Yield();
+        Assert.That(Get(coordinator, "quickJoinInProgress"), Is.False);
+        Assert.That(Get(coordinator, "awaitingRoomJoin"), Is.False);
+        Assert.That(Get(coordinator, "pendingRoomCode"), Is.Null);
+    }
+
+    [Test]
+    public void AcceptedQuickJoinRoomStateEndsRetryMode()
+    {
+        Component coordinator = CreateJoinCoordinator();
+        // Identity 미설정 상태의 LocalPlayerId는 빈 문자열이다. 실제 소켓/계정 없이 수락 경로를 확인한다.
+        Set(coordinator, "quickJoinInProgress", true);
+        Set(coordinator, "quickJoinRetryCount", 1);
+        Set(coordinator, "awaitingRoomJoin", true);
+        Set(coordinator, "pendingRoomCode", "NEXT");
+        object room = JoinEnvelope("ROOM_STATE", "{\"roomCode\":\"NEXT\",\"status\":\"WAITING\",\"members\":[{\"playerId\":\"\",\"nickname\":\"감자\",\"team\":0}]}");
+        Invoke(coordinator, "OnMessageReceived", room);
+        Assert.That(Get(coordinator, "quickJoinInProgress"), Is.False);
+        Assert.That(Get(coordinator, "awaitingRoomJoin"), Is.False);
+        Assert.That(Get(coordinator, "quickJoinRetryCount"), Is.Zero);
+        Assert.That(Get(coordinator, "lastRoomState"), Is.Not.Null);
+    }
+
+    [Test]
+    public void SocketFailureDuringQuickJoinDoesNotRetry()
+    {
+        Component coordinator = CreateJoinCoordinator();
+        Set(coordinator, "quickJoinInProgress", true);
+        Set(coordinator, "awaitingRoomJoin", true);
+        Set(coordinator, "pendingRoomCode", "BAD");
+        Invoke(coordinator, "OnSocketError", "connection failed");
+        Assert.That(Get(coordinator, "quickJoinInProgress"), Is.False);
+        Assert.That(Get(coordinator, "roomJoinVersion"), Is.EqualTo(1));
         Assert.That(Get(coordinator, "pendingRoomCode"), Is.Null);
     }
 

@@ -26,12 +26,11 @@ public sealed class MainMenuPanel : UIBase
             nicknameText.text = string.IsNullOrWhiteSpace(nickname) ? "닉네임 미설정" : nickname;
         if (profileIcon != null)
         {
-            var icon = string.IsNullOrWhiteSpace(iconId) ? null : Resources.Load<Sprite>(ProfileIconCatalog.SpritePath(iconId));
-            profileIcon.sprite = icon != null ? icon : profileIconFallback;
+            profileIcon.sprite = PlayerProfileIconResolver.Resolve(null, iconId, 0);
+            profileIcon.enabled = profileIcon.sprite != null;
             profileIcon.preserveAspect = true;
         }
     }
-    private Sprite profileIconFallback;
     private LobbyNetworkCoordinator coordinator;
     private int profileRequestVersion;
     public void SetGold(int gold)
@@ -49,7 +48,6 @@ public sealed class MainMenuPanel : UIBase
 
     public override void Init()
     {
-        profileIconFallback = profileIcon != null ? profileIcon.sprite : null;
         playButton?.onClick.AddListener(OnPlayClicked);
         gachaButton?.onClick.AddListener(OnGachaClicked);
         collectionButton?.onClick.AddListener(OnCollectionClicked);

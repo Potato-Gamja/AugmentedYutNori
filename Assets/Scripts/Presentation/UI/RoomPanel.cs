@@ -145,9 +145,7 @@ public class RoomPanel : UIBase
             if (playerProfileIcons != null && i < playerProfileIcons.Length && playerProfileIcons[i] != null)
             {
                 Image icon = playerProfileIcons[i];
-                // 미착용 참가자의 기본 그림은 팀·자리 순서와 무관하게 윷가락이다.
-                string iconId = occupied && string.IsNullOrWhiteSpace(player.iconId) ? "icon_001" : player?.iconId;
-                icon.sprite = occupied ? PlayerProfileIconResolver.Resolve(profileIcons, iconId, displayTeam) : null;
+                icon.sprite = occupied ? PlayerProfileIconResolver.Resolve(profileIcons, player.iconId, displayTeam) : null;
                 icon.enabled = icon.sprite != null;
                 icon.preserveAspect = true;
             }

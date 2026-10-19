@@ -575,10 +575,22 @@ public sealed class PlayerStatusView : MonoBehaviour
             headerLabel.text = DisplayName(team);
 
         Image icon = (panel.Find("Header/ProfileIcon") ?? panel.Find("ProfileIcon"))?.GetComponent<Image>();
-        if (icon == null) return;
+        Transform frame = panel.Find("Header/ProfileFrame") ?? panel.Find("ProfileFrame");
+        if (icon == null)
+        {
+            if (frame != null) frame.gameObject.SetActive(false);
+            return;
+        }
         icon.sprite = PlayerProfileIconResolver.Resolve(profileIcons, profile?.iconId, team);
         icon.enabled = team < activeTeamCount && icon.sprite != null;
         icon.preserveAspect = true;
+        if (frame != null)
+        {
+            bool visible = icon.enabled && icon.gameObject.activeSelf;
+            Image frameImage = frame.GetComponent<Image>();
+            if (frameImage != null) frameImage.enabled = visible;
+            frame.gameObject.SetActive(visible);
+        }
     }
 
     private PlayerDisplayInfo FindProfile(int team)

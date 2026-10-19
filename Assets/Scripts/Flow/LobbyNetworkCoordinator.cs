@@ -52,6 +52,10 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     private bool changingRoomSocket;
     private int roomJoinVersion;
     private Task roomSocketCleanupTask = Task.CompletedTask;
+    private const int MaxQuickJoinRetries = 2;
+    private bool quickJoinInProgress;
+    private int quickJoinVersion;
+    private int quickJoinRetryCount;
     private bool leaveRequested;
     private bool gameExitInProgress;
     private readonly HashSet<string> reconnectingRoomPlayers = new();
@@ -135,6 +139,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     private void OnDestroy()
     {
+        CancelQuickJoin();
         if (instance != this) return;
 
         CancelReconnect();
@@ -414,6 +419,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     private async void OnCreateRoomRequested(string nickname)
     {
+        if (quickJoinInProgress) return;
         bool isPublic = lobbyController != null ? lobbyController.IsPublicRoom : createRoomIsPublic;
         try
         {
@@ -443,30 +449,67 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     private async void OnQuickJoinRequested(string nickname)
     {
+        if (quickJoinInProgress || awaitingRoomJoin || changingRoomSocket || logoutRequested || reconnecting) return;
+        quickJoinInProgress = true;
+        quickJoinRetryCount = 0;
+        leaveRequested = false;
+        int version = ++quickJoinVersion;
         try
         {
-            await EnsurePlayer(nickname);
-            CreateRoomRestResponse response = await apiClient.Post<CreateRoomRequest, CreateRoomRestResponse>(
-                "/rooms/quick-join", new CreateRoomRequest
-                {
-                    isPublic = true,
-                    maxPlayers = createRoomMaxPlayers,
-                    timeLimit = createRoomTimeLimitSec,
-                });
-
-            if (response == null || string.IsNullOrWhiteSpace(response.code))
-                throw new InvalidOperationException("빠른 참가 응답에 방 코드가 없습니다.");
-
-            ConnectAndJoin(response.code, playerIdentity.Nickname);
+            await RequestQuickJoinAsync(nickname, version);
         }
         catch (Exception exception)
         {
-            ActiveLobbyController?.ReceiveError(ToUserMessage(exception));
+            if (IsCurrentQuickJoin(version)) FailRoomJoin(ToUserMessage(exception));
         }
+    }
+
+    private bool IsCurrentQuickJoin(int version) => this != null && quickJoinInProgress &&
+        version == quickJoinVersion && !logoutRequested && !leaveRequested;
+
+    private async Task RequestQuickJoinAsync(string nickname, int version)
+    {
+        // 방 코드가 소켓 주소에 포함되므로 실패한 연결부터 닫고 새 방을 조회한다.
+        await CloseRoomSocketForJoin();
+        if (!IsCurrentQuickJoin(version)) return;
+        await EnsurePlayer(nickname);
+        if (!IsCurrentQuickJoin(version)) return;
+        CreateRoomRestResponse response = await apiClient.Post<CreateRoomRequest, CreateRoomRestResponse>(
+            "/rooms/quick-join", new CreateRoomRequest
+            {
+                isPublic = true,
+                maxPlayers = createRoomMaxPlayers,
+                timeLimit = createRoomTimeLimitSec,
+            });
+        if (!IsCurrentQuickJoin(version)) return;
+        if (response == null || string.IsNullOrWhiteSpace(response.code))
+            throw new InvalidOperationException("빠른 참가 응답에 방 코드가 없습니다.");
+        ConnectAndJoin(response.code, playerIdentity.Nickname);
+    }
+
+    private async void RetryQuickJoin()
+    {
+        int version = quickJoinVersion;
+        quickJoinRetryCount++;
+        ++roomJoinVersion;
+        awaitingRoomJoin = false;
+        try { await RequestQuickJoinAsync(LocalNickname, version); }
+        catch (Exception exception)
+        {
+            if (IsCurrentQuickJoin(version)) FailRoomJoin(ToUserMessage(exception));
+        }
+    }
+
+    private void CancelQuickJoin()
+    {
+        quickJoinInProgress = false;
+        quickJoinRetryCount = 0;
+        ++quickJoinVersion;
     }
 
     private async void OnJoinRoomRequested(string nickname, string roomCode)
     {
+        if (quickJoinInProgress) return;
         try
         {
             await EnsurePlayer(nickname);
@@ -543,6 +586,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     private async Task ClearSessionAndGoToLoginAsync()
     {
+        CancelQuickJoin();
         try
         {
             // 진행 중인 자동 로그인이 로그아웃 후 토큰을 다시 저장하지 않도록 완료를 기다린다.
@@ -600,6 +644,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     private void GoToLogin()
     {
+        CancelQuickJoin();
         ++loginRedirectCount;
         ++roomJoinVersion;
         awaitingRoomJoin = false;
@@ -657,6 +702,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     private async void FailRoomJoin(string message)
     {
+        CancelQuickJoin();
         int version = ++roomJoinVersion;
         awaitingRoomJoin = false;
         try { await CloseRoomSocketForJoin(); }
@@ -739,6 +785,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
     private async void OnLeaveRoomRequested()
     {
         if (leaveRequested) return;
+        CancelQuickJoin();
         ++roomJoinVersion;
         awaitingRoomJoin = false;
         leaveRequested = true;
@@ -815,7 +862,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     private void OnMessageReceived(WsEnvelope envelope)
     {
-        if (changingRoomSocket) return;
+        if (changingRoomSocket || (quickJoinInProgress && !awaitingRoomJoin)) return;
         // GAME_START 직후의 개인 선택지·확정 메시지가 씬 로딩 중 사라지지 않도록 보관한다.
         if (waitingForGameSession && envelope.type != MessageType.GAME_START &&
             envelope.type != MessageType.ROOM_STATE && envelope.type != MessageType.PONG)
@@ -833,6 +880,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
                         if (room?.roomCode != pendingRoomCode ||
                             room.members?.Exists(member => member.playerId == LocalPlayerId) != true) break;
                         awaitingRoomJoin = false;
+                        CancelQuickJoin();
                     }
                     if (lastRoomState?.roomCode != room?.roomCode) reconnectingRoomPlayers.Clear();
                     reconnectingRoomPlayers.RemoveWhere(id => room?.members == null || !room.members.Exists(member => member.playerId == id));
@@ -955,7 +1003,15 @@ public class LobbyNetworkCoordinator : MonoBehaviour
                         break;
                     }
                     if (awaitingRoomJoin)
-                        FailRoomJoin(error?.message ?? "방 참가에 실패했습니다.");
+                    {
+                        if (quickJoinInProgress && error?.code == "ROOM_FULL" &&
+                            quickJoinRetryCount < MaxQuickJoinRetries)
+                            RetryQuickJoin();
+                        else
+                            FailRoomJoin(quickJoinInProgress && error?.code == "ROOM_FULL"
+                                ? "참가 가능한 방에 입장하지 못했습니다. 잠시 후 다시 시도해 주세요."
+                                : error?.message ?? "방 참가에 실패했습니다.");
+                    }
                     else ActiveLobbyController?.ReceiveError(error?.message ?? "서버 요청이 거절됐습니다.");
                     break;
             }
@@ -988,7 +1044,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     private void OnSocketError(string message)
     {
-        if (changingRoomSocket) return;
+        if (changingRoomSocket || (quickJoinInProgress && !awaitingRoomJoin)) return;
         if (reconnecting)
         {
             reconnectSnapshot?.TrySetException(new InvalidOperationException("서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요."));
@@ -1000,7 +1056,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
 
     private void OnDisconnected(bool byUser)
     {
-        if (changingRoomSocket) return;
+        if (changingRoomSocket || (quickJoinInProgress && !awaitingRoomJoin)) return;
         if (reconnecting)
         {
             if (!byUser) reconnectSnapshot?.TrySetException(new InvalidOperationException("재접속 중 연결이 끊어졌습니다."));
