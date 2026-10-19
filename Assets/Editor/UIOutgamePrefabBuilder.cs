@@ -89,7 +89,7 @@ public static class UIOutgamePrefabBuilder
         var grid=Rect("MenuGrid",root,new Vector2(720,820));grid.anchorMin=grid.anchorMax=new Vector2(1,0.5f);grid.pivot=new Vector2(1,0.5f);grid.anchoredPosition=new Vector2(-120,-30);
         var layout=grid.gameObject.AddComponent<GridLayoutGroup>();layout.cellSize=new Vector2(340,390);layout.spacing=new Vector2(40,40);layout.constraint=GridLayoutGroup.Constraint.FixedColumnCount;layout.constraintCount=2;
         Bind(panel,"gachaButton",Card(grid,"GachaCard","뽑기","프로필 아이콘 뽑기",null));
-        Bind(panel,"collectionButton",Card(grid,"AugmentCard","증강","직업 11종 도감","menu_augment"));
+        Bind(panel,"collectionButton",Card(grid,"AugmentCard","직업","직업 도감","menu_augment"));
         Bind(panel,"achievementButton",Card(grid,"AchievementCard","업적","업적을 달성하고 골드 받기","menu_achievement"));
         Bind(panel,"profileButton",Card(grid,"ProfileCard","내 정보","프로필 아이콘 · 닉네임","menu_profile_icon"));
         Bind(panel,"settingsButton",settings.GetComponentInChildren<Button>());Bind(panel,"statusText",status);

@@ -11,7 +11,7 @@ using System.Collections.Generic;
 /// - THROW_RESULT/MOVE_APPLIED/AUGMENT_SELECTED에는 행동한 team을 반드시 포함한다.
 /// - MOVE는 말 id·칸 수·도착 칸만 보낸다. 내 이동도 먼저 적용하지 않고, 서버의 MOVE_APPLIED를 받은 뒤 모든 기기가 같은 순서로 적용한다.
 /// - MOVE_APPLIED의 movedPieceIds/capturedPieceIds/isFinished와 Core 적용 결과가 다르면 서버와 판이 어긋난 것으로 알린다.
-/// - GAME_SNAPSHOT으로 말·증강·턴·저장 결과와 메시지 순서를 복원한다.
+/// - GAME_SNAPSHOT으로 말·직업·턴·저장 결과와 메시지 순서를 복원한다.
 /// </summary>
 public sealed class RemoteGameSession : IGameSession, IDisposable
 {
@@ -56,7 +56,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
     public event Action<int> AutomatedMoveApplied;
     public event Action<bool> ConnectionAvailabilityChanged;
     public event Action<GameSnapshotMessage> SnapshotApplied;
-    public event Action<GameSnapshotMessage> AugmentsRestored;   // 스냅샷의 증강 복원 직후, 말 복원 전 (팀별 말 수를 정할 수 있는 시점)
+    public event Action<GameSnapshotMessage> AugmentsRestored;   // 스냅샷의 직업 복원 직후, 말 복원 전 (팀별 말 수를 정할 수 있는 시점)
     public event Action<string> ReconnectRejected;
 
 
@@ -108,7 +108,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
     {
         if (string.IsNullOrWhiteSpace(augmentId))
         {
-            Reject("선택할 증강 ID가 없습니다.");
+            Reject("선택할 직업 ID가 없습니다.");
             return;
         }
 
@@ -118,7 +118,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
             augmentId = augmentId,
         }))
         {
-            Reject("증강 선택을 서버에 보내지 못했습니다.");
+            Reject("직업 선택을 서버에 보내지 못했습니다.");
             return;
         }
         commandPending = true;
@@ -363,7 +363,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
     {
         if (message == null) throw new InvalidOperationException("AUGMENT_SELECTED 내용이 없습니다.");
         if (message.team < 0 || message.team >= setup.teamCount)
-            throw new InvalidOperationException("증강을 선택한 팀 번호가 올바르지 않습니다.");
+            throw new InvalidOperationException("직업을 선택한 팀 번호가 올바르지 않습니다.");
         IAugment augment = rules.ApplyConfirmedAugment(message.team, message.augmentId);
         if (message.team == setup.localTeam) commandPending = false;
         AugmentSelected?.Invoke(message.team, augment);
@@ -540,12 +540,12 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
 
     private void Reject(string message) => RequestRejected?.Invoke(message);
 
-    // 서버 상태로 통째로 덮어쓴다: 증강 → 말 위치 → 턴·윷 결과 → 승자 → seq 기준
+    // 서버 상태로 통째로 덮어쓴다: 직업 → 말 위치 → 턴·윷 결과 → 승자 → seq 기준
     private void ApplySnapshot(GameSnapshotMessage snapshot)
     {
         if (snapshot == null) throw new InvalidOperationException("GAME_SNAPSHOT 내용이 없습니다.");
 
-        // 증강 먼저: 노장이면 말 수가 달라서, 증강을 알아야 말을 만들 수 있다
+        // 직업 먼저: 노장이면 말 수가 달라서, 직업을 알아야 말을 만들 수 있다
         RestoreAugments(snapshot.ownedAugments);
         AugmentsRestored?.Invoke(snapshot);
         RestorePieces(snapshot.pieces);
@@ -558,7 +558,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
         if (snapshot.storedResults != null) gameState.StoredResults.AddRange(snapshot.storedResults);
         gameState.WinnerTeam = snapshot.winnerTeam;
 
-        // 증강 선택 중이면 내 후보를 다시 등록 (선택 요청이 후보 검사를 통과하도록)
+        // 직업 선택 중이면 내 후보를 다시 등록 (선택 요청이 후보 검사를 통과하도록)
         if (snapshot.phase == "AUGMENT_SELECT" && snapshot.offeredAugments != null && snapshot.offeredAugments.Count > 0)
             rules.SetAugmentChoices(snapshot.myTeam, snapshot.offeredAugments);
 
@@ -606,7 +606,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
             gameState.Board.RemoveTeam(team);
     }
 
-    // 서버가 가진 증강 중 로컬에 없는 것만 추가한다 (서버 확정 증강 적용과 같은 경로)
+    // 서버가 가진 직업 중 로컬에 없는 것만 추가한다 (서버 확정 직업 적용과 같은 경로)
     private void RestoreAugments(Dictionary<int, List<string>> owned)
     {
         if (owned == null) return;

@@ -8,7 +8,7 @@ public class LocalGameSession : IGameSession, IDisposable
     private readonly GameRules rules;
     private readonly GameEvents events;
 
-    // 증강 선택 진행 (팀 0부터 차례대로)
+    // 직업 선택 진행 (팀 0부터 차례대로)
     private int augmentTeamCount;
     private int augmentChoiceCount;
     private int augmentSelectionTeam = -1;
@@ -24,7 +24,7 @@ public class LocalGameSession : IGameSession, IDisposable
     // 로컬은 요청을 그 자리에서 처리하므로 기다리는 요청이 없다
     public bool IsCommandPending => false;
 
-    // 증강 선택 중이면 지금 고르는 팀, 아니면 -1
+    // 직업 선택 중이면 지금 고르는 팀, 아니면 -1
     public int AugmentSelectionTeam => augmentSelectionTeam;
 
     public LocalGameSession(GameRules rules, GameEvents events)
@@ -46,7 +46,7 @@ public class LocalGameSession : IGameSession, IDisposable
         events.GameEnded -= OnGameEnded;
     }
 
-    // 게임 시작 시 증강 선택을 시작한다. 팀 0의 후보부터 AugmentChoices로 알린다
+    // 게임 시작 시 직업 선택을 시작한다. 팀 0의 후보부터 AugmentChoices로 알린다
     public void BeginAugmentSelection(int teamCount, int choiceCount = 3)
     {
         augmentTeamCount = teamCount;
@@ -83,7 +83,7 @@ public class LocalGameSession : IGameSession, IDisposable
     {
         if (augmentSelectionTeam < 0)
         {
-            RequestRejected?.Invoke("증강을 고를 차례가 아닙니다.");
+            RequestRejected?.Invoke("직업을 고를 차례가 아닙니다.");
             return;
         }
 

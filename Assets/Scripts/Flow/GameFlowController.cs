@@ -86,7 +86,7 @@ public class GameFlowController : MonoBehaviour
 
         OpenHud();
         CreateCoreState();
-        // 말은 증강이 모두 확정된 뒤 만든다 (노장은 말 수가 바뀜). 그 전까지 씬의 말은 숨긴다
+        // 말은 직업이 모두 확정된 뒤 만든다 (노장은 말 수가 바뀜). 그 전까지 씬의 말은 숨긴다
         foreach (PieceView view in pieceViews) view.gameObject.SetActive(false);
 
         hudPresenter = new GameFlowHudPresenter(
@@ -230,11 +230,11 @@ public class GameFlowController : MonoBehaviour
         pieceViews.RemoveAll(view => !view.gameObject.activeSelf);
     }
 
-    // 팀의 말 수 (나간 팀 0, 노장이면 1개 적게). 증강이 확정된 뒤에만 의미가 있다
+    // 팀의 말 수 (나간 팀 0, 노장이면 1개 적게). 직업이 확정된 뒤에만 의미가 있다
     private int PieceCount(int team) =>
         removedTeams.Contains(team) ? 0 : VeteranAugment.PieceCountFor(boardState, team, setup.piecesPerTeam);
 
-    // 모든 팀이 증강을 하나씩 가졌는지 (원격·재접속에서 말을 만들 시점)
+    // 모든 팀이 직업을 하나씩 가졌는지 (원격·재접속에서 말을 만들 시점)
     private bool AllTeamsHaveAugment()
     {
         for (int t = 0; t < teamCount; t++)
@@ -265,7 +265,7 @@ public class GameFlowController : MonoBehaviour
             : new LocalGameSession(gameRules, gameEvents);
     }
 
-    // json에 저장되어 있는 모든 증강 가져오기
+    // json에 저장되어 있는 모든 직업 가져오기
     private AugmentPool CreateAugmentPool()
     {
         AugmentDefinitionFile file = JsonUtility.FromJson<AugmentDefinitionFile>(augmentsJson.text);
@@ -350,7 +350,7 @@ public class GameFlowController : MonoBehaviour
         }
     }
 
-    // 재접속: 증강 선택 중이면 말을 만들지 않고, 그 뒤면 스냅샷에 말이 없는 팀(나간 팀)을 빼고 만든다
+    // 재접속: 직업 선택 중이면 말을 만들지 않고, 그 뒤면 스냅샷에 말이 없는 팀(나간 팀)을 빼고 만든다
     private void OnAugmentsRestored(GameSnapshotMessage snapshot)
     {
         if (snapshot.phase == "AUGMENT_SELECT") return;
@@ -500,7 +500,7 @@ public class GameFlowController : MonoBehaviour
                 uiManager?.Close<AugmentSelectPanel>();
                 hud?.SetInstruction("선택 완료! 다른 플레이어의 선택을 기다리는 중입니다.");
             }
-            // 모든 팀의 증강이 확정되면 팀별 말 수로 말을 만든다 (서버도 이 시점에 만든다)
+            // 모든 팀의 직업이 확정되면 팀별 말 수로 말을 만든다 (서버도 이 시점에 만든다)
             if (AllTeamsHaveAugment()) CreatePieces();
             return; // PLAYING 진입은 서버 TURN_CHANGED로 확정한다.
         }
@@ -514,7 +514,7 @@ public class GameFlowController : MonoBehaviour
         }
         else
         {
-            hud?.SetInstruction("증강 선택지를 기다리는 중입니다.");
+            hud?.SetInstruction("직업 선택지를 기다리는 중입니다.");
         }
     }
 
@@ -674,7 +674,7 @@ public class GameFlowController : MonoBehaviour
         }
     }
 
-    // 모든 팀의 증강이 확정된 뒤 팀별 말 수로 말을 만든다. (노장 증강을 보유한 팀은 마지막 슬롯 제외)
+    // 모든 팀의 직업이 확정된 뒤 팀별 말 수로 말을 만든다. (노장 직업을 보유한 팀은 마지막 슬롯 제외)
     private void CreatePieces()
     {
         if (piecesCreated) return;
@@ -712,7 +712,7 @@ public class GameFlowController : MonoBehaviour
     private void OnTurnChanged(int team)
     {
         if (leavingGame) return;
-        // 첫 턴 전에는 증강 선택이 끝났다는 뜻 (증강 없이 나간 팀이 있어도 말이 생기도록, 이미 만들었으면 아무것도 안 함)
+        // 첫 턴 전에는 직업 선택이 끝났다는 뜻 (직업 없이 나간 팀이 있어도 말이 생기도록, 이미 만들었으면 아무것도 안 함)
         CreatePieces();
         hud?.ResetTimer();
         hudPresenter.RefreshStoredResults();
@@ -847,13 +847,13 @@ public class GameFlowController : MonoBehaviour
     private void PrepareAugmentSelection()
     {
         selectionController.Clear();
-        hud?.SetTurn($"{PlayerName(augmentSelectionTeam)} 증강 선택", augmentSelectionTeam);
+        hud?.SetTurn($"{PlayerName(augmentSelectionTeam)} 직업 선택", augmentSelectionTeam);
         hud?.SetThrowInteractable(false);
         hud?.SetRethrowVisible(false);
         // 시간 초과 선택은 서버가 처리하고 클라이언트는 전달받은 시간만 표시한다.
         hud?.SetTimerRunning(gameSession is RemoteGameSession remote && remote.AugmentSelectionTimeLimitSec > 0);
         hud?.SetInteractionState(setup.CanControl(augmentSelectionTeam), gameSession?.IsCommandPending ?? false);
-        hud?.SetInstruction("증강 선택지를 기다리는 중입니다.");
+        hud?.SetInstruction("직업 선택지를 기다리는 중입니다.");
     }
 
     private string PlayerName(int team)
@@ -886,7 +886,7 @@ public class GameFlowController : MonoBehaviour
         if (!setup.CanControl(augmentSelectionTeam))
         {
             uiManager?.Close<AugmentSelectPanel>();
-            hud?.SetInstruction("다른 플레이어의 증강 선택을 기다리는 중입니다.");
+            hud?.SetInstruction("다른 플레이어의 직업 선택을 기다리는 중입니다.");
             return;
         }
 
@@ -895,7 +895,7 @@ public class GameFlowController : MonoBehaviour
             selection.Add(augmentCatalog.Find(id));
         panel.Setup(selection, OnAugmentSelected, augmentSelectionTeam, gameSession is RemoteGameSession);
         uiManager.Open<AugmentSelectPanel>();
-        hud?.SetInstruction("증강을 선택하세요.");
+        hud?.SetInstruction("직업을 선택하세요.");
     }
 
     private void OnWaitingPieceClicked(int team, int slotIndex)
