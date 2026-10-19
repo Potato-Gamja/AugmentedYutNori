@@ -24,8 +24,7 @@ public class InGameDescriptionLayoutTests
         Assert.That(text, Is.EqualTo(expected));
     }
 
-    [Test]
-    public void TooltipGrowsForFiveLinesAndShrinksForShortDescription()
+    [Test]    public void SkippedBackDoNoticeStaysCenteredAboveHudAfterLayoutRebuild()    {        hud = new GameObject("NoticeCanvas", typeof(RectTransform), typeof(Canvas));        hud.GetComponent<RectTransform>().sizeDelta = new Vector2(1920, 1080);        var panel = UnityEngine.Object.Instantiate(UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(            "Assets/Prefabs/UI/GameHudPanel_3Col.prefab"), hud.transform);        Component view = panel.AddComponent(RuntimeType("YutResultRevealView"));        view.GetType().GetMethod("EnsureCreated", Private).Invoke(view, null);        RectTransform notice = panel.transform.Find("YutResultReveal").GetComponent<RectTransform>();        notice.gameObject.SetActive(true);        UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(panel.GetComponent<RectTransform>());        Canvas.ForceUpdateCanvases();        Assert.That(notice.GetComponent<UnityEngine.UI.LayoutElement>().ignoreLayout, Is.True);        Assert.That(notice.anchorMin, Is.EqualTo(new Vector2(0.5f, 0.5f)));        Assert.That(notice.anchorMax, Is.EqualTo(new Vector2(0.5f, 0.5f)));        Assert.That(notice.anchoredPosition, Is.EqualTo(Vector2.zero));        Assert.That(notice.GetSiblingIndex(), Is.EqualTo(panel.transform.childCount - 1));        Assert.That(notice.GetComponent<CanvasGroup>().blocksRaycasts, Is.False);    }    [Test]    public void TooltipGrowsForFiveLinesAndShrinksForShortDescription()
     {
         hud = UnityEngine.Object.Instantiate(UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/UI/GameHudPanel_3Col.prefab"));
         Type type = RuntimeType("PlayerStatusView");
