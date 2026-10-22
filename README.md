@@ -4,7 +4,8 @@
 
 **이 브랜치는 코드 검토용입니다.** Unity에서 단독 실행하는 완성 프로젝트가 아닙니다. 팀의 규칙·데이터·네트워크 인터페이스, 씬·프리팹·아트·패키지·프로젝트 설정은 실행에 필요하지만 개인 코드 보관 범위에서 제외했습니다.
 
-- [팀 원본 저장소](https://github.com/TeamYutNori/AugmentedYutNori)
+- [팀 클라이언트 원본 저장소](https://github.com/TeamYutNori/AugmentedYutNori)
+- [팀 서버 저장소 · Spring Boot 멀티플레이 서버](https://github.com/TeamYutNori/AugmentedYutNori-Server)
 - [전체 프로젝트 기준 소스](https://github.com/Potato-Gamja/AugmentedYutNori/tree/a4fca4d4dd238c8c4abda41502fc847fe8503d6d)
 - [상세 포트폴리오](https://app.notion.com/p/400c52d0fe99805895efe66e07246260)
 - [게임 플레이](https://changil.itch.io/yut)
@@ -17,6 +18,8 @@
 - UI·실행 환경: 공통 UI와 Editor 생성 도구, 모바일 입력, WebGL 닉네임 입력·방 코드 복사
 
 서버·게임 규칙·증강·공통 네트워크 기반과 팀원 구현 전체를 개인 작업으로 표시하지 않습니다. 테스트 파일은 포함된 검증 코드의 사례이며, 팀 전체 테스트 수나 부하 테스트 결과를 개인 성과로 계산하지 않습니다.
+
+팀 서버 저장소는 클라이언트 연동을 이해하기 위한 참고 자료입니다. 이 브랜치에는 클라이언트의 요청·이벤트 반영 및 오류 처리 기여를 정리했으며, 서버 구현 전체를 개인 담당 범위에 포함하지 않습니다.
 
 ## 구성
 
