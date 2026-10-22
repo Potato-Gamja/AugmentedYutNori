@@ -1,0 +1,2028 @@
+From commit: f849e90fd12bb7f4bc4540076854e0b895ec0572
+Contributor: Potato-Gamja (Gamja)
+Subject: [feat] 프로필 UI와 재접속·플레이어 제거 흐름 연동
+Original: https://github.com/Potato-Gamja/AugmentedYutNori/commit/f849e90fd12bb7f4bc4540076854e0b895ec0572
+
+diff --git a/Assets/Plugins/WebGL/FirebaseGoogleAuth.jslib b/Assets/Plugins/WebGL/FirebaseGoogleAuth.jslib
+index df19bf8..12ea76a 100644
+--- a/Assets/Plugins/WebGL/FirebaseGoogleAuth.jslib
++++ b/Assets/Plugins/WebGL/FirebaseGoogleAuth.jslib
+@@ -57,6 +57,7 @@ mergeInto(LibraryManager.library, {
+           return user.getIdToken().then(function (idToken) {
+             state.send("OnGoogleSignInSucceeded", JSON.stringify({
+               idToken: idToken,
++              refreshToken: user.refreshToken,
+               uid: user.uid,
+               email: user.email,
+               displayName: user.displayName
+diff --git a/Assets/Scripts/Flow/GameFlowController.cs b/Assets/Scripts/Flow/GameFlowController.cs
+index 0a90317..31bbbbd 100644
+--- a/Assets/Scripts/Flow/GameFlowController.cs
++++ b/Assets/Scripts/Flow/GameFlowController.cs
+@@ -29,6 +29,7 @@ public class GameFlowController : MonoBehaviour
+     private GameState gameState;
+     private TurnManager turnManager;
+     private GameEvents gameEvents;
++    private GameSoundBinder soundBinder;
+     private GameRules gameRules;
+     // Flow는 규칙 구현을 직접 실행하지 않고 세션에 명령을 보낸 뒤 확정 이벤트만 화면에 반영한다.
+     private IGameSession gameSession;
+@@ -47,6 +48,7 @@ public class GameFlowController : MonoBehaviour
+     private int? pendingWinnerTeam;
+     private string lastStateHash;
+     private readonly Dictionary<string, int> playerTeams = new();
++    private IReadOnlyList<PlayerDisplayInfo> playerProfiles = Array.Empty<PlayerDisplayInfo>();
+ 
+     public GameFlowState CurrentState => currentState;
+     public int CurrentTeam => turnManager != null ? turnManager.CurrentTeam : 0;
+@@ -131,6 +133,12 @@ public class GameFlowController : MonoBehaviour
+         sessionFactory = factory ?? throw new ArgumentNullException(nameof(factory));
+     }
+ 
++    public void ConfigurePlayerProfiles(IReadOnlyList<PlayerDisplayInfo> profiles)
++    {
++        if (gameState != null) throw new InvalidOperationException("게임이 시작된 뒤에는 플레이어 표시 정보를 바꿀 수 없습니다.");
++        playerProfiles = profiles ?? Array.Empty<PlayerDisplayInfo>();
++    }
++
+     private bool ValidateSetup()
+     {
+         setup ??= GameSetup.CreateLocalDefault();
+@@ -172,6 +180,7 @@ public class GameFlowController : MonoBehaviour
+         hud.WaitingPieceClicked += OnWaitingPieceClicked;
+         hud.SettingsClicked += OnSettingsClicked;
+         hud.ConfigurePlayers(setup.teamCount, setup.piecesPerTeam);
++        hud.ConfigurePlayerProfiles(playerProfiles);
+         hud.SetRethrowVisible(false);
+     }
+ 
+@@ -217,6 +226,7 @@ public class GameFlowController : MonoBehaviour
+         gameState = new GameState(boardState);
+         turnManager = new TurnManager(gameState, teamCount);
+         gameEvents = new GameEvents();
++        soundBinder = new GameSoundBinder(gameEvents);
+         gameRules = new GameRules(
+             gameState,
+             turnManager,
+@@ -289,6 +299,7 @@ public class GameFlowController : MonoBehaviour
+ 
+     private void OnDestroy()
+     {
++        soundBinder?.Dispose();
+         if (hud != null)
+         {
+             hud.ThrowClicked -= OnThrowButtonClicked;
+@@ -438,6 +449,35 @@ public class GameFlowController : MonoBehaviour
+         hud?.SetInstruction("연결이 끊긴 플레이어를 기다리는 중입니다.");
+     }
+ 
++#if UNITY_EDITOR
++    [ContextMenu("테스트/플레이어 4 연결 끊김")]
++    private void TestPlayer4Disconnected()
++    {
++        if (!Application.isPlaying || hud == null)
++        {
++            Debug.LogWarning("[GameFlow] 플레이 모드에서만 연결 끊김 UI를 테스트할 수 있습니다.", this);
++            return;
++        }
++
++        if (teamCount < 4)
++        {
++            Debug.LogWarning("[GameFlow] 플레이어 4 연결 끊김 테스트는 4인 게임에서만 표시됩니다.", this);
++            return;
++        }
++
++        hud.SetPlayerConnectionState(3, PlayerStatusView.ConnectionState.Reconnecting, 30);
++        hud.SetInstruction("연결이 끊긴 플레이어를 기다리는 중입니다.");
++    }
++
++    [ContextMenu("테스트/플레이어 4 재접속")]
++    private void TestPlayer4Reconnected()
++    {
++        if (!Application.isPlaying || hud == null) return;
++        hud.SetPlayerConnectionState(3, PlayerStatusView.ConnectionState.Connected);
++        hud.SetInstruction("플레이어가 재접속했습니다.");
++    }
++#endif
++
+     private void OnRemotePlayerReconnected(string playerId)
+     {
+         if (playerTeams.TryGetValue(playerId, out int team))
+@@ -452,12 +492,15 @@ public class GameFlowController : MonoBehaviour
+         foreach (PieceView view in pieceViews)
+             if (view != null && view.Team == team) view.SetWorldVisible(false);
+ 
+-        hud?.SetInstruction($"플레이어 {team + 1}이 게임에서 나갔습니다.");
++        if (!isMoving) RefreshPieceLayout();
++        hudPresenter?.RefreshPlayerPanels();
++
++        hud?.SetInstruction($"{PlayerName(team)}님이 게임에서 나갔습니다.");
+     }
+ 
+     private void OnAutomatedMoveApplied(int team)
+     {
+-        hud?.SetInstruction($"플레이어 {team + 1} 자동 진행 중");
++        hud?.SetInstruction($"{PlayerName(team)} 자동 진행 중");
+     }
+ 
+     private void OnConnectionAvailabilityChanged(bool connected)
+@@ -487,6 +530,8 @@ public class GameFlowController : MonoBehaviour
+     {
+         Debug.LogWarning($"[GameFlow] 요청이 거절됐습니다. {reason}", this);
+         selectionController?.Clear();
++        // 이동은 MOVE_APPLIED를 받아야 적용되므로, 거절되면 말 화면만 원래 상태로 되돌리면 된다
++        if (!isMoving) RefreshPieceLayout();
+         hudPresenter?.RefreshStoredResults();
+         hudPresenter?.RefreshPlayerPanels();
+         RefreshSessionInteraction();
+@@ -535,7 +580,7 @@ public class GameFlowController : MonoBehaviour
+             case GameFlowState.Throw:
+                 PrepareInteractiveState(false);
+                 hud?.SetInteractionState(setup.CanControl(CurrentTeam), false);
+-                hud?.SetTurn($"플레이어 {CurrentTeam + 1} 차례", CurrentTeam);
++                hud?.SetTurn($"{PlayerName(CurrentTeam)} 차례", CurrentTeam);
+                 hud?.SetInstruction(gameState.StoredResults.Count > 0 ? "추가 윷을 던지세요." : "윷을 던지세요.");
+                 hud?.SetThrowInteractable(gameState.RemainingThrows > 0);
+                 hud?.SetRethrowVisible(false);
+@@ -545,7 +590,7 @@ public class GameFlowController : MonoBehaviour
+             case GameFlowState.Move:
+                 PrepareInteractiveState(true);
+                 hud?.SetInteractionState(setup.CanControl(CurrentTeam), false);
+-                hud?.SetTurn($"플레이어 {CurrentTeam + 1} 차례", CurrentTeam);
++                hud?.SetTurn($"{PlayerName(CurrentTeam)} 차례", CurrentTeam);
+                 hud?.SetInstruction("이동할 말을 선택하세요.");
+                 hud?.SetThrowInteractable(false);
+                 hud?.SetRethrowVisible(hudPresenter.CanUseRethrow(CurrentTeam));
+@@ -558,13 +603,15 @@ public class GameFlowController : MonoBehaviour
+                 hudPresenter.RefreshPlayerPanels();
+                 hud?.SetInteractionState(false, false);
+                 int winner = pendingWinnerTeam ?? gameState.WinnerTeam ?? CurrentTeam;
+-                hud?.SetInstruction($"플레이어 {winner + 1} 승리!");
++                hud?.SetInstruction($"{PlayerName(winner)} 승리!");
+                 hud?.SetThrowInteractable(false);
+                 hud?.SetRethrowVisible(false);
+                 hud?.SetTimerRunning(false);
+-                uiManager?.Open<ResultPopup>()?.SetWinner(
+-                    $"플레이어 {winner + 1}",
++                ResultPopup resultPopup = uiManager?.Open<ResultPopup>()?.SetWinner(
++                    PlayerName(winner),
+                     GameHudPanel.GetTeamColor(winner));
++                if (resultPopup != null && gameSession is RemoteGameSession remoteSession)
++                    resultPopup.SetRankings(remoteSession.Rankings, playerProfiles);
+                 break;
+ 
+             case GameFlowState.AugmentSelect:
+@@ -599,7 +646,7 @@ public class GameFlowController : MonoBehaviour
+     private void PrepareAugmentSelection()
+     {
+         selectionController.Clear();
+-        hud?.SetTurn($"플레이어 {augmentSelectionTeam + 1} 증강 선택", augmentSelectionTeam);
++        hud?.SetTurn($"{PlayerName(augmentSelectionTeam)} 증강 선택", augmentSelectionTeam);
+         hud?.SetThrowInteractable(false);
+         hud?.SetRethrowVisible(false);
+         hud?.SetTimerRunning(false);
+@@ -607,6 +654,23 @@ public class GameFlowController : MonoBehaviour
+         hud?.SetInstruction("증강 선택지를 기다리는 중입니다.");
+     }
+ 
++    private string PlayerName(int team)
++    {
++        foreach (PlayerDisplayInfo profile in playerProfiles)
++        {
++            if (profile != null && profile.team == team && !string.IsNullOrWhiteSpace(profile.nickname))
++                return profile.nickname;
++        }
++
++        return team switch
++        {
++            0 => "빨강 팀",
++            1 => "파랑 팀",
++            2 => "초록 팀",
++            _ => "노랑 팀",
++        };
++    }
++
+     private void OpenAugmentSelection(IReadOnlyList<string> ids)
+     {
+         PrepareAugmentSelection();
+diff --git a/Assets/Scripts/Flow/LobbyController.cs b/Assets/Scripts/Flow/LobbyController.cs
+index 1a26a48..59a5130 100644
+--- a/Assets/Scripts/Flow/LobbyController.cs
++++ b/Assets/Scripts/Flow/LobbyController.cs
+@@ -14,6 +14,7 @@ public class LobbyController : MonoBehaviour
+     private LobbyPanel lobbyPanel;
+     private MainMenuPanel mainMenuPanel;
+     private RoomPanel roomPanel;
++    private ProfilePanel profilePanel;
+     private string localPlayerId;
+ 
+     // 네트워크 계약:
+@@ -90,6 +91,8 @@ public class LobbyController : MonoBehaviour
+             mainMenuPanel.AchievementRequested -= OnAchievementRequested;
+             mainMenuPanel.SettingsRequested -= OnSettingsRequested;
+         }
++        if (profilePanel != null)
++            profilePanel.NicknameChangeRequested -= OnNicknameChangeRequested;
+     }
+ 
+     private void OnSettingsRequested()
+@@ -108,6 +111,8 @@ public class LobbyController : MonoBehaviour
+         uiManager.Close<MainMenuPanel>();
+         uiManager.Open<LobbyPanel>();
+         lobbyPanel.ShowStatus(string.Empty);
++        LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
++        lobbyPanel.SetNickname(coordinator?.LocalNickname);
+     }
+ 
+     private void OnMainMenuRequested()
+@@ -116,14 +121,48 @@ public class LobbyController : MonoBehaviour
+         uiManager.Open<MainMenuPanel>();
+     }
+ 
+-    private void OnGachaRequested() => mainMenuPanel.ShowStatus("뽑기 기능은 준비 중입니다.");
++    private void OnGachaRequested() => uiManager?.Open<GachaPanel>();
+     private void OnProfileRequested()
+     {
+-        ProfilePanel panel = uiManager?.Open<ProfilePanel>();
+-        if (panel == null) return;
++        profilePanel = uiManager?.Open<ProfilePanel>();
++        if (profilePanel == null) return;
++
++        profilePanel.NicknameChangeRequested -= OnNicknameChangeRequested;
++        profilePanel.NicknameChangeRequested += OnNicknameChangeRequested;
++
++        LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
++        profilePanel.ShowProfile(coordinator?.LocalPlayerId, coordinator?.LocalNickname);
++    }
++    private async void OnNicknameChangeRequested(string nickname)
++    {
++        if (profilePanel == null) return;
+ 
+         LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
+-        panel.ShowProfile(coordinator?.LocalPlayerId, coordinator?.LocalNickname);
++        if (coordinator == null)
++        {
++            profilePanel.ShowStatus("로그인 정보를 찾을 수 없습니다.");
++            return;
++        }
++
++        profilePanel.SetNicknameBusy(true);
++        profilePanel.ShowStatus("닉네임을 변경하는 중입니다.");
++        try
++        {
++            string updatedNickname = await coordinator.ChangeNicknameAsync(nickname);
++            profilePanel.ApplyNickname(updatedNickname);
++            profilePanel.ShowStatus("닉네임이 변경되었습니다.");
++            lobbyPanel?.SetNickname(updatedNickname);
++        }
++        catch (Exception exception)
++        {
++            profilePanel.ShowStatus(exception is ApiException apiException
++                ? $"닉네임 변경에 실패했습니다. ({apiException.StatusCode})"
++                : exception.Message);
++        }
++        finally
++        {
++            profilePanel.SetNicknameBusy(false);
++        }
+     }
+     private void OnAchievementRequested() => mainMenuPanel.ShowStatus("업적 기능은 준비 중입니다.");
+ 
+@@ -169,9 +208,10 @@ public class LobbyController : MonoBehaviour
+     }
+ 
+     // PlayerIdentity/ApiClient 계약: POST /players 응답의 playerId를 전달한다.
+-    public void SetLocalPlayer(string playerId)
++    public void SetLocalPlayer(string playerId, string nickname = null)
+     {
+         localPlayerId = playerId;
++        if (!string.IsNullOrWhiteSpace(nickname)) lobbyPanel?.SetNickname(nickname);
+     }
+ 
+     // WebSocketClient 계약: ROOM_STATE payload를 역직렬화한 뒤 호출한다.
+diff --git a/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs b/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
+index d51515a..f176aba 100644
+--- a/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
++++ b/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
+@@ -1,5 +1,6 @@
+ using System;
+ using System.Collections.Generic;
++using System.Threading.Tasks;
+ using UnityEngine;
+ using UnityEngine.SceneManagement;
+ 
+@@ -15,25 +16,37 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+     [SerializeField] private string webSocketUrl = "ws://localhost:8080/ws/rooms/{roomCode}";
+     [SerializeField] private string playerPrefsKeyPrefix = "";
+ 
++    [Header("방 생성")]
++    [SerializeField] private bool createRoomIsPublic = true;
++    [SerializeField, Range(2, 4)] private int createRoomMaxPlayers = 4;
++    [SerializeField, Min(1)] private int createRoomTimeLimitSec = 30;
++
+     [Header("로그인")]
+-    [SerializeField] private string loginSceneName = "PJWScene_Login";
++    [SerializeField] private string loginSceneName = "Login";
+     [SerializeField] private string lobbySceneName = "Lobby";
+     // 서버 로그인 연동 전·에디터 테스트에서는 게스트 생성을 유지한다.
+     // 끄면 토큰이 없는 사용자를 로그인 씬으로 보낸다.
+     [SerializeField] private bool allowGuestLogin = true;
++    [SerializeField] private FirebaseAuthSettings authSettings;
+ 
+     private static LobbyNetworkCoordinator instance;
+ 
+     private ApiClient apiClient;
+     private AuthApi authApi;
++    private GachaApi gachaApi;
+     private PlayerIdentity playerIdentity;
+     private string pendingRoomCode;
+     private string pendingNickname;
+     private bool leaveRequested;
++    // GAME_ENDED가 재전송돼도 보상을 한 번만 더하도록 (GAME_START마다 초기화)
++    private bool rewardAppliedThisGame;
++    private Task silentLoginTask = Task.CompletedTask;
+     private readonly Dictionary<string, int> playerTeams = new();
++    private readonly List<PlayerDisplayInfo> playerProfiles = new();
+ 
+     public string LocalPlayerId => playerIdentity?.PlayerId ?? string.Empty;
+     public string LocalNickname => playerIdentity?.Nickname ?? string.Empty;
++    public int LocalGold => playerIdentity?.Gold ?? 0;
+ 
+     private void Awake()
+     {
+@@ -56,6 +69,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+ 
+         apiClient = new ApiClient(apiBaseUrl);
+         authApi = new AuthApi(apiClient);
++        gachaApi = new GachaApi(apiClient);
+         playerIdentity = new PlayerIdentity(playerPrefsKeyPrefix);
+         apiClient.Token = playerIdentity.Token;
+         apiClient.Unauthorized += OnUnauthorized;
+@@ -117,10 +131,65 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+         lobbyController.ReadyRequested += OnReadyRequested;
+         lobbyController.LeaveRoomRequested += OnLeaveRoomRequested;
+ 
+-        if (playerIdentity.HasToken)
+-            lobbyController.SetLocalPlayer(playerIdentity.PlayerId);
+-        else if (!allowGuestLogin)
++        if (!IsLoggedIn())
++        {
++            if (!allowGuestLogin) GoToLogin();
++        }
++        else
++        {
++            lobbyController.SetLocalPlayer(playerIdentity.PlayerId, playerIdentity.Nickname);
++            if (silentLoginTask.IsCompleted && !PlayerIdentity.IsVerifiedThisRun(playerIdentity.Token))
++                silentLoginTask = SilentLoginAsync();
++        }
++    }
++
++    // Lobby 직접 실행 시 저장된 Firebase 갱신 토큰으로 서버 토큰을 새로 받는다.
++    private async Task SilentLoginAsync()
++    {
++        if (!playerIdentity.IsGoogleLogin || string.IsNullOrEmpty(playerIdentity.FirebaseRefreshToken)) return;
++        if (authSettings == null)
++        {
++            Debug.LogWarning("[LobbyNetwork] FirebaseAuthSettings가 없어 자동 재로그인을 건너뜁니다.", this);
++            return;
++        }
++
++        try
++        {
++            FirebaseSignInResult firebaseUser = await new FirebaseTokenRefresher(authSettings)
++                .RefreshAsync(playerIdentity.FirebaseRefreshToken);
++            FirebaseLoginResponse login = await authApi.LoginWithFirebaseAsync(firebaseUser.IdToken);
++            if (string.IsNullOrWhiteSpace(login.nickname) && login.playerId == playerIdentity.PlayerId)
++                login.nickname = playerIdentity.Nickname;
++            if (string.IsNullOrWhiteSpace(login.nickname))
++            {
+                 GoToLogin();
++                return;
++            }
++
++            playerIdentity.ApplyLogin(login, firebaseUser.RefreshToken);
++            apiClient.Token = playerIdentity.Token;
++            lobbyController?.SetLocalPlayer(playerIdentity.PlayerId, playerIdentity.Nickname);
++        }
++        catch (RefreshFailedException exception) when (exception.Expired)
++        {
++            playerIdentity.Clear();
++            apiClient.Token = null;
++            GoToLogin();
++        }
++        catch (Exception exception)
++        {
++            Debug.LogWarning($"[LobbyNetwork] 자동 재로그인 실패, 저장된 로그인으로 계속합니다: {exception.Message}");
++        }
++    }
++
++    public Task WaitForLoginAsync() => silentLoginTask;
++
++    public async Task<GachaResultResponse> DrawGachaAsync()
++    {
++        await EnsurePlayer(LocalNickname);
++        GachaResultResponse response = await gachaApi.DrawAsync();
++        playerIdentity.ApplyGold(response.gold);
++        return response;
+     }
+ 
+     private void UnbindLobbyController()
+@@ -143,12 +212,17 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+             // 현재는 설계표의 REST 방식인 POST /rooms를 사용한다.
+             // 서버가 CREATE_ROOM WebSocket 방식으로 확정되면 이 호출만 메시지 전송으로 교체한다.
+             CreateRoomRestResponse response = await apiClient.Post<CreateRoomRequest, CreateRoomRestResponse>(
+-                "/rooms", new CreateRoomRequest { nickname = nickname });
++                "/rooms", new CreateRoomRequest
++                {
++                    isPublic = createRoomIsPublic,
++                    maxPlayers = createRoomMaxPlayers,
++                    timeLimit = createRoomTimeLimitSec,
++                });
+ 
+-            if (response == null || string.IsNullOrWhiteSpace(response.roomCode))
++            if (response == null || string.IsNullOrWhiteSpace(response.code))
+                 throw new InvalidOperationException("방 생성 응답에 roomCode가 없습니다.");
+ 
+-            ConnectAndJoin(response.roomCode, nickname);
++            ConnectAndJoin(response.code, nickname);
+         }
+         catch (Exception exception)
+         {
+@@ -172,7 +246,8 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+     // 로그인(또는 게스트 가입)된 플레이어가 있는지 확인한다
+     private async System.Threading.Tasks.Task EnsurePlayer(string nickname)
+     {
+-        if (!playerIdentity.HasToken)
++        await silentLoginTask;
++        if (!IsLoggedIn())
+         {
+             if (!allowGuestLogin)
+             {
+@@ -184,7 +259,30 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+         }
+ 
+         apiClient.Token = playerIdentity.Token;
+-        lobbyController?.SetLocalPlayer(playerIdentity.PlayerId);
++        lobbyController?.SetLocalPlayer(playerIdentity.PlayerId, playerIdentity.Nickname);
++    }
++
++    public async Task<string> ChangeNicknameAsync(string nickname)
++    {
++        await silentLoginTask;
++        if (!IsLoggedIn()) throw new InvalidOperationException("로그인이 필요합니다.");
++
++        string requestedNickname = nickname?.Trim() ?? string.Empty;
++        apiClient.Token = playerIdentity.Token;
++        ChangeNicknameResponse response = await authApi.ChangeNicknameAsync(requestedNickname);
++        string updatedNickname = string.IsNullOrWhiteSpace(response?.nickname)
++            ? requestedNickname
++            : response.nickname.Trim();
++
++        playerIdentity.ApplyNickname(updatedNickname);
++        lobbyController?.SetLocalPlayer(playerIdentity.PlayerId, updatedNickname);
++        return updatedNickname;
++    }
++
++    // 게스트를 허용하지 않으면 구글 로그인 토큰만 로그인으로 친다 (예전에 만든 게스트 토큰이 남아 있어도 로그인 씬으로 보낸다)
++    private bool IsLoggedIn()
++    {
++        return playerIdentity.HasToken && (allowGuestLogin || playerIdentity.IsGoogleLogin);
+     }
+ 
+     private void OnUnauthorized()
+@@ -274,11 +372,12 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+         if (leaveRequested) return;
+ 
+         leaveRequested = true;
+-        // 명시적인 LEAVE_ROOM을 보내지 않는다. 서버는 일반 연결 끊김으로 받아
+-        // 재접속 유예시간을 시작하고, 만료된 뒤 기존 탈주 처리를 수행한다.
++        if (webSocketClient.IsConnected)
++            webSocketClient.Send(MessageType.LEAVE_ROOM);
+         await webSocketClient.CloseAndWait();
+ 
+         playerTeams.Clear();
++        playerProfiles.Clear();
+         pendingRoomCode = null;
+         pendingNickname = null;
+         leaveRequested = false;
+@@ -298,10 +397,21 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+                     break;
+ 
+                 case MessageType.GAME_START:
++                    rewardAppliedThisGame = false;
++                    GameInstaller.PreparePlayerProfiles(playerProfiles);
+                     lobbyController?.ReceiveGameStart(
+                         MessageSerializer.ReadPayload<GameStartMessage>(envelope));
+                     break;
+ 
++                case MessageType.GAME_ENDED:
++                    // 게임 화면 처리는 RemoteGameSession이 하고, 여기서는 내 보상만 보유 골드 캐시에 더한다
++                    if (rewardAppliedThisGame) break;
++                    GameEndedMessage ended = MessageSerializer.ReadPayload<GameEndedMessage>(envelope);
++                    int reward = playerIdentity.ApplyGameReward(ended?.rankings);
++                    rewardAppliedThisGame = true;
++                    if (reward > 0) Debug.Log($"[LobbyNetwork] 게임 보상 {reward}골드, 보유 {playerIdentity.Gold}골드");
++                    break;
++
+                 case MessageType.ERROR:
+                     ErrorMessage error = MessageSerializer.ReadPayload<ErrorMessage>(envelope);
+                     lobbyController?.ReceiveError(error?.message ?? "서버 요청이 거절됐습니다.");
+@@ -337,12 +447,20 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+     private void CachePlayerTeams(RoomStateMessage room)
+     {
+         playerTeams.Clear();
+-        if (room?.players == null) return;
++        playerProfiles.Clear();
++        if (room?.members == null) return;
+ 
+-        foreach (RoomPlayer player in room.players)
++        foreach (RoomPlayer player in room.members)
+         {
+             if (player == null || string.IsNullOrEmpty(player.playerId) || player.team < 0) continue;
+             playerTeams[player.playerId] = player.team;
++            playerProfiles.Add(new PlayerDisplayInfo
++            {
++                playerId = player.playerId,
++                nickname = player.nickname,
++                team = player.team,
++                iconId = player.iconId,
++            });
+         }
+     }
+ 
+@@ -372,5 +490,5 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+ // POST /rooms 응답이 중첩 객체이거나 필드명이 다르면 이 DTO만 서버 명세와 맞춘다.
+ public class CreateRoomRestResponse
+ {
+-    public string roomCode;
++    public string code;
+ }
+diff --git a/Assets/Scripts/Flow/LoginController.cs b/Assets/Scripts/Flow/LoginController.cs
+index 8e61e4e..7ae5e75 100644
+--- a/Assets/Scripts/Flow/LoginController.cs
++++ b/Assets/Scripts/Flow/LoginController.cs
+@@ -4,7 +4,8 @@ using UnityEngine;
+ using UnityEngine.SceneManagement;
+ 
+ /// <summary>
+-/// 로그인 화면 흐름. 구글(Firebase) 로그인 → 서버 POST /auth/firebase → 플레이어 토큰 저장 → 로비 씬으로 이동.
++/// 로그인 화면 흐름. 구글(Firebase) 로그인 → 서버 POST /auth/firebase → 플레이어 토큰 저장
++/// → (계정 닉네임이 없으면) 닉네임 설정 → 로비 씬으로 이동.
+ /// 토큰은 PlayerIdentity가 PlayerPrefs에 저장하므로 로비의 LobbyNetworkCoordinator가 같은 키 접두어로 그대로 이어 쓴다.
+ /// </summary>
+ public class LoginController : MonoBehaviour
+@@ -17,8 +18,11 @@ public class LoginController : MonoBehaviour
+     [SerializeField] private string nextSceneName = "Lobby";
+ 
+     private LoginPanel loginPanel;
++    private NicknamePanel nicknamePanel;
++    private ApiClient apiClient;
+     private IGoogleSignIn googleSignIn;
+     private AuthApi authApi;
++    private FirebaseTokenRefresher tokenRefresher;
+     private PlayerIdentity playerIdentity;
+     private bool signingIn;
+     private CancellationTokenSource signInCancel;
+@@ -37,9 +41,13 @@ public class LoginController : MonoBehaviour
+         loginPanel.GoogleLoginPressed += OnGoogleLoginPressed;
+         loginPanel.GoogleLoginRequested += OnGoogleLoginRequested;
+         loginPanel.CancelRequested += OnCancelRequested;
++        loginPanel.ContinueRequested += OnContinueRequested;
+ 
+-        authApi = new AuthApi(new ApiClient(apiBaseUrl));
++        apiClient = new ApiClient(apiBaseUrl);
++        authApi = new AuthApi(apiClient);
++        tokenRefresher = new FirebaseTokenRefresher(authSettings);
+         playerIdentity = new PlayerIdentity(playerPrefsKeyPrefix);
++        loginPanel.SetContinueAvailable(HasSavedLogin(), playerIdentity.Nickname);
+ 
+         loginPanel.SetBusy(true);
+         loginPanel.ShowStatus("로그인을 준비하는 중입니다.");
+@@ -62,10 +70,12 @@ public class LoginController : MonoBehaviour
+     private void OnDestroy()
+     {
+         signInCancel?.Cancel();
++        if (nicknamePanel != null) nicknamePanel.Submitted -= OnNicknameSubmitted;
+         if (loginPanel == null) return;
+         loginPanel.GoogleLoginPressed -= OnGoogleLoginPressed;
+         loginPanel.GoogleLoginRequested -= OnGoogleLoginRequested;
+         loginPanel.CancelRequested -= OnCancelRequested;
++        loginPanel.ContinueRequested -= OnContinueRequested;
+     }
+ 
+     private void OnGoogleLoginPressed()
+@@ -78,6 +88,49 @@ public class LoginController : MonoBehaviour
+         if (googleSignIn != null && !googleSignIn.StartOnPointerDown) SignIn();
+     }
+ 
++    // 이 기기에 저장된 구글 로그인이 있는지 (게스트 토큰은 제외). 갱신 토큰이 있어야 다시 로그인할 수 있다
++    private bool HasSavedLogin() =>
++        playerIdentity.IsGoogleLogin && !string.IsNullOrEmpty(playerIdentity.FirebaseRefreshToken);
++
++    // 저장된 Firebase 갱신 토큰으로 브라우저 없이 다시 로그인한다.
++    // 새 Firebase ID 토큰 → 서버 /auth/firebase → 새 게임 토큰이라, 서버를 재시작해 예전 게임 토큰이 무효가 돼도 들어갈 수 있다
++    private async void OnContinueRequested()
++    {
++        if (signingIn || !HasSavedLogin()) return;
++        signingIn = true;
++        loginPanel.SetBusy(true);
++        loginPanel.ShowStatus("이전 계정으로 로그인하는 중입니다.");
++
++        try
++        {
++            FirebaseSignInResult firebaseUser = await tokenRefresher.RefreshAsync(playerIdentity.FirebaseRefreshToken);
++            if (this == null) return;
++            Debug.Log($"[Login] 저장된 로그인으로 Firebase 토큰 갱신: uid={firebaseUser.Uid}");
++
++            await CompleteServerLogin(firebaseUser);
++        }
++        catch (Exception exception)
++        {
++            if (this == null) return;
++            if (exception is RefreshFailedException { Expired: true })
++            {
++                // 갱신 토큰이 더 이상 유효하지 않음 → 저장된 로그인을 지우고 구글 로그인을 다시 하게 한다
++                playerIdentity.Clear();
++                loginPanel.SetContinueAvailable(false, null);
++            }
++            else
++            {
++                Debug.LogException(exception, this);
++            }
++            loginPanel.ShowStatus(ToUserMessage(exception));
++            loginPanel.SetBusy(false);
++        }
++        finally
++        {
++            signingIn = false;
++        }
++    }
++
+     // 브라우저 창을 그냥 닫으면 게임은 결과를 알 수 없으므로, 취소 버튼으로 기다림을 끝내고 다시 시도하게 한다
+     private void OnCancelRequested()
+     {
+@@ -101,12 +154,7 @@ public class LoginController : MonoBehaviour
+             Debug.Log($"[Login] Firebase 로그인 성공: uid={firebaseUser.Uid}, email={firebaseUser.Email}");
+ 
+             loginPanel.SetCancelable(false);
+-            loginPanel.ShowStatus("서버에 로그인하는 중입니다.");
+-            FirebaseLoginResponse login = await authApi.LoginWithFirebaseAsync(firebaseUser.IdToken);
+-            playerIdentity.ApplyLogin(login);
+-            Debug.Log($"[Login] 서버 로그인 성공: playerId={playerIdentity.PlayerId}");
+-
+-            SceneManager.LoadScene(nextSceneName);
++            await CompleteServerLogin(firebaseUser);
+         }
+         catch (Exception exception)
+         {
+@@ -124,6 +172,95 @@ public class LoginController : MonoBehaviour
+         }
+     }
+ 
++    // Firebase ID 토큰을 서버 게임 토큰으로 바꿔 저장하고, 닉네임이 없으면 닉네임부터 정한 뒤 로비로 간다
++    private async System.Threading.Tasks.Task CompleteServerLogin(FirebaseSignInResult firebaseUser)
++    {
++        loginPanel.ShowStatus("서버에 로그인하는 중입니다.");
++        FirebaseLoginResponse login = await authApi.LoginWithFirebaseAsync(firebaseUser.IdToken);
++        KeepLocalNicknameIfServerHasNone(login);
++        playerIdentity.ApplyLogin(login, firebaseUser.RefreshToken);
++        apiClient.Token = playerIdentity.Token;
++        Debug.Log($"[Login] 서버 로그인 성공: playerId={playerIdentity.PlayerId}, nickname={playerIdentity.Nickname}");
++
++        if (string.IsNullOrWhiteSpace(playerIdentity.Nickname))
++            OpenNicknamePanel();
++        else
++            SceneManager.LoadScene(nextSceneName);
++    }
++
++    // 서버 닉네임 API가 생기기 전에는 닉네임을 이 기기에만 저장하므로, 서버가 빈 닉네임을 주면 같은 계정의 저장값을 유지한다
++    private void KeepLocalNicknameIfServerHasNone(FirebaseLoginResponse login)
++    {
++        if (string.IsNullOrWhiteSpace(login.nickname) &&
++            login.playerId == playerIdentity.PlayerId &&
++            !string.IsNullOrWhiteSpace(playerIdentity.Nickname))
++        {
++            login.nickname = playerIdentity.Nickname;
++        }
++    }
++
++    // 처음 로그인했거나 닉네임이 없는 계정이면 닉네임을 정한 뒤 로비로 간다
++    private void OpenNicknamePanel()
++    {
++        nicknamePanel = uiManager.Get<NicknamePanel>();
++        if (nicknamePanel == null)
++        {
++            Debug.LogError("[Login] UIManager에 NicknamePanel 프리팹을 등록해 주세요. 닉네임 없이 로비로 이동합니다.", this);
++            SceneManager.LoadScene(nextSceneName);
++            return;
++        }
++
++        nicknamePanel.Submitted -= OnNicknameSubmitted;
++        nicknamePanel.Submitted += OnNicknameSubmitted;
++        uiManager.Close<LoginPanel>();
++        uiManager.Open<NicknamePanel>();
++    }
++
++    private async void OnNicknameSubmitted(string nickname)
++    {
++        nicknamePanel.SetBusy(true);
++        nicknamePanel.ShowStatus("닉네임을 저장하는 중입니다.");
++
++        try
++        {
++            ChangeNicknameResponse response = await authApi.ChangeNicknameAsync(nickname);
++            playerIdentity.ApplyNickname(string.IsNullOrWhiteSpace(response.nickname) ? nickname : response.nickname);
++        }
++        catch (ApiException exception) when (exception.StatusCode == 404 || exception.StatusCode == 405)
++        {
++            // 서버에 닉네임 API가 아직 없음 → 이 기기에만 저장하고 진행 (서버 구현 후 이 분기는 지울 것)
++            Debug.LogWarning($"[Login] 서버 닉네임 API가 없어 이 기기에만 저장합니다. ({exception.Message})", this);
++            playerIdentity.ApplyNickname(nickname);
++        }
++        catch (Exception exception)
++        {
++            if (this == null) return;
++            nicknamePanel.ShowStatus(ToNicknameMessage(exception));
++            nicknamePanel.SetBusy(false);
++            return;
++        }
++
++        if (this == null) return;
++        Debug.Log($"[Login] 닉네임 설정: {playerIdentity.Nickname}");
++        SceneManager.LoadScene(nextSceneName);
++    }
++
++    private static string ToNicknameMessage(Exception exception)
++    {
++        if (exception is ApiException apiException)
++        {
++            switch (apiException.StatusCode)
++            {
++                case 0: return "서버에 연결할 수 없습니다. 서버가 켜져 있는지 확인해 주세요.";
++                case 400: return "사용할 수 없는 닉네임입니다.";
++                case 409: return "이미 사용 중인 닉네임입니다.";
++                case 401: return "로그인이 만료되었습니다. 다시 로그인해 주세요.";
++            }
++            return $"닉네임 저장에 실패했습니다. ({apiException.StatusCode})";
++        }
++        return exception.Message;
++    }
++
+     private static string ToUserMessage(Exception exception)
+     {
+         if (exception is ApiException apiException)
+diff --git a/Assets/Scripts/Network/ApiClient.cs b/Assets/Scripts/Network/ApiClient.cs
+index ab2ad0a..649bc9e 100644
+--- a/Assets/Scripts/Network/ApiClient.cs
++++ b/Assets/Scripts/Network/ApiClient.cs
+@@ -35,6 +35,11 @@ public class ApiClient
+         return Send<TResponse>(UnityWebRequest.kHttpVerbPOST, path, JsonConvert.SerializeObject(body, MessageSerializer.Settings));
+     }
+ 
++    public Task<TResponse> Patch<TRequest, TResponse>(string path, TRequest body)
++    {
++        return Send<TResponse>("PATCH", path, JsonConvert.SerializeObject(body, MessageSerializer.Settings));
++    }
++
+     private async Task<TResponse> Send<TResponse>(string method, string path, string json)
+     {
+         using var request = new UnityWebRequest(BaseUrl + path, method)
+diff --git a/Assets/Scripts/Network/Auth/DesktopGoogleSignIn.cs b/Assets/Scripts/Network/Auth/DesktopGoogleSignIn.cs
+index 3886d1d..6939bb0 100644
+--- a/Assets/Scripts/Network/Auth/DesktopGoogleSignIn.cs
++++ b/Assets/Scripts/Network/Auth/DesktopGoogleSignIn.cs
+@@ -87,6 +87,7 @@ public class DesktopGoogleSignIn : IGoogleSignIn
+                 return new FirebaseSignInResult
+                 {
+                     IdToken = result.idToken,
++                    RefreshToken = result.refreshToken,
+                     Uid = result.uid,
+                     Email = result.email,
+                     DisplayName = result.displayName,
+@@ -162,7 +163,7 @@ public class DesktopGoogleSignIn : IGoogleSignIn
+         return user.getIdToken().then(function (idToken) {{
+           return fetch('result', {{
+             method: 'POST',
+-            body: JSON.stringify({{ idToken: idToken, uid: user.uid, email: user.email, displayName: user.displayName }})
++            body: JSON.stringify({{ idToken: idToken, refreshToken: user.refreshToken, uid: user.uid, email: user.email, displayName: user.displayName }})
+           }});
+         }});
+       }})
+@@ -218,6 +219,7 @@ public class DesktopGoogleSignIn : IGoogleSignIn
+     private class PageResult
+     {
+         public string idToken;
++        public string refreshToken;
+         public string uid;
+         public string email;
+         public string displayName;
+diff --git a/Assets/Scripts/Network/Auth/IGoogleSignIn.cs b/Assets/Scripts/Network/Auth/IGoogleSignIn.cs
+index 969b6e6..dc1153f 100644
+--- a/Assets/Scripts/Network/Auth/IGoogleSignIn.cs
++++ b/Assets/Scripts/Network/Auth/IGoogleSignIn.cs
+@@ -22,6 +22,8 @@ public interface IGoogleSignIn
+ public class FirebaseSignInResult
+ {
+     public string IdToken;
++    // Firebase 갱신 토큰. 저장해 두면 다음에 브라우저 없이 새 IdToken을 받을 수 있다 (FirebaseTokenRefresher)
++    public string RefreshToken;
+     public string Uid;
+     public string Email;
+     public string DisplayName;
+diff --git a/Assets/Scripts/Network/Auth/WebGLGoogleSignIn.cs b/Assets/Scripts/Network/Auth/WebGLGoogleSignIn.cs
+index a65d3cf..7e872cc 100644
+--- a/Assets/Scripts/Network/Auth/WebGLGoogleSignIn.cs
++++ b/Assets/Scripts/Network/Auth/WebGLGoogleSignIn.cs
+@@ -83,6 +83,7 @@ public class WebGLGoogleSignIn : MonoBehaviour, IGoogleSignIn
+         tcs?.TrySetResult(new FirebaseSignInResult
+         {
+             IdToken = user.idToken,
++            RefreshToken = user.refreshToken,
+             Uid = user.uid,
+             Email = user.email,
+             DisplayName = user.displayName,
+@@ -119,6 +120,7 @@ public class WebGLGoogleSignIn : MonoBehaviour, IGoogleSignIn
+     private class WebSignInResult
+     {
+         public string idToken;
++        public string refreshToken;
+         public string uid;
+         public string email;
+         public string displayName;
+diff --git a/Assets/Scripts/Network/AuthApi.cs b/Assets/Scripts/Network/AuthApi.cs
+index e3b40e2..d4f686c 100644
+--- a/Assets/Scripts/Network/AuthApi.cs
++++ b/Assets/Scripts/Network/AuthApi.cs
+@@ -36,6 +36,17 @@ public class AuthApi
+ 
+         return response;
+     }
++
++    // 계정 닉네임 설정·변경 (로그인 토큰 필요). 서버 오류: 400 형식 오류, 409 중복 닉네임, 401 토큰 무효
++    // ⚠ 서버 API 미구현 상태의 제안 형식. 서버 담당과 주소·필드를 맞출 것
++    public async Task<ChangeNicknameResponse> ChangeNicknameAsync(string nickname)
++    {
++        ChangeNicknameResponse response = await api.Patch<ChangeNicknameRequest, ChangeNicknameResponse>(
++            "/players/me/nickname", new ChangeNicknameRequest { nickname = nickname });
++
++        // 응답 본문이 비어 있어도 성공이면 보낸 닉네임으로 저장한다
++        return response ?? new ChangeNicknameResponse { nickname = nickname };
++    }
+ }
+ 
+ // POST /players 요청/응답. 서버 REST 명세가 정해지면 필드 이름을 맞출 것
+@@ -62,4 +73,17 @@ public class FirebaseLoginResponse
+     public string playerId;
+     public string nickname;
+     public string token;
++    public int? gold;   // 보유 골드. 서버 LoginResponse에 아직 없음 (없으면 null → 기기 캐시 유지)
++}
++
++// PATCH /players/me/nickname 요청/응답 (제안 형식)
++public class ChangeNicknameRequest
++{
++    public string nickname;
++}
++
++public class ChangeNicknameResponse
++{
++    public string playerId;
++    public string nickname;
+ }
+diff --git a/Assets/Scripts/Network/PlayerIdentity.cs b/Assets/Scripts/Network/PlayerIdentity.cs
+index be2c622..b755a94 100644
+--- a/Assets/Scripts/Network/PlayerIdentity.cs
++++ b/Assets/Scripts/Network/PlayerIdentity.cs
+@@ -14,26 +14,110 @@ public class PlayerIdentity
+     public string Token { get; private set; }
+     public string Nickname { get; private set; }
+ 
++    // 어떤 방법으로 받은 토큰인지. 구분이 없던 예전 저장값은 게스트로 본다
++    public bool IsGoogleLogin { get; private set; }
++
++    // 구글 로그인 때 받은 Firebase 갱신 토큰. "이전 로그인으로 계속하기"에서 새 게임 토큰을 받을 때 쓴다
++    public string FirebaseRefreshToken { get; private set; }
++
++    // 보유 골드 캐시. 서버가 기준이고, 화면 표시용으로 이 기기에 들고 있는다
++    //   로그인 응답에 gold가 오면 그 값으로 맞추고, 게임이 끝나면 GAME_ENDED의 내 rewardGold를 더한다
++    public int Gold { get; private set; }
++
+     public bool HasToken => !string.IsNullOrEmpty(Token);
+ 
++    private static string verifiedTokenThisRun;
++
++    public static bool IsVerifiedThisRun(string token) =>
++        !string.IsNullOrEmpty(token) && token == verifiedTokenThisRun;
++
++    // 도메인 리로드를 끈 에디터에서도 새 Play 시 서버 토큰을 다시 확인한다.
++    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
++    private static void ResetVerifiedToken() => verifiedTokenThisRun = null;
++
+     public PlayerIdentity(string keyPrefix = "")
+     {
+-        this.keyPrefix = keyPrefix ?? "";
++        this.keyPrefix = (keyPrefix ?? "") + EditorInstancePrefix();
+         Reload();
+     }
+ 
++    // Multiplayer Play Mode의 가상 플레이어는 Library/VP/mppmXXXX 폴더에서 실행되지만 PlayerPrefs는 메인 에디터와 같이 쓴다.
++    // 그대로 두면 모든 창이 같은 토큰(같은 플레이어)이 되므로, 가상 플레이어는 폴더 이름을 접두어로 붙여 따로 저장한다.
++    // 메인 에디터와 빌드는 접두어가 붙지 않는다
++    private static string EditorInstancePrefix()
++    {
++#if UNITY_EDITOR
++        string dataPath = Application.dataPath.Replace('\\', '/');
++        int index = dataPath.IndexOf("/Library/VP/", System.StringComparison.OrdinalIgnoreCase);
++        if (index >= 0)
++        {
++            string rest = dataPath.Substring(index + "/Library/VP/".Length);
++            int slash = rest.IndexOf('/');
++            return (slash >= 0 ? rest.Substring(0, slash) : rest) + ".";
++        }
++#endif
++        return "";
++    }
++
+     // 다른 PlayerIdentity(예: 로그인 씬)가 저장한 값을 다시 읽는다
+     public void Reload()
+     {
+         PlayerId = PlayerPrefs.GetString(Key("playerId"), "");
+         Token = PlayerPrefs.GetString(Key("token"), "");
+         Nickname = PlayerPrefs.GetString(Key("nickname"), "");
++        IsGoogleLogin = PlayerPrefs.GetString(Key("authType"), "") == AuthTypeGoogle;
++        FirebaseRefreshToken = PlayerPrefs.GetString(Key("refreshToken"), "");
++        Gold = PlayerPrefs.GetInt(Key("gold"), 0);
+     }
+ 
+     // 구글 로그인 결과 저장. 게스트 토큰과 같은 자리에 저장하므로 이후 흐름(WebSocket 접속 등)은 그대로다
+-    public void ApplyLogin(FirebaseLoginResponse response)
++    public void ApplyLogin(FirebaseLoginResponse response, string firebaseRefreshToken)
++    {
++        string previousPlayerId = PlayerId;
++        Save(response.playerId, response.token, response.nickname, AuthTypeGoogle);
++        verifiedTokenThisRun = Token;
++        FirebaseRefreshToken = firebaseRefreshToken ?? "";
++        PlayerPrefs.SetString(Key("refreshToken"), FirebaseRefreshToken);
++
++        // 서버가 보유 골드를 알려 주면 그 값으로, 아니면 같은 계정일 때만 캐시를 유지한다
++        if (response.gold.HasValue) SetGoldInternal(response.gold.Value);
++        else if (previousPlayerId != PlayerId) SetGoldInternal(0);
++        PlayerPrefs.Save();
++    }
++
++    // 게임 결과(GAME_ENDED rankings)에서 내 보상을 보유 골드에 더한다. 더한 금액을 돌려준다
++    public int ApplyGameReward(RankingEntry[] rankings)
+     {
+-        Save(response.playerId, response.token, response.nickname);
++        if (rankings == null || string.IsNullOrEmpty(PlayerId)) return 0;
++
++        foreach (RankingEntry entry in rankings)
++        {
++            if (entry == null || entry.playerId != PlayerId) continue;
++            if (entry.rewardGold <= 0) return 0;
++
++            SetGoldInternal(Gold + entry.rewardGold);
++            PlayerPrefs.Save();
++            return entry.rewardGold;
++        }
++        return 0;
++    }
++
++    public void ApplyGold(int gold)
++    {
++        SetGoldInternal(gold);
++        PlayerPrefs.Save();
++    }
++
++    private void SetGoldInternal(int gold)
++    {
++        Gold = Mathf.Max(0, gold);
++        PlayerPrefs.SetInt(Key("gold"), Gold);
++    }
++
++    // 닉네임만 바꿔 저장 (닉네임 설정 화면에서 서버 저장이 끝난 뒤)
++    public void ApplyNickname(string nickname)
++    {
++        Save(PlayerId, Token, nickname, IsGoogleLogin ? AuthTypeGoogle : AuthTypeGuest);
+     }
+ 
+     // 저장된 토큰이 있으면 그대로, 없으면 서버에서 게스트 토큰을 받는다. 에디터 테스트용
+@@ -42,27 +126,38 @@ public class PlayerIdentity
+         if (HasToken) return;
+ 
+         GuestLoginResponse response = await auth.CreateGuestAsync(nickname);
+-        Save(response.playerId, response.guestToken, string.IsNullOrEmpty(response.nickname) ? nickname : response.nickname);
++        Save(response.playerId, response.guestToken, string.IsNullOrEmpty(response.nickname) ? nickname : response.nickname, AuthTypeGuest);
+     }
+ 
+     // 토큰이 만료됐거나(401) 다른 플레이어로 시작하고 싶을 때
+     public void Clear()
+     {
++        verifiedTokenThisRun = null;
+         PlayerPrefs.DeleteKey(Key("playerId"));
+         PlayerPrefs.DeleteKey(Key("token"));
+         PlayerPrefs.DeleteKey(Key("nickname"));
++        PlayerPrefs.DeleteKey(Key("authType"));
++        PlayerPrefs.DeleteKey(Key("refreshToken"));
++        PlayerPrefs.DeleteKey(Key("gold"));
+         PlayerPrefs.Save();
+-        PlayerId = Token = Nickname = "";
++        PlayerId = Token = Nickname = FirebaseRefreshToken = "";
++        Gold = 0;
++        IsGoogleLogin = false;
+     }
+ 
+-    private void Save(string playerId, string token, string nickname)
++    private const string AuthTypeGoogle = "google";
++    private const string AuthTypeGuest = "guest";
++
++    private void Save(string playerId, string token, string nickname, string authType)
+     {
+         PlayerId = playerId ?? "";
+         Token = token ?? "";
+         Nickname = nickname ?? "";
++        IsGoogleLogin = authType == AuthTypeGoogle;
+         PlayerPrefs.SetString(Key("playerId"), PlayerId);
+         PlayerPrefs.SetString(Key("token"), Token);
+         PlayerPrefs.SetString(Key("nickname"), Nickname);
++        PlayerPrefs.SetString(Key("authType"), authType);
+         PlayerPrefs.Save();
+     }
+ 
+diff --git a/Assets/Scripts/Network/Protocol/MessageType.cs b/Assets/Scripts/Network/Protocol/MessageType.cs
+index afaa2c8..48f4cdc 100644
+--- a/Assets/Scripts/Network/Protocol/MessageType.cs
++++ b/Assets/Scripts/Network/Protocol/MessageType.cs
+@@ -16,7 +16,7 @@ public enum MessageType
+     THROW_REQUEST,      // C→S 윷 던지기 요청
+     RETHROW_REQUEST,    // C→S 재던지기 증강 사용 요청
+     THROW_RESULT,       // S→C 서버가 정한 윷 결과 (던지기·재던지기 공통)
+-    MOVE,               // C→S 내가 둔 이동 + 이동 후 판단 정보(MoveReport)
++    MOVE,               // C→S 내가 둔 이동 (말 id, 윷 칸 수, 도착 칸). 결과는 서버가 계산
+     MOVE_APPLIED,       // S→C 확정된 이동 (상대 기기는 이걸로 재계산)
+     TURN_CHANGED,       // S→C 턴 변경
+     GAME_ENDED,         // S→C 게임 종료
+@@ -33,6 +33,7 @@ public enum MessageType
+     ERROR,              // S→C 요청 거부·오류
+     PLAYER_DISCONNECTED,// S→C 다른 플레이어 연결 끊김 (재접속 대기)
+     PLAYER_RECONNECTED, // S→C 끊겼던 플레이어 재접속
++    PLAYER_REMOVED,     // S→C 플레이어 제거 (나가기·재접속 실패)
+     GAME_SNAPSHOT,
+     SYNC_REQUEST
+ }
+diff --git a/Assets/Scripts/Network/Protocol/Messages/GameMessages.cs b/Assets/Scripts/Network/Protocol/Messages/GameMessages.cs
+index 3f2f2ef..b459516 100644
+--- a/Assets/Scripts/Network/Protocol/Messages/GameMessages.cs
++++ b/Assets/Scripts/Network/Protocol/Messages/GameMessages.cs
+@@ -1,3 +1,4 @@
++using System.Collections.Generic;
+ 
+ // 말 ID 규칙: 팀 * 100 + 순번 (GameSetup.PieceId). 서버도 같은 규칙을 쓴다.
+ 
+@@ -18,49 +19,41 @@ public class ThrowResultMessage
+     public bool isRethrow;      // true면 GameRules.ApplyRethrow, false면 GameRules.ApplyThrow
+ }
+ 
+-// C→S MOVE  내가 둔 이동 + 이동 후 판단 정보
+-// 서버는 이 정보로 턴 종료·추가 던지기·승리를 판단
++// C→S MOVE  "어떤 말을, 어떤 윷 결과(칸 수)로, 어느 칸으로"만 보낸다.
++// 잡기·업기·완주 같은 결과는 서버가 판으로 계산해서 MOVE_APPLIED로 돌려준다.
+ public class MoveMessage
+ {
+-    // MoveCommand
+     public int pieceId;
+-    public int moveCount;
+-    public int destinationNodeId;
++    public int moveCount;           // 사용할 윷 결과의 칸 수 (증강 보정 전, 빽도 = -1)
++    public int destinationNodeId;   // 지름길·빽도 전환처럼 갈 길이 여러 개일 때 도착 칸
++    public string stateHash;        // 서버가 MOVE_APPLIED에 그대로 실어 보낸다. 이동 전에는 알 수 없어 비워 보낸다
+ 
+-    // MoveReport
+-    public int capturedCount;
+-    public bool isFinished;
+-    public bool hasExtraThrow;
+-    public bool hasRemainingAction;
+-    public string stateHash;    // StateHasher.HashHex
+-
+-    public static MoveMessage From(MoveCommand command, MoveReport report)
++    public static MoveMessage From(MoveCommand command)
+     {
+         return new MoveMessage
+         {
+             pieceId = command.PieceId,
+             moveCount = command.MoveCount,
+             destinationNodeId = command.DestinationNodeId,
+-            capturedCount = report.CapturedCount,
+-            isFinished = report.IsFinished,
+-            hasExtraThrow = report.HasExtraThrow,
+-            hasRemainingAction = report.HasRemainingAction,
+-            stateHash = report.StateHash,
+         };
+     }
+ 
+     public MoveCommand ToCommand() => new MoveCommand(pieceId, moveCount, destinationNodeId);
+ }
+ 
+-// S→C MOVE_APPLIED  서버가 확정한 이동. 양쪽 모두에게 보낸다
+-// 상대 기기는 BoardState.TryApply(ToCommand())로 재계산하고 stateHash로 검증
++// S→C MOVE_APPLIED  서버가 판으로 계산해 확정한 이동. 방 전체(이동한 사람 포함)에게 보낸다.
++// 모든 기기가 이 메시지를 받은 뒤 Core에 적용하고, 결과가 서버 값과 같은지 확인한다
+ public class MoveAppliedMessage
+ {
+     public int team;
+     public int pieceId;
+     public int moveCount;
+     public int destinationNodeId;
+-    public string stateHash;    // 보낸 쪽이 계산한 해시. 다르면 desync
++    public List<int> movedPieceIds;     // 같이 움직인 말 (업힌 말 포함)
++    public List<int> capturedPieceIds;  // 잡혀서 대기석으로 간 말
++    public bool isFinished;             // 움직인 말이 완주했는지
++    public string stateHash;            // MOVE에 실려 온 해시 (현재 클라는 비워 보냄)
++    public bool auto;                   // 끊긴 플레이어 자동 진행으로 서버가 대신 둔 이동인지
+ 
+     public MoveCommand ToCommand() => new MoveCommand(pieceId, moveCount, destinationNodeId);
+ }
+@@ -71,6 +64,7 @@ public class TurnChangedMessage
+     public int team;                // 이제 행동할 팀 → TurnManager.ApplyServerTurn
+     public int remainingThrows;
+     public int turnTimeLimitSec;
++    public int turnNumber;          // 새 턴마다 1씩 증가
+ }
+ 
+ // S→C GAME_ENDED
+@@ -78,6 +72,17 @@ public class GameEndedMessage
+ {
+     public int winnerTeam;
+     public GameEndReason reason;
++    public RankingEntry[] rankings = new RankingEntry[0]; // 이번 판 등수 목록 (서버가 비워 보낼 수 있음)
++}
++
++// GAME_ENDED 순위 한 줄 (플레이어 = 팀). rank는 1부터, 같은 등수 다음은 건너뜀
++// 기권·끊김으로 나간 플레이어는 꼴찌 등수 + rewardGold 0
++public class RankingEntry
++{
++    public string playerId;
++    public int team;
++    public int rank;
++    public int rewardGold;
+ }
+ 
+ public enum GameEndReason
+diff --git a/Assets/Scripts/Network/Protocol/Messages/RoomMessages.cs b/Assets/Scripts/Network/Protocol/Messages/RoomMessages.cs
+index f97837f..364e399 100644
+--- a/Assets/Scripts/Network/Protocol/Messages/RoomMessages.cs
++++ b/Assets/Scripts/Network/Protocol/Messages/RoomMessages.cs
+@@ -4,7 +4,9 @@ using System.Collections.Generic;
+ // C→S CREATE_ROOM
+ public class CreateRoomRequest
+ {
+-    public string nickname;
++    public bool isPublic;
++    public int maxPlayers;
++    public int timeLimit;
+ }
+ 
+ // C→S JOIN_ROOM
+@@ -26,13 +28,17 @@ public class ReadyRequest
+ public class RoomStateMessage
+ {
+     public string roomCode;
+-    public List<RoomPlayer> players = new List<RoomPlayer>();
++    public string status;
++    public int currentPlayers;
++    public int maxPlayers;
++    public List<RoomPlayer> members = new List<RoomPlayer>();
+ }
+ 
+ public class RoomPlayer
+ {
+     public string playerId;
+     public string nickname;
++    public string iconId;     // 서버가 아직 보내지 않으면 팀별 기본 아이콘을 사용한다
+     public int team;        // 0, 1 (아직 배정 전이면 -1)
+     public bool ready;
+ }
+diff --git a/Assets/Scripts/Network/Protocol/Messages/SystemMessages.cs b/Assets/Scripts/Network/Protocol/Messages/SystemMessages.cs
+index ae82570..33c41fe 100644
+--- a/Assets/Scripts/Network/Protocol/Messages/SystemMessages.cs
++++ b/Assets/Scripts/Network/Protocol/Messages/SystemMessages.cs
+@@ -2,6 +2,8 @@
+ // Ping/Pong은 UnityEngine.Ping과 이름이 겹치지 않도록 Message를 붙인다
+ 
+ // C→S PING
++using System.Collections.Generic;
++
+ public class PingMessage
+ {
+     public long clientTime;     // 보낸 시각(ms). PONG에 그대로 돌아오면 왕복 지연 계산
+@@ -34,3 +36,27 @@ public class PlayerReconnectedMessage
+     public string playerId;
+ }
+ 
++// S→C PLAYER_REMOVED
++public class PlayerRemovedMessage
++{
++    public string playerId;
++    public int team;
++    public GameEndReason reason;
++}
++
++// S→C GAME_SNAPSHOT  재접속·DESYNC 때 현재 게임 상태
++public class GameSnapshotMessage
++{
++    public long lastSeq;        // 이 다음 seq부터 순서 검사
++    public string phase;        // "AUGMENT_SELECT", "PLAYING", "ENDED"
++    public int myTeam;
++    public int currentTeam;
++    public int remainingThrows;
++    public int turnNumber;
++    public List<YutResult> storedResults = new List<YutResult>();
++    public Dictionary<int, List<string>> ownedAugments = new Dictionary<int, List<string>>();
++    public List<string> offeredAugments = new List<string>();   // 증강 선택 중일 때 내 후보
++    public int? winnerTeam;
++    public string timerType;        // "TURN", "AUGMENT_SELECT", 없으면 null
++    public int timerRemainingSec;
++}
+diff --git a/Assets/Scripts/Network/RemoteGameSession.cs b/Assets/Scripts/Network/RemoteGameSession.cs
+index c35b6cd..08f879e 100644
+--- a/Assets/Scripts/Network/RemoteGameSession.cs
++++ b/Assets/Scripts/Network/RemoteGameSession.cs
+@@ -9,7 +9,8 @@ using System.Collections.Generic;
+ /// - 방 전체 broadcast는 seq를 1씩 증가시킨다. PONG/개인 ERROR처럼 seq=0인 메시지는 순서 검사에서 제외한다.
+ /// - GAME_START의 teamCount는 2~4, localTeam은 0~teamCount-1로 보낸다.
+ /// - THROW_RESULT/MOVE_APPLIED/AUGMENT_SELECTED에는 행동한 team을 반드시 포함한다.
+-/// - MOVE는 현재 클라이언트 선적용 결과(MoveReport)를 전송하고, 서버의 MOVE_APPLIED를 최종 확정으로 취급한다.
++/// - MOVE는 말 id·칸 수·도착 칸만 보낸다. 내 이동도 먼저 적용하지 않고, 서버의 MOVE_APPLIED를 받은 뒤 모든 기기가 같은 순서로 적용한다.
++/// - MOVE_APPLIED의 movedPieceIds/capturedPieceIds/isFinished와 Core 적용 결과가 다르면 서버와 판이 어긋난 것으로 알린다.
+ /// - MOVE 거절 또는 seq 누락 뒤 완전 복구는 향후 snapshot/RECONNECT 메시지 계약이 필요하다.
+ /// </summary>
+ public sealed class RemoteGameSession : IGameSession, IDisposable
+@@ -26,12 +27,12 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
+     private bool commandPending;
+     private bool hasReceivedSequence;
+     private long lastSequence;
+-    private MoveResult pendingLocalMove;
+-    private int pendingMovePieceId = -1;
+-    private int pendingMoveDestinationId = -1;
+ 
+     public bool IsCommandPending => commandPending;
+ 
++    // 마지막 GAME_ENDED의 순위·보상 목록 (결과 화면용). 게임이 끝나기 전엔 빈 배열
++    public IReadOnlyList<RankingEntry> Rankings { get; private set; } = Array.Empty<RankingEntry>();
++
+     public event Action<YutThrowOutcome> Thrown;
+     public event Action<MoveResult> Moved;
+     public event Action<int> TurnChanged;
+@@ -105,6 +106,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
+     {
+         if (!CanSendCommand()) return;
+ 
++        // 보내기 전에 로컬 규칙으로 갈 수 있는 이동인지만 확인한다. 실제 적용은 MOVE_APPLIED를 받은 뒤에 한다
+         MoveOption? selected = FindMoveOption(pieceId, resultIndex, destinationNodeId);
+         if (!selected.HasValue)
+         {
+@@ -112,40 +114,14 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
+             return;
+         }
+ 
+-        MoveResult result = null;
+-        void CaptureMove(MoveResult moved) => result = moved;
+-
+-        gameEvents.PieceMoved += CaptureMove;
+-        bool moved;
+-        try
+-        {
+-            // 현재 서버 계약의 MOVE에는 이동 후 MoveReport가 포함된다.
+-            // 따라서 요청 측 Core에 먼저 적용해 보고 보고서를 만든 뒤 전송한다.
+-            // 서버 거절 뒤 상태 복구는 RECONNECT/snapshot 계약이 추가될 때 이 경계에서 처리한다.
+-            moved = rules.MovePiece(pieceId, resultIndex, destinationNodeId);
+-        }
+-        finally
+-        {
+-            gameEvents.PieceMoved -= CaptureMove;
+-        }
+-
+-        if (!moved || result == null)
+-        {
+-            Reject("선택한 말을 이동할 수 없습니다.");
+-            return;
+-        }
+-
+-        MoveReport report = rules.BuildMoveReport(result);
+-        MoveMessage message = MoveMessage.From(result.ToCommand(), report);
++        int moveCount = gameState.StoredResults[resultIndex].Steps();
++        MoveMessage message = MoveMessage.From(new MoveCommand(pieceId, moveCount, destinationNodeId));
+         if (!socket.Send(MessageType.MOVE, message))
+         {
+-            Reject("이동 요청을 서버에 보내지 못했습니다. 상태를 다시 동기화해 주세요.");
++            Reject("이동 요청을 서버에 보내지 못했습니다.");
+             return;
+         }
+ 
+-        pendingLocalMove = result;
+-        pendingMovePieceId = pieceId;
+-        pendingMoveDestinationId = destinationNodeId;
+         commandPending = true;
+     }
+ 
+@@ -181,6 +157,9 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
+                 case MessageType.PLAYER_RECONNECTED:
+                     ApplyPlayerReconnected(MessageSerializer.ReadPayload<PlayerReconnectedMessage>(envelope));
+                     break;
++                case MessageType.PLAYER_REMOVED:
++                    ApplyPlayerRemoved(MessageSerializer.ReadPayload<PlayerRemovedMessage>(envelope));
++                    break;
+                 case MessageType.ERROR:
+                     ErrorMessage error = MessageSerializer.ReadPayload<ErrorMessage>(envelope);
+                     commandPending = false;
+@@ -217,53 +196,73 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
+         Thrown?.Invoke(outcome);
+     }
+ 
++    // 서버가 확정한 이동을 내 이동·상대 이동 구분 없이 같은 방법으로 적용한다
+     private void ApplyMove(MoveAppliedMessage message, long sequence)
+     {
+         if (message == null) throw new InvalidOperationException("MOVE_APPLIED 내용이 없습니다.");
+ 
+-        MoveResult result;
+-        bool isPendingLocalMove = pendingLocalMove != null &&
+-                                  message.team == setup.localTeam &&
+-                                  message.pieceId == pendingMovePieceId &&
+-                                  message.destinationNodeId == pendingMoveDestinationId;
+-
+-        if (isPendingLocalMove)
+-        {
+-            result = pendingLocalMove;
+-            ClearPendingMove();
+-            commandPending = false;
+-        }
+-        else
+-        {
+         int resultIndex = FindStoredResultIndex(message.moveCount);
+         if (resultIndex < 0)
+             throw new InvalidOperationException($"{message.moveCount}칸 이동에 사용할 저장 결과가 없습니다.");
+ 
+-            result = null;
++        MoveResult result = null;
+         void CaptureMove(MoveResult moved) => result = moved;
+         gameEvents.PieceMoved += CaptureMove;
+         try
+         {
+-                if (!rules.MovePiece(message.pieceId, resultIndex, message.destinationNodeId))
++            if (!rules.MovePiece(message.pieceId, resultIndex, message.destinationNodeId) || result == null)
+                 throw new InvalidOperationException("서버가 확정한 이동을 Core에서 재현할 수 없습니다.");
+         }
+         finally
+         {
+             gameEvents.PieceMoved -= CaptureMove;
+         }
+-        }
+ 
+-        if (message.team != setup.localTeam) AutomatedMoveApplied?.Invoke(message.team);
++        if (message.team == setup.localTeam) commandPending = false;
++        if (message.auto) AutomatedMoveApplied?.Invoke(message.team);
++
+         Moved?.Invoke(result);
++
++        // 연출은 Core 결과로 하지만, 서버가 계산한 결과(잡힌 말·같이 움직인 말·완주)와 같은지 확인한다
++        string mismatch = FindResultMismatch(message, result);
++        if (mismatch != null) Reject($"이동 결과가 서버와 다릅니다 ({mismatch}). 상태를 다시 동기화해 주세요.");
++
+         ReportStateHash(sequence, message.stateHash);
+     }
+ 
++    // 서버 MOVE_APPLIED와 Core 이동 결과 비교. 같으면 null
++    private static string FindResultMismatch(MoveAppliedMessage message, MoveResult result)
++    {
++        if (message.isFinished != result.Path.IsFinished)
++            return $"완주 서버={message.isFinished}, 로컬={result.Path.IsFinished}";
++        if (message.movedPieceIds != null && !SameIds(message.movedPieceIds, result.MovedPieces))
++            return $"같이 움직인 말 서버=[{string.Join(",", message.movedPieceIds)}], 로컬=[{JoinIds(result.MovedPieces)}]";
++        if (message.capturedPieceIds != null && !SameIds(message.capturedPieceIds, result.CapturedPieces))
++            return $"잡힌 말 서버=[{string.Join(",", message.capturedPieceIds)}], 로컬=[{JoinIds(result.CapturedPieces)}]";
++        return null;
++    }
++
++    private static bool SameIds(List<int> serverIds, IReadOnlyList<Piece> pieces)
++    {
++        if (serverIds.Count != pieces.Count) return false;
++        var remaining = new HashSet<int>(serverIds);
++        foreach (Piece piece in pieces)
++            if (!remaining.Remove(piece.Id)) return false;
++        return true;
++    }
++
++    private static string JoinIds(IReadOnlyList<Piece> pieces)
++    {
++        var ids = new List<int>(pieces.Count);
++        foreach (Piece piece in pieces) ids.Add(piece.Id);
++        return string.Join(",", ids);
++    }
++
+     private void ApplyTurn(TurnChangedMessage message)
+     {
+         if (message == null) throw new InvalidOperationException("TURN_CHANGED 내용이 없습니다.");
+         turnManager.ApplyServerTurn(message.team, message.remainingThrows);
+         commandPending = false;
+-        ClearPendingMove();
+         TurnChanged?.Invoke(message.team);
+     }
+ 
+@@ -286,6 +285,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
+     {
+         if (message == null) throw new InvalidOperationException("GAME_ENDED 내용이 없습니다.");
+         gameState.WinnerTeam = message.winnerTeam;
++        Rankings = message.rankings ?? Array.Empty<RankingEntry>();
+         commandPending = false;
+         GameEnded?.Invoke(message.winnerTeam);
+     }
+@@ -304,6 +304,17 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
+         PlayerReconnected?.Invoke(message.playerId);
+     }
+ 
++    // 나가기·재접속 실패로 빠진 플레이어: 그 팀 말을 판에서 지운다
++    // 턴은 서버가 TURN_CHANGED로 넘겨주고, 1명만 남으면 이어서 GAME_ENDED가 온다
++    private void ApplyPlayerRemoved(PlayerRemovedMessage message)
++    {
++        if (message == null || message.team < 0 || message.team >= setup.teamCount)
++            throw new InvalidOperationException("PLAYER_REMOVED 내용이 없습니다.");
++
++        gameState.Board.RemoveTeam(message.team);
++        PlayerRemoved?.Invoke(message.playerId, message.team);
++    }
++
+     private void ReportStateHash(long sequence, string serverHash)
+     {
+         string localHash = StateHasher.HashHex(gameState, turnManager);
+@@ -417,17 +428,9 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
+     private void OnDisconnected(bool byUser)
+     {
+         commandPending = false;
+-        ClearPendingMove();
+         ConnectionAvailabilityChanged?.Invoke(false);
+         if (!byUser) Reject("서버 연결이 끊어졌습니다.");
+     }
+ 
+-    private void ClearPendingMove()
+-    {
+-        pendingLocalMove = null;
+-        pendingMovePieceId = -1;
+-        pendingMoveDestinationId = -1;
+-    }
+-
+     private void Reject(string message) => RequestRejected?.Invoke(message);
+ }
+diff --git a/Assets/Scripts/Presentation/UI/AugmentCardView.cs b/Assets/Scripts/Presentation/UI/AugmentCardView.cs
+index ea9ddb4..06366d0 100644
+--- a/Assets/Scripts/Presentation/UI/AugmentCardView.cs
++++ b/Assets/Scripts/Presentation/UI/AugmentCardView.cs
+@@ -42,5 +42,6 @@ public class AugmentCardView : MonoBehaviour
+             return;
+         }
+         selectButton.onClick.AddListener(() => onCardSelected(definition.id));
++        SoundManager.BindButtonClick(selectButton);
+     }
+ }
+diff --git a/Assets/Scripts/Presentation/UI/GameHudPanel.cs b/Assets/Scripts/Presentation/UI/GameHudPanel.cs
+index 139cccd..765c790 100644
+--- a/Assets/Scripts/Presentation/UI/GameHudPanel.cs
++++ b/Assets/Scripts/Presentation/UI/GameHudPanel.cs
+@@ -40,6 +40,8 @@ public class GameHudPanel : UIBase
+     [SerializeField] private List<Sprite> augmentIcons = new();
+     [SerializeField] private Sprite augmentActiveRing;
+     [SerializeField] private TextAsset augmentDefinitions;
++    [Header("Player Profile Art")]
++    [SerializeField] private List<Sprite> profileIcons = new();
+ 
+     private TurnHudView turnView;
+     private PlayerStatusView playerView;
+@@ -165,6 +167,11 @@ public class GameHudPanel : UIBase
+         playerView?.Configure(teamCount, piecesPerTeam, teamPieceSprites, teamPieceGlowSprites);
+     }
+ 
++    public void ConfigurePlayerProfiles(IReadOnlyList<PlayerDisplayInfo> profiles)
++    {
++        playerView?.SetPlayerProfiles(profiles, profileIcons);
++    }
++
+     public void SetPlayerState(
+         int team,
+         int waiting,
+diff --git a/Assets/Scripts/Presentation/UI/LoginPanel.cs b/Assets/Scripts/Presentation/UI/LoginPanel.cs
+index 1bfff43..2838b3f 100644
+--- a/Assets/Scripts/Presentation/UI/LoginPanel.cs
++++ b/Assets/Scripts/Presentation/UI/LoginPanel.cs
+@@ -11,16 +11,23 @@ public class LoginPanel : UIBase
+ {
+     [Header("버튼")]
+     [SerializeField] private Button googleLoginButton;
+-    // 로그인 진행 중에만 보인다. 브라우저 창을 그냥 닫았을 때 기다림을 끝내는 용도
++    // 이 기기에 저장된 로그인으로 바로 들어간다. 저장된 로그인이 있을 때만 누를 수 있다
++    [SerializeField] private Button continueButton;
++    [SerializeField] private TMP_Text continueLabel;
++    // 로그인 진행 중에만 보인다 (계속하기 버튼 자리). 브라우저 창을 그냥 닫았을 때 기다림을 끝내는 용도
+     [SerializeField] private Button cancelButton;
+ 
+     [Header("상태")]
+     [SerializeField] private TMP_Text statusText;
+ 
++    private bool busy;
++    private bool continueAvailable;
++
+     // 버튼을 누르는 순간 (WebGL 팝업은 이 시점에 준비해야 한다)
+     public event Action GoogleLoginPressed;
+     // 버튼 클릭 (누르고 뗐을 때)
+     public event Action GoogleLoginRequested;
++    public event Action ContinueRequested;
+     public event Action CancelRequested;
+ 
+     public override void Init()
+@@ -31,6 +38,9 @@ public class LoginPanel : UIBase
+             cancelButton.gameObject.SetActive(false);
+         }
+ 
++        continueButton?.onClick.AddListener(OnContinueClicked);
++        SetContinueAvailable(false, null);
++
+         if (googleLoginButton == null) return;
+ 
+         googleLoginButton.onClick.AddListener(OnGoogleLoginClicked);
+@@ -44,18 +54,35 @@ public class LoginPanel : UIBase
+     private void OnDestroy()
+     {
+         googleLoginButton?.onClick.RemoveListener(OnGoogleLoginClicked);
++        continueButton?.onClick.RemoveListener(OnContinueClicked);
+         cancelButton?.onClick.RemoveListener(OnCancelClicked);
+     }
+ 
+-    public void SetBusy(bool busy)
++    public void SetBusy(bool isBusy)
+     {
++        busy = isBusy;
+         if (googleLoginButton != null) googleLoginButton.interactable = !busy;
++        RefreshContinue();
++    }
++
++    // 저장된 로그인이 있으면 계속하기 버튼을 켠다. nickname이 있으면 버튼에 같이 보여 준다
++    public void SetContinueAvailable(bool available, string nickname)
++    {
++        continueAvailable = available;
++        if (continueLabel != null)
++        {
++            continueLabel.text = available && !string.IsNullOrWhiteSpace(nickname)
++                ? $"{nickname}(으)로 계속하기"
++                : "이전 로그인으로 계속하기";
++        }
++        RefreshContinue();
+     }
+ 
+-    // 로그인 진행 중이면 취소 버튼을 보여 준다
++    // 로그인 진행 중이면 계속하기 대신 취소 버튼을 보여 준다
+     public void SetCancelable(bool cancelable)
+     {
+         if (cancelButton != null) cancelButton.gameObject.SetActive(cancelable);
++        if (continueButton != null) continueButton.gameObject.SetActive(!cancelable);
+     }
+ 
+     public void ShowStatus(string message)
+@@ -63,6 +90,11 @@ public class LoginPanel : UIBase
+         if (statusText != null) statusText.text = message ?? string.Empty;
+     }
+ 
++    private void RefreshContinue()
++    {
++        if (continueButton != null) continueButton.interactable = continueAvailable && !busy;
++    }
++
+     private void OnGoogleLoginPointerDown(BaseEventData _)
+     {
+         if (googleLoginButton != null && googleLoginButton.interactable) GoogleLoginPressed?.Invoke();
+@@ -73,6 +105,11 @@ public class LoginPanel : UIBase
+         GoogleLoginRequested?.Invoke();
+     }
+ 
++    private void OnContinueClicked()
++    {
++        ContinueRequested?.Invoke();
++    }
++
+     private void OnCancelClicked()
+     {
+         CancelRequested?.Invoke();
+diff --git a/Assets/Scripts/Presentation/UI/PlayerStatusView.cs b/Assets/Scripts/Presentation/UI/PlayerStatusView.cs
+index cee0a22..7c5cb80 100644
+--- a/Assets/Scripts/Presentation/UI/PlayerStatusView.cs
++++ b/Assets/Scripts/Presentation/UI/PlayerStatusView.cs
+@@ -28,22 +28,32 @@ public sealed class PlayerStatusView : MonoBehaviour
+     private readonly Dictionary<string, Sprite> augmentIconById = new(StringComparer.Ordinal);
+     private readonly Dictionary<string, AugmentDefinition> augmentDefinitionById = new(StringComparer.Ordinal);
+     private Sprite augmentActiveRing;
++    private IReadOnlyList<PlayerDisplayInfo> playerProfiles = Array.Empty<PlayerDisplayInfo>();
++    private IReadOnlyList<Sprite> profileIcons = Array.Empty<Sprite>();
+     private RectTransform augmentTooltip;
+     private Image augmentTooltipIcon;
+     private TMP_Text augmentTooltipName;
+     private TMP_Text augmentTooltipDescription;
+     private readonly Dictionary<int, float> reconnectDeadlines = new();
++    private readonly Dictionary<int, ReconnectOverlayView> reconnectOverlays = new();
++
++    private sealed class ReconnectOverlayView
++    {
++        public GameObject Root;
++        public Image Background;
++        public TMP_Text StatusText;
++        public TMP_Text TimerText;
++    }
+ 
+     private void Update()
+     {
+         if (reconnectDeadlines.Count == 0) return;
+         foreach (KeyValuePair<int, float> pair in reconnectDeadlines)
+         {
+-            TMP_Text label = GetConnectionLabel(pair.Key);
+-            if (label == null) continue;
++            ReconnectOverlayView overlay = GetReconnectOverlay(pair.Key);
++            if (overlay == null) continue;
+             int seconds = Mathf.Max(0, Mathf.CeilToInt(pair.Value - Time.unscaledTime));
+-            if (seconds > 0) label.SetText("재접속 대기 {0}초", seconds);
+-            else label.text = "재접속 처리 중";
++            overlay.TimerText.SetText("{0}초 남음", seconds);
+         }
+     }
+ 
+@@ -65,6 +75,13 @@ public sealed class PlayerStatusView : MonoBehaviour
+         if (waitingPieceClicked != null) BindWaitingPieceClicks(waitingPieceClicked);
+     }
+ 
++    public void SetPlayerProfiles(IReadOnlyList<PlayerDisplayInfo> profiles, IReadOnlyList<Sprite> icons)
++    {
++        playerProfiles = profiles ?? Array.Empty<PlayerDisplayInfo>();
++        profileIcons = icons ?? Array.Empty<Sprite>();
++        for (int team = 0; team < MaxTeamCount; team++) ApplyPlayerProfile(team);
++    }
++
+     public void BindWaitingPieceClicks(Action<int, int> onClicked)
+     {
+         waitingPieceClicked = onClicked;
+@@ -91,6 +108,7 @@ public sealed class PlayerStatusView : MonoBehaviour
+                 button.onClick.RemoveAllListeners();
+                 button.interactable = capturedTeam < activeTeamCount && capturedSlot < pieceSlotCount;
+                 button.onClick.AddListener(() => waitingPieceClicked?.Invoke(capturedTeam, capturedSlot));
++                SoundManager.BindButtonClick(button);
+             }
+         }
+     }
+@@ -324,63 +342,103 @@ public sealed class PlayerStatusView : MonoBehaviour
+ 
+     public void SetConnectionState(int team, ConnectionState state, int graceSec = 0)
+     {
+-        TMP_Text label = GetConnectionLabel(team);
+-        if (label == null) return;
++        ReconnectOverlayView overlay = GetReconnectOverlay(team);
++        if (overlay == null) return;
+ 
+         reconnectDeadlines.Remove(team);
+         switch (state)
+         {
+             case ConnectionState.Connected:
+-                label.gameObject.SetActive(false);
++                overlay.Root.SetActive(false);
+                 break;
+             case ConnectionState.Reconnecting:
+                 reconnectDeadlines[team] = Time.unscaledTime + Mathf.Max(0, graceSec);
+-                label.text = $"재접속 대기 {Mathf.Max(0, graceSec)}초";
+-                label.color = new Color32(181, 94, 18, 255);
+-                label.gameObject.SetActive(true);
++                overlay.Background.color = new Color32(255, 249, 236, 225);
++                overlay.StatusText.text = "재접속 중...";
++                overlay.StatusText.color = new Color32(92, 62, 42, 255);
++                overlay.TimerText.SetText("{0}초 남음", Mathf.Max(0, graceSec));
++                overlay.TimerText.gameObject.SetActive(true);
++                overlay.Root.SetActive(true);
++                overlay.Root.transform.SetAsLastSibling();
+                 break;
+             case ConnectionState.Removed:
+-                label.text = "탈주";
+-                label.color = new Color32(150, 140, 125, 255);
+-                label.gameObject.SetActive(true);
+-                SetTeamPiecesVisible(team, false);
++                overlay.Background.color = new Color32(232, 226, 216, 235);
++                overlay.StatusText.text = "탈주";
++                overlay.StatusText.color = new Color32(120, 110, 96, 255);
++                overlay.TimerText.gameObject.SetActive(false);
++                overlay.Root.SetActive(true);
++                overlay.Root.transform.SetAsLastSibling();
+                 break;
+         }
+     }
+ 
+-    private TMP_Text GetConnectionLabel(int team)
++    private ReconnectOverlayView GetReconnectOverlay(int team)
+     {
++        if (reconnectOverlays.TryGetValue(team, out ReconnectOverlayView cached) && cached.Root != null)
++            return cached;
++
+         Transform panel = FindPanel(team);
+         if (panel == null) return null;
+-        TMP_Text existing = panel.Find("ConnectionStatus")?.GetComponent<TMP_Text>();
+-        if (existing != null) return existing;
+-
+-        GameObject labelObject = new("ConnectionStatus", typeof(RectTransform), typeof(TextMeshProUGUI));
+-        labelObject.transform.SetParent(panel, false);
+-        RectTransform rect = labelObject.GetComponent<RectTransform>();
+-        rect.anchorMin = rect.anchorMax = new Vector2(1f, 1f);
+-        rect.pivot = new Vector2(1f, 1f);
+-        rect.anchoredPosition = new Vector2(-18f, -58f);
+-        rect.sizeDelta = new Vector2(170f, 30f);
+-        TMP_Text label = labelObject.GetComponent<TMP_Text>();
+-        label.alignment = TextAlignmentOptions.Right;
+-        label.fontSize = 18f;
+-        label.fontStyle = FontStyles.Normal;
+-        label.raycastTarget = false;
+-        return label;
+-    }
+-
+-    private void SetTeamPiecesVisible(int team, bool visible)
+-    {
+-        Transform panel = FindPanel(team);
+-        if (panel == null) return;
+-        for (int slot = 0; slot < MaxPieceSlotCount; slot++)
+-        {
+-            Transform waiting = panel.Find($"PieceSlot_{slot}");
+-            Transform finished = panel.Find($"FinishSlot_{slot}");
+-            if (waiting != null) waiting.gameObject.SetActive(visible && slot < pieceSlotCount);
+-            if (finished != null) finished.gameObject.SetActive(visible && slot < pieceSlotCount);
++        Transform oldStatus = panel.Find("ConnectionStatus");
++        if (oldStatus != null) oldStatus.gameObject.SetActive(false);
++
++        Transform existing = panel.Find("ReconnectOverlay");
++        GameObject root = existing != null
++            ? existing.gameObject
++            : new GameObject("ReconnectOverlay", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
++        if (existing == null) root.transform.SetParent(panel, false);
++
++        RectTransform rootRect = root.GetComponent<RectTransform>();
++        rootRect.anchorMin = Vector2.zero;
++        rootRect.anchorMax = Vector2.one;
++        rootRect.offsetMin = new Vector2(6f, 6f);
++        rootRect.offsetMax = new Vector2(-6f, -6f);
++
++        Image background = root.GetComponent<Image>();
++        background.raycastTarget = false;
++
++        TMP_Text statusText = GetOrCreateOverlayText(root.transform, "ReconnectText");
++        RectTransform statusRect = statusText.rectTransform;
++        statusRect.anchorMin = statusRect.anchorMax = new Vector2(0.5f, 0.5f);
++        statusRect.pivot = new Vector2(0.5f, 0.5f);
++        statusRect.anchoredPosition = new Vector2(0f, 14f);
++        statusRect.sizeDelta = new Vector2(190f, 34f);
++        statusText.fontSize = 22f;
++
++        TMP_Text timerText = GetOrCreateOverlayText(root.transform, "ReconnectTimerText");
++        RectTransform timerRect = timerText.rectTransform;
++        timerRect.anchorMin = timerRect.anchorMax = new Vector2(0.5f, 0.5f);
++        timerRect.pivot = new Vector2(0.5f, 0.5f);
++        timerRect.anchoredPosition = new Vector2(0f, -18f);
++        timerRect.sizeDelta = new Vector2(190f, 30f);
++        timerText.fontSize = 18f;
++        timerText.color = new Color32(181, 94, 18, 255);
++
++        if (existing == null) root.SetActive(false);
++        var overlay = new ReconnectOverlayView
++        {
++            Root = root,
++            Background = background,
++            StatusText = statusText,
++            TimerText = timerText
++        };
++        reconnectOverlays[team] = overlay;
++        return overlay;
+     }
++
++    private static TMP_Text GetOrCreateOverlayText(Transform parent, string name)
++    {
++        TMP_Text text = parent.Find(name)?.GetComponent<TMP_Text>();
++        if (text != null) return text;
++
++        GameObject textObject = new(name, typeof(RectTransform), typeof(TextMeshProUGUI));
++        textObject.transform.SetParent(parent, false);
++        text = textObject.GetComponent<TMP_Text>();
++        text.alignment = TextAlignmentOptions.Center;
++        text.fontStyle = FontStyles.Normal;
++        text.raycastTarget = false;
++        text.textWrappingMode = TextWrappingModes.NoWrap;
++        return text;
+     }
+ 
+     private Transform FindPanel(int team)
+@@ -429,7 +487,7 @@ public sealed class PlayerStatusView : MonoBehaviour
+         TMP_Text headerLabel = panel.Find("Header")?.GetComponentInChildren<TMP_Text>(true);
+         if (headerLabel != null)
+         {
+-            headerLabel.text = occupied ? $"플레이어 {team + 1}  /  {TeamName(team)} 팀" : "빈 자리";
++            headerLabel.text = occupied ? DisplayName(team) : "빈 자리";
+             headerLabel.color = !occupied
+                 ? new Color32(150, 140, 125, 255)
+                 : team == currentActiveTeam ? Color.white : TurnHudView.GetTeamColor(team);
+@@ -452,6 +510,37 @@ public sealed class PlayerStatusView : MonoBehaviour
+             Transform finishSlot = panel.Find($"FinishSlot_{slot}");
+             if (finishSlot != null) finishSlot.gameObject.SetActive(occupied && slot < pieceSlotCount);
+         }
++        ApplyPlayerProfile(team);
++    }
++
++    private void ApplyPlayerProfile(int team)
++    {
++        Transform panel = FindPanel(team);
++        if (panel == null) return;
++
++        PlayerDisplayInfo profile = FindProfile(team);
++        TMP_Text headerLabel = panel.Find("Header")?.GetComponentInChildren<TMP_Text>(true);
++        if (headerLabel != null && team < activeTeamCount)
++            headerLabel.text = DisplayName(team);
++
++        Image icon = panel.Find("ProfileIcon")?.GetComponent<Image>();
++        if (icon == null) return;
++        icon.sprite = PlayerProfileIconResolver.Resolve(profileIcons, profile?.iconId, team);
++        icon.enabled = team < activeTeamCount && icon.sprite != null;
++        icon.preserveAspect = true;
++    }
++
++    private PlayerDisplayInfo FindProfile(int team)
++    {
++        foreach (PlayerDisplayInfo profile in playerProfiles)
++            if (profile != null && profile.team == team) return profile;
++        return null;
++    }
++
++    private string DisplayName(int team)
++    {
++        PlayerDisplayInfo profile = FindProfile(team);
++        return !string.IsNullOrWhiteSpace(profile?.nickname) ? profile.nickname : $"{TeamName(team)} 팀";
+     }
+ 
+     private static void PlacePanel(Transform panel, bool right, bool top)
+diff --git a/Assets/Scripts/Presentation/UI/ProfilePanel.cs b/Assets/Scripts/Presentation/UI/ProfilePanel.cs
+index 4256ab4..54f25cd 100644
+--- a/Assets/Scripts/Presentation/UI/ProfilePanel.cs
++++ b/Assets/Scripts/Presentation/UI/ProfilePanel.cs
+@@ -1,3 +1,4 @@
++using System;
+ using TMPro;
+ using UnityEngine;
+ using UnityEngine.UI;
+@@ -11,21 +12,29 @@ public sealed class ProfilePanel : UIBase
+     [SerializeField] private TMP_Text nicknameText;
+     [SerializeField] private TMP_Text playerIdText;
+     [SerializeField] private TMP_Text statusText;
++    [SerializeField] private TMP_InputField nicknameInput;
++    [SerializeField] private Button saveNicknameButton;
++
++    public event Action<string> NicknameChangeRequested;
+ 
+     public override void Init()
+     {
+         closeButton?.onClick.AddListener(Close);
++        saveNicknameButton?.onClick.AddListener(OnSaveNicknameClicked);
+     }
+ 
+     private void OnDestroy()
+     {
+         closeButton?.onClick.RemoveListener(Close);
++        saveNicknameButton?.onClick.RemoveListener(OnSaveNicknameClicked);
+     }
+ 
+     public void ShowProfile(string playerId, string nickname, Sprite icon = null)
+     {
+         if (nicknameText != null)
+             nicknameText.text = string.IsNullOrWhiteSpace(nickname) ? "닉네임 미설정" : nickname;
++        if (nicknameInput != null)
++            nicknameInput.SetTextWithoutNotify(nickname ?? string.Empty);
+         if (playerIdText != null)
+             playerIdText.text = string.IsNullOrWhiteSpace(playerId) ? "플레이어 ID 없음" : $"플레이어 ID  {playerId}";
+         if (profileIcon != null && icon != null) profileIcon.sprite = icon;
+@@ -33,4 +42,33 @@ public sealed class ProfilePanel : UIBase
+         if (statusText != null)
+             statusText.text = icon == null ? "프로필 아이콘은 서버 연동 후 표시됩니다." : string.Empty;
+     }
++
++    public void SetNicknameBusy(bool busy)
++    {
++        if (nicknameInput != null) nicknameInput.interactable = !busy;
++        if (saveNicknameButton != null) saveNicknameButton.interactable = !busy;
++    }
++
++    public void ShowStatus(string message)
++    {
++        if (statusText != null) statusText.text = message ?? string.Empty;
++    }
++
++    public void ApplyNickname(string nickname)
++    {
++        if (nicknameText != null) nicknameText.text = nickname;
++        if (nicknameInput != null) nicknameInput.SetTextWithoutNotify(nickname ?? string.Empty);
++    }
++
++    private void OnSaveNicknameClicked()
++    {
++        string nickname = nicknameInput != null ? nicknameInput.text.Trim() : string.Empty;
++        if (nickname.Length < 2 || nickname.Length > 20)
++        {
++            ShowStatus("닉네임은 2~20자로 입력해 주세요.");
++            return;
++        }
++
++        NicknameChangeRequested?.Invoke(nickname);
++    }
+ }
+diff --git a/Assets/Scripts/Presentation/UI/ResultPopup.cs b/Assets/Scripts/Presentation/UI/ResultPopup.cs
+index 68aa83a..3531689 100644
+--- a/Assets/Scripts/Presentation/UI/ResultPopup.cs
++++ b/Assets/Scripts/Presentation/UI/ResultPopup.cs
+@@ -1,4 +1,7 @@
+ using System;
++using System.Collections.Generic;
++using System.Linq;
++using System.Text;
+ using TMPro;
+ using UnityEngine;
+ using UnityEngine.SceneManagement;
+@@ -10,6 +13,7 @@ public class ResultPopup : UIBase
+     [Header("UI연결")]
+     [SerializeField] private TextMeshProUGUI winnerText;
+     [SerializeField] private Image winnerColorImage;
++    [SerializeField] private TextMeshProUGUI rankingsText;
+     [SerializeField] private Button restartButton;
+ 
+     public event Action RestartClicked;
+@@ -19,6 +23,11 @@ public class ResultPopup : UIBase
+         restartButton.onClick.AddListener(HandleRestart);
+     }
+ 
++    protected override void OnOpen()
++    {
++        SoundManager.Play(SoundId.ResultPopup);
++    }
++
+     public ResultPopup SetWinner(string winnername, Color winnerColor)
+     {
+         if (winnerText != null) winnerText.text = string.Format("{0} win", winnername);
+@@ -26,6 +35,33 @@ public class ResultPopup : UIBase
+         return this;
+     }
+ 
++    public ResultPopup SetRankings(
++        IReadOnlyList<RankingEntry> rankings,
++        IReadOnlyList<PlayerDisplayInfo> profiles)
++    {
++        if (rankingsText == null) return this;
++        if (rankings == null || rankings.Count == 0)
++        {
++            rankingsText.text = string.Empty;
++            return this;
++        }
++
++        var builder = new StringBuilder();
++        foreach (RankingEntry entry in rankings.OrderBy(value => value.rank).ThenBy(value => value.team))
++        {
++            PlayerDisplayInfo profile = profiles?.FirstOrDefault(value =>
++                value != null && (value.playerId == entry.playerId || value.team == entry.team));
++            string name = !string.IsNullOrWhiteSpace(profile?.nickname)
++                ? profile.nickname
++                : $"팀 {entry.team + 1}";
++            if (builder.Length > 0) builder.AppendLine();
++            builder.Append($"{entry.rank}위  {name}  +{entry.rewardGold} 골드");
++        }
++
++        rankingsText.text = builder.ToString();
++        return this;
++    }
++
+     private void HandleRestart()
+     {
+         Close();
+diff --git a/Assets/Scripts/Presentation/UI/UIBase.cs b/Assets/Scripts/Presentation/UI/UIBase.cs
+index 40956c9..6557f06 100644
+--- a/Assets/Scripts/Presentation/UI/UIBase.cs
++++ b/Assets/Scripts/Presentation/UI/UIBase.cs
+@@ -22,6 +22,8 @@ public class UIBase : MonoBehaviour
+         gameObject.SetActive(true);
+         transform.SetAsLastSibling();
+         OnOpen();
++        foreach (var button in GetComponentsInChildren<UnityEngine.UI.Button>(true))
++            SoundManager.BindButtonClick(button);
+     }
+ 
+     public void Close()
+diff --git a/Assets/Scripts/Presentation/Yut/YutThrowView.cs b/Assets/Scripts/Presentation/Yut/YutThrowView.cs
+index b1af7e1..c5230cd 100644
+--- a/Assets/Scripts/Presentation/Yut/YutThrowView.cs
++++ b/Assets/Scripts/Presentation/Yut/YutThrowView.cs
+@@ -22,6 +22,7 @@ public class YutThrowView : MonoBehaviour
+         });
+     }
+ 
++    // 윷가락 결과를 보여준다. 현재 게임 HUD의 효과음은 YutResultRevealView에서 재생한다.
+     public void ShowSticks(bool[] sticks)
+     {
+         for (int i = 0; i < stickImages.Length; i++)

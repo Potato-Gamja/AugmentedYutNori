@@ -1,0 +1,134 @@
+From commit: aa820155f81d724cd18ad73f9d3127378fe102a1
+Contributor: Potato-Gamja (Gamja)
+Subject: [feat] 게임시작 버튼 서버와 연결
+Original: https://github.com/Potato-Gamja/AugmentedYutNori/commit/aa820155f81d724cd18ad73f9d3127378fe102a1
+
+diff --git a/Assets/Scripts/Flow/GameFlowController.cs b/Assets/Scripts/Flow/GameFlowController.cs
+index 35b6567..66c9b99 100644
+--- a/Assets/Scripts/Flow/GameFlowController.cs
++++ b/Assets/Scripts/Flow/GameFlowController.cs
+@@ -1,4 +1,4 @@
+-using System;
++﻿using System;
+ using System.Collections.Generic;
+ using System.Linq;
+ using UnityEngine;
+diff --git a/Assets/Scripts/Flow/LobbyController.cs b/Assets/Scripts/Flow/LobbyController.cs
+index 46fa2f3..c027331 100644
+--- a/Assets/Scripts/Flow/LobbyController.cs
++++ b/Assets/Scripts/Flow/LobbyController.cs
+@@ -30,6 +30,7 @@ public class LobbyController : MonoBehaviour
+     public event Action<string, string> JoinRoomRequested;
+     public event Action<string> QuickJoinRequested;
+     public event Action<bool> ReadyRequested;
++    public event Action StartGameRequested;
+     public event Action LeaveRoomRequested;
+ 
+     private void Start()
+@@ -216,6 +217,16 @@ public class LobbyController : MonoBehaviour
+         ReadyRequested?.Invoke(ready);
+     }
+ 
++    private void OnStartGameRequested()
++    {
++        if (StartGameRequested == null)
++        {
++            ReceiveError("게임 시작 요청 연결을 확인해 주세요.");
++            return;
++        }
++        StartGameRequested.Invoke();
++    }
++
+     private void OnLeaveRequested()
+     {
+         roomPanel.SetInteraction(false);
+@@ -236,6 +247,9 @@ public class LobbyController : MonoBehaviour
+         uiManager.Close<LobbyPanel>();
+         uiManager.Open<RoomPanel>();
+         roomPanel.ShowRoom(room, localPlayerId);
++        roomPanel.ConfigureGameStart(
++            !string.IsNullOrEmpty(localPlayerId) && room?.hostPlayerId == localPlayerId,
++            OnStartGameRequested);
+         roomPanel.SetInteraction(true);
+         roomPanel.ShowStatus("다른 플레이어를 기다리는 중입니다.");
+         LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
+diff --git a/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs b/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
+index 3de8575..538a6c8 100644
+--- a/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
++++ b/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
+@@ -1,5 +1,6 @@
+ using System;
+ using System.Collections.Generic;
++using System.Linq;
+ using System.Threading.Tasks;
+ using UnityEngine;
+ using UnityEngine.SceneManagement;
+@@ -167,6 +168,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+         lobbyController.JoinRoomRequested += OnJoinRoomRequested;
+         lobbyController.QuickJoinRequested += OnQuickJoinRequested;
+         lobbyController.ReadyRequested += OnReadyRequested;
++        lobbyController.StartGameRequested += OnStartGameRequested;
+         lobbyController.LeaveRoomRequested += OnLeaveRoomRequested;
+ 
+         if (!IsLoggedIn())
+@@ -369,6 +371,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+         lobbyController.JoinRoomRequested -= OnJoinRoomRequested;
+         lobbyController.QuickJoinRequested -= OnQuickJoinRequested;
+         lobbyController.ReadyRequested -= OnReadyRequested;
++        lobbyController.StartGameRequested -= OnStartGameRequested;
+         lobbyController.LeaveRoomRequested -= OnLeaveRoomRequested;
+         lobbyController = null;
+     }
+@@ -633,6 +636,28 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+         }
+     }
+ 
++    public bool CanStartGameInCurrentRoom => CanReadyInCurrentRoom && !leaveRequested &&
++        lastRoomState?.status == "WAITING" && !string.IsNullOrEmpty(LocalPlayerId) &&
++        lastRoomState.hostPlayerId == LocalPlayerId && lastRoomState.members != null &&
++        lastRoomState.members.Count >= 2 && lastRoomState.members.Count <= 4 &&
++        lastRoomState.members.Any(player => player != null && player.playerId == LocalPlayerId) &&
++        lastRoomState.members.All(player => player != null && player.ready &&
++            !reconnectingRoomPlayers.Contains(player.playerId));
++
++    private void OnStartGameRequested()
++    {
++        if (!CanStartGameInCurrentRoom)
++        {
++            ActiveLobbyController?.ReceiveError("방장과 참가자의 준비·연결 상태를 다시 확인해 주세요.");
++            return;
++        }
++        if (webSocketClient == null || !webSocketClient.IsConnected ||
++            !webSocketClient.Send(MessageType.START_GAME))
++        {
++            ActiveLobbyController?.ReceiveError("서버에 연결되어 있지 않습니다.");
++        }
++    }
++
+     private async void OnLeaveRoomRequested()
+     {
+         if (leaveRequested) return;
+diff --git a/Assets/Scripts/Network/Protocol/MessageType.cs b/Assets/Scripts/Network/Protocol/MessageType.cs
+index 48f4cdc..574f9f7 100644
+--- a/Assets/Scripts/Network/Protocol/MessageType.cs
++++ b/Assets/Scripts/Network/Protocol/MessageType.cs
+@@ -35,5 +35,6 @@ public enum MessageType
+     PLAYER_RECONNECTED, // S→C 끊겼던 플레이어 재접속
+     PLAYER_REMOVED,     // S→C 플레이어 제거 (나가기·재접속 실패)
+     GAME_SNAPSHOT,
+-    SYNC_REQUEST
++    SYNC_REQUEST,
++    START_GAME          // C→S 방장의 수동 게임 시작 요청 (내용 없음)
+ }
+diff --git a/Assets/Scripts/Network/Protocol/Messages/RoomMessages.cs b/Assets/Scripts/Network/Protocol/Messages/RoomMessages.cs
+index 364e399..7d1aabf 100644
+--- a/Assets/Scripts/Network/Protocol/Messages/RoomMessages.cs
++++ b/Assets/Scripts/Network/Protocol/Messages/RoomMessages.cs
+@@ -27,6 +27,7 @@ public class ReadyRequest
+ // S→C ROOM_STATE  방 인원·준비 상태가 바뀔 때마다 전체를 다시 보낸다
+ public class RoomStateMessage
+ {
++    public string hostPlayerId; // 서버가 지정한 현재 방장 (최초 입장자 또는 승계자)
+     public string roomCode;
+     public string status;
+     public int currentPlayers;

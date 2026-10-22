@@ -1,0 +1,495 @@
+From commit: 5aedecb144482bd01f146f173198fa6f6cb66fae
+Contributor: Potato-Gamja (Gamja)
+Subject: [feat & fix] UI 교체 및 폰트 추가
+Original: https://github.com/Potato-Gamja/AugmentedYutNori/commit/5aedecb144482bd01f146f173198fa6f6cb66fae
+
+diff --git a/Assets/Scripts/Flow/GameFlowController.cs b/Assets/Scripts/Flow/GameFlowController.cs
+index 148e2bb..e3efd5c 100644
+--- a/Assets/Scripts/Flow/GameFlowController.cs
++++ b/Assets/Scripts/Flow/GameFlowController.cs
+@@ -844,7 +844,7 @@ public class GameFlowController : MonoBehaviour
+         List<AugmentDefinition> selection = new();
+         foreach (string id in ids)
+             selection.Add(augmentCatalog.Find(id));
+-        panel.Setup(selection, OnAugmentSelected);
++        panel.Setup(selection, OnAugmentSelected, augmentSelectionTeam, gameSession is RemoteGameSession);
+         uiManager.Open<AugmentSelectPanel>();
+         hud?.SetInstruction("증강을 선택하세요.");
+     }
+diff --git a/Assets/Scripts/Flow/LobbyController.cs b/Assets/Scripts/Flow/LobbyController.cs
+index 54b10fb..46fa2f3 100644
+--- a/Assets/Scripts/Flow/LobbyController.cs
++++ b/Assets/Scripts/Flow/LobbyController.cs
+@@ -1,4 +1,4 @@
+-﻿using System;
++using System;
+ using UnityEngine;
+ using UnityEngine.SceneManagement;
+ 
+@@ -43,7 +43,7 @@ public class LobbyController : MonoBehaviour
+         }
+ 
+         mainMenuPanel = uiManager.Open<MainMenuPanel>();
+-        lobbyPanel = uiManager.Get<LobbyPanel>();
++        lobbyPanel = uiManager.Open<LobbyPanel>();
+         roomPanel = uiManager.Get<RoomPanel>();
+         if (mainMenuPanel == null || lobbyPanel == null || roomPanel == null)
+         {
+@@ -68,6 +68,7 @@ public class LobbyController : MonoBehaviour
+         mainMenuPanel.AchievementRequested += OnAchievementRequested;
+         mainMenuPanel.SettingsRequested += OnSettingsRequested;
+         LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
++        lobbyPanel.SetNickname(coordinator?.LocalNickname);
+         coordinator?.RestoreWaitingRoom(this);
+         coordinator?.OfferReconnect(this);
+     }
+@@ -106,6 +107,7 @@ public class LobbyController : MonoBehaviour
+     {
+         uiManager?.Close<ReconnectPanel>();
+         uiManager?.Close<MainMenuPanel>();
++        uiManager?.Close<LobbyPanel>();
+         ReturnToLobby();
+         ReceiveError(reason);
+     }
+@@ -128,7 +130,7 @@ public class LobbyController : MonoBehaviour
+ 
+     private void OnPlayRequested()
+     {
+-        uiManager.Close<MainMenuPanel>();
++        uiManager.Open<MainMenuPanel>();
+         uiManager.Open<LobbyPanel>();
+         lobbyPanel.ShowStatus(string.Empty);
+         LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
+@@ -137,8 +139,8 @@ public class LobbyController : MonoBehaviour
+ 
+     private void OnMainMenuRequested()
+     {
+-        uiManager.Close<LobbyPanel>();
+         uiManager.Open<MainMenuPanel>();
++        uiManager.Open<LobbyPanel>();
+     }
+ 
+     private void OnGachaRequested() => uiManager?.Open<GachaPanel>();
+@@ -282,6 +284,7 @@ public class LobbyController : MonoBehaviour
+     public void ReturnToLobby()
+     {
+         uiManager.Close<RoomPanel>();
++        uiManager.Open<MainMenuPanel>();
+         uiManager.Open<LobbyPanel>();
+         lobbyPanel.SetBusy(false);
+         lobbyPanel.ShowStatus(string.Empty);
+diff --git a/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs b/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
+index 8757af4..3de8575 100644
+--- a/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
++++ b/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
+@@ -1,4 +1,4 @@
+-﻿using System;
++using System;
+ using System.Collections.Generic;
+ using System.Threading.Tasks;
+ using UnityEngine;
+@@ -72,6 +72,8 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+     public string LocalPlayerId => playerIdentity?.PlayerId ?? string.Empty;
+     public string LocalNickname => playerIdentity?.Nickname ?? string.Empty;
+     public int LocalGold => playerIdentity?.Gold ?? 0;
++    public string LocalIconId { get; private set; } = string.Empty;
++    public event Action LocalDisplayChanged;
+ 
+     private void Awake()
+     {
+@@ -308,6 +310,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+         await EnsurePlayer(LocalNickname);
+         GachaResultResponse response = await gachaApi.DrawAsync();
+         playerIdentity.ApplyGold(response.gold);
++        LocalDisplayChanged?.Invoke();
+         return response;
+     }
+ 
+@@ -329,6 +332,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+         await EnsurePlayer(LocalNickname);
+         ClaimAchievementResponse response = await achievementApi.ClaimAsync(achievementId);
+         playerIdentity.ApplyGold(response.gold);
++        LocalDisplayChanged?.Invoke();
+         return response;
+     }
+ 
+@@ -340,6 +344,8 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+         if (!string.IsNullOrWhiteSpace(response.nickname))
+             playerIdentity.ApplyNickname(response.nickname);
+         ActiveLobbyController?.SetLocalPlayer(LocalPlayerId, LocalNickname);
++        LocalIconId = response.iconId;
++        LocalDisplayChanged?.Invoke();
+         return response;
+     }
+ 
+@@ -466,6 +472,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+ 
+         playerIdentity.ApplyNickname(updatedNickname);
+         ActiveLobbyController?.SetLocalPlayer(playerIdentity.PlayerId, updatedNickname);
++        LocalDisplayChanged?.Invoke();
+         return updatedNickname;
+     }
+ 
+diff --git a/Assets/Scripts/Presentation/UI/AchievementItemView.cs b/Assets/Scripts/Presentation/UI/AchievementItemView.cs
+index c5ca77f..01f42a1 100644
+--- a/Assets/Scripts/Presentation/UI/AchievementItemView.cs
++++ b/Assets/Scripts/Presentation/UI/AchievementItemView.cs
+@@ -14,6 +14,9 @@ public class AchievementItemView : MonoBehaviour
+     [SerializeField] private TMP_Text rewardText;
+     [SerializeField] private Button claimButton;
+     [SerializeField] private TMP_Text claimButtonLabel;
++    [SerializeField] private Image claimableBorder;
++    [SerializeField] private GameObject claimedCheck;
++    [SerializeField] private Sprite claimReadySprite, claimDisabledSprite, claimBusySprite;
+ 
+     public event Action<AchievementItemView> ClaimClicked;
+ 
+@@ -59,12 +62,26 @@ public class AchievementItemView : MonoBehaviour
+         if (claimButtonLabel != null)
+         {
+             claimButtonLabel.text = Entry.claimed ? "받음" : canClaim ? (busy ? "받는 중" : "받기") : "진행 중";
+-            claimButtonLabel.color = canClaim ? Color.white : new Color(0.35f, 0.28f, 0.18f);
++            claimButtonLabel.color = canClaim && !busy ? Color.white : new Color32(168, 142, 110, 255);
++            claimButtonLabel.fontSize = canClaim ? 28 : 24;
++            claimButtonLabel.rectTransform.anchoredPosition = new Vector2(Entry.claimed ? 12 : 0, 0);
+         }
+         if (claimButton?.targetGraphic != null)
+-            claimButton.targetGraphic.color = canClaim
+-                ? new Color(0.12f, 0.58f, 0.36f)
+-                : Entry.claimed ? new Color(0.88f, 0.75f, 0.5f) : new Color(0.9f, 0.86f, 0.76f);
++        {
++            claimButton.targetGraphic.color = canClaim && !busy ? new Color32(145, 95, 48, 255) : Color.white;
++            if (claimReadySprite != null && claimDisabledSprite != null && claimBusySprite != null)
++            {
++                ((Image)claimButton.targetGraphic).sprite = canClaim ? claimReadySprite : claimDisabledSprite;
++                SpriteState state = claimButton.spriteState;
++                state.disabledSprite = canClaim ? claimBusySprite : claimDisabledSprite;
++                claimButton.spriteState = state;
++            }
++        }
++        if (claimableBorder != null) claimableBorder.gameObject.SetActive(canClaim);
++        if (claimedCheck != null) claimedCheck.SetActive(Entry.claimed);
++        if (nameText != null) nameText.color = Entry.claimed ? new Color32(168, 142, 110, 255) : new Color32(58, 38, 24, 255);
++        if (descriptionText != null) descriptionText.color = Entry.claimed ? new Color32(168, 142, 110, 255) : new Color32(122, 92, 62, 255);
++        if (progressFill != null) progressFill.color = Entry.claimed ? new Color32(203, 176, 138, 255) : new Color32(138, 90, 46, 255);
+     }
+ 
+     // 받기 성공 후 상태만 바꿔 다시 그린다
+diff --git a/Assets/Scripts/Presentation/UI/AchievementPanel.cs b/Assets/Scripts/Presentation/UI/AchievementPanel.cs
+index 04f56c3..c2eee77 100644
+--- a/Assets/Scripts/Presentation/UI/AchievementPanel.cs
++++ b/Assets/Scripts/Presentation/UI/AchievementPanel.cs
+@@ -136,7 +136,7 @@ public sealed class AchievementPanel : UIBase
+ 
+     private void ShowGold(int gold)
+     {
+-        if (goldText != null) goldText.text = $"보유 골드  {gold:N0}";
++        if (goldText != null) goldText.text = $"{gold:N0}";
+     }
+ 
+     private void ShowStatus(string message)
+diff --git a/Assets/Scripts/Presentation/UI/AugmentCardView.cs b/Assets/Scripts/Presentation/UI/AugmentCardView.cs
+index ca440cb..6d17758 100644
+--- a/Assets/Scripts/Presentation/UI/AugmentCardView.cs
++++ b/Assets/Scripts/Presentation/UI/AugmentCardView.cs
+@@ -3,8 +3,9 @@ using System.Collections.Generic;
+ using TMPro;
+ using UnityEngine;
+ using UnityEngine.UI;
++using UnityEngine.EventSystems;
+ 
+-public class AugmentCardView : MonoBehaviour
++public class AugmentCardView : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+ {
+     private static readonly string[] AugmentIds =
+     {
+@@ -16,11 +17,35 @@ public class AugmentCardView : MonoBehaviour
+     [SerializeField] private TextMeshProUGUI augumentName;
+     [SerializeField] private TextMeshProUGUI augmentDescription;
+     [SerializeField] private List<Sprite> augmentIcons = new();
++    [Header("표시")]
++    [SerializeField] private RectTransform visual;
++    [SerializeField] private Image categoryPill;
++    [SerializeField] private TMP_Text categoryLabel;
++    [SerializeField] private Image hoverBorder;
++    [SerializeField] private Image selectedBorder;
++    [SerializeField] private Image selectedGlow;
++    [SerializeField] private Image checkBadge;
++    [SerializeField] private Image checkMark;
++    [SerializeField] private Sprite[] teamCheckBadges;
+ 
+     private Button selectButton;
++    private bool hovered, selected;
++    public string AugmentId { get; private set; }
++
++    public static Color TeamColor(int team, bool dark = false)
++    {
++        string[] colors = dark ? new[] { "922A26", "1E478F", "1C6642", "8F5C00" }
++            : new[] { "D6403C", "2E6BD1", "2A9460", "E0950F" };
++        ColorUtility.TryParseHtmlString("#" + colors[Mathf.Clamp(team, 0, 3)], out Color color);
++        return color;
++    }
+ 
+     public void Init(AugmentDefinition definition, Action<string> onCardSelected = null)
+     {
++        AugmentId = definition.id;
++        hovered = false;
++        SetSelected(false);
++        ShowCategory(definition.id);
+         if (augmentIcon != null)
+         {
+             int iconIndex = Array.IndexOf(AugmentIds, definition.id);
+@@ -44,4 +69,66 @@ public class AugmentCardView : MonoBehaviour
+         selectButton.onClick.AddListener(() => onCardSelected(definition.id));
+         SoundManager.BindButtonClick(selectButton);
+     }
++
++    private void ShowCategory(string id)
++    {
++        if (categoryPill == null || categoryLabel == null) return;
++        string category, color;
++        switch (id)
++        {
++            case "Assassin": case "Hunter": category = "공격"; color = "94584E"; break;
++            case "Marathoner": case "Monk": case "Sprinter": category = "이동"; color = "6B8A6E"; break;
++            case "Loner": case "Pacifist": case "FriendShield": category = "방어"; color = "5B7A8C"; break;
++            case "Gambler": case "Rethrow": case "Contrarian": category = "운"; color = "8C6BA8"; break;
++            default: category = string.Empty; color = "A88E6E"; break;
++        }
++        categoryLabel.text = category;
++        categoryPill.rectTransform.sizeDelta = new Vector2(categoryLabel.preferredWidth + 36, categoryPill.rectTransform.sizeDelta.y);
++        ColorUtility.TryParseHtmlString("#" + color, out Color tint);
++        categoryPill.color = tint;
++        categoryPill.gameObject.SetActive(category.Length > 0);
++    }
++
++    public void SetTeam(int team)
++    {
++        Color color = TeamColor(team);
++        if (selectedBorder != null) selectedBorder.color = color;
++        if (selectedGlow != null) { color.a = 0.5f; selectedGlow.color = color; }
++        if (checkBadge != null && teamCheckBadges != null && teamCheckBadges.Length == 4)
++            checkBadge.sprite = teamCheckBadges[Mathf.Clamp(team, 0, 3)];
++        if (checkMark != null) checkMark.color = team == 3 ? new Color32(58, 38, 24, 255) : Color.white;
++    }
++
++    public void SetInput(bool enabled)
++    {
++        if (selectButton != null) selectButton.interactable = enabled;
++        if (!enabled) SetHovered(false);
++    }
++
++    public void SetSelected(bool value)
++    {
++        selected = value;
++        if (selectedBorder != null) selectedBorder.gameObject.SetActive(value);
++        if (selectedGlow != null) selectedGlow.gameObject.SetActive(value);
++        if (checkBadge != null) checkBadge.gameObject.SetActive(value);
++        if (hoverBorder != null) hoverBorder.gameObject.SetActive(!value && hovered);
++    }
++
++    public void SetHovered(bool value)
++    {
++        hovered = value;
++        if (hoverBorder != null) hoverBorder.gameObject.SetActive(value && !selected);
++    }
++
++    public void OnPointerEnter(PointerEventData eventData)
++    { if (selectButton != null && selectButton.IsInteractable()) SetHovered(true); }
++    public void OnPointerExit(PointerEventData eventData) => SetHovered(false);
++
++    private void Update()
++    {
++        if (visual == null) return;
++        Vector3 position = visual.localPosition;
++        position.y = Mathf.MoveTowards(position.y, hovered || selected ? 8 : 0, 80 * Time.unscaledDeltaTime);
++        visual.localPosition = position;
++    }
+ }
+diff --git a/Assets/Scripts/Presentation/UI/AugmentSelectPanel.cs b/Assets/Scripts/Presentation/UI/AugmentSelectPanel.cs
+index 55dd60e..eacbb5c 100644
+--- a/Assets/Scripts/Presentation/UI/AugmentSelectPanel.cs
++++ b/Assets/Scripts/Presentation/UI/AugmentSelectPanel.cs
+@@ -1,27 +1,55 @@
+ using System;
+ using System.Collections.Generic;
++using System.Collections;
++using TMPro;
+ using UnityEngine;
++using UnityEngine.UI;
+ 
+ public class AugmentSelectPanel : UIBase
+ {
+     [Header("UI 연결")]
+     [SerializeField] private GameObject augumentCardViewPrefab;
+     [SerializeField] private Transform augmentCardContainer;
++    [SerializeField] private TMP_Text titleText;
++    [SerializeField] private Image modalBorder;
+     
+     private IReadOnlyList<AugmentDefinition> choices;
+     private Action<string> onAugmentSelected;
++    private readonly List<AugmentCardView> cards = new();
++    private int selectionTeam;
++    private bool online;
++    private bool selectionPending;
++    private int selectionVersion;
++    private Coroutine selectionRoutine;
+ 
+     // GameRules가 만든 후보만 받아 표시하는 연결 API.
+     // UI가 AugmentPool이나 중복 선택 규칙을 직접 알지 않도록 한다.
+-    public void Setup(IReadOnlyList<AugmentDefinition> choices, Action<string> onAugmentSelected)
++    public void Setup(IReadOnlyList<AugmentDefinition> choices, Action<string> onAugmentSelected,
++        int selectionTeam = 0, bool online = false)
+     {
++        CancelPendingSelection();
+         this.choices = choices;
+         this.onAugmentSelected = onAugmentSelected;
++        this.selectionTeam = Mathf.Clamp(selectionTeam, 0, 3);
++        this.online = online;
+     }
+ 
+     protected override void OnOpen()
+     {
+-        foreach (Transform child in augmentCardContainer) Destroy(child.gameObject);
++        CancelPendingSelection();
++        foreach (Transform child in augmentCardContainer)
++        {
++            child.gameObject.SetActive(false);
++            Destroy(child.gameObject);
++        }
++        cards.Clear();
++        if (titleText != null)
++        {
++            string[] teamNames = { "빨강", "파랑", "초록", "노랑" };
++            titleText.text = online ? "직업을 고르세요" : $"{teamNames[selectionTeam]} 팀, 직업을 고르세요";
++            titleText.color = AugmentCardView.TeamColor(selectionTeam, true);
++        }
++        if (modalBorder != null) modalBorder.color = AugmentCardView.TeamColor(selectionTeam);
+ 
+         if (choices == null) return;
+         foreach (AugmentDefinition choice in choices)
+@@ -29,12 +57,42 @@ public class AugmentSelectPanel : UIBase
+             AugmentCardView card = Instantiate(augumentCardViewPrefab, augmentCardContainer)
+                 .GetComponent<AugmentCardView>();
+             card.Init(choice, OnCardSelected);
++            card.SetTeam(selectionTeam);
++            cards.Add(card);
+         }
+     }
+ 
+     private void OnCardSelected(string id)
+     {
++        if (selectionPending || !IsOpen) return;
++        selectionPending = true;
++        foreach (AugmentCardView card in cards)
++        {
++            card.SetInput(false);
++            card.SetSelected(card.AugmentId == id);
++        }
++        selectionRoutine = StartCoroutine(CompleteSelection(id, selectionVersion));
++    }
++
++    private IEnumerator CompleteSelection(string id, int version)
++    {
++        yield return new WaitForSecondsRealtime(0.3f);
++        if (!IsOpen || version != selectionVersion || !selectionPending) yield break;
++        Action<string> callback = onAugmentSelected;
++        selectionRoutine = null;
++        selectionPending = false;
+         Close();
+-        onAugmentSelected?.Invoke(id);
++        callback?.Invoke(id);
++    }
++
++    protected override void OnClose() => CancelPendingSelection();
++    private void OnDisable() => CancelPendingSelection();
++
++    private void CancelPendingSelection()
++    {
++        selectionVersion++;
++        selectionPending = false;
++        if (selectionRoutine != null) StopCoroutine(selectionRoutine);
++        selectionRoutine = null;
+     }
+ }
+diff --git a/Assets/Scripts/Presentation/UI/GachaPanel.cs b/Assets/Scripts/Presentation/UI/GachaPanel.cs
+index dc81a41..0c709ec 100644
+--- a/Assets/Scripts/Presentation/UI/GachaPanel.cs
++++ b/Assets/Scripts/Presentation/UI/GachaPanel.cs
+@@ -101,7 +101,7 @@ public sealed class GachaPanel : UIBase
+ 
+     private void ShowGold(int gold)
+     {
+-        if (goldText != null) goldText.text = $"보유 골드  {gold:N0}";
++        if (goldText != null) goldText.text = $"{gold:N0}";
+     }
+ 
+     private void ShowStatus(string message)
+diff --git a/Assets/Scripts/Presentation/UI/GachaResultView.cs b/Assets/Scripts/Presentation/UI/GachaResultView.cs
+index 8806e69..df42abd 100644
+--- a/Assets/Scripts/Presentation/UI/GachaResultView.cs
++++ b/Assets/Scripts/Presentation/UI/GachaResultView.cs
+@@ -10,6 +10,7 @@ public sealed class GachaResultView : UIBase
+     [SerializeField] private Image iconImage;
+     [SerializeField] private TMP_Text nameText;
+     [SerializeField] private TMP_Text resultText;
++    [SerializeField] private Image resultPill;
+     [SerializeField] private Button confirmButton;
+     [SerializeField] private float revealDuration = 0.35f;
+ 
+@@ -35,6 +36,8 @@ public sealed class GachaResultView : UIBase
+         if (nameText != null) nameText.text = iconName ?? result.iconId;
+         if (resultText != null)
+             resultText.text = result.duplicate ? $"이미 가진 아이콘이에요 (x{result.count})" : "NEW! 새 아이콘을 얻었어요";
++        if (resultPill != null) resultPill.color = result.duplicate
++            ? new Color32(243, 230, 207, 255) : new Color32(224, 149, 15, 255);
+ 
+         if (reveal != null) StopCoroutine(reveal);
+         reveal = StartCoroutine(Reveal());
+diff --git a/Assets/Scripts/Presentation/UI/ProfilePanel.cs b/Assets/Scripts/Presentation/UI/ProfilePanel.cs
+index 20351c7..d08b604 100644
+--- a/Assets/Scripts/Presentation/UI/ProfilePanel.cs
++++ b/Assets/Scripts/Presentation/UI/ProfilePanel.cs
+@@ -101,7 +101,7 @@ public sealed class ProfilePanel : UIBase
+         ownedIconIds.Clear();
+         selectedIconId = null;
+         ShowProfile(coordinator?.LocalPlayerId, coordinator?.LocalNickname);
+-        if (goldText != null) goldText.text = "보유 골드  —";
++        if (goldText != null) goldText.text = "—";
+         SetBusy(true);
+         ShowStatus("프로필과 보유 아이콘을 불러오는 중입니다.");
+         try
+@@ -135,7 +135,8 @@ public sealed class ProfilePanel : UIBase
+         if (nicknameText != null)
+             nicknameText.text = string.IsNullOrWhiteSpace(nickname) ? "닉네임 미설정" : nickname;
+         if (playerIdText != null)
+-            playerIdText.text = string.IsNullOrWhiteSpace(playerId) ? "플레이어 ID 없음" : $"플레이어 ID  {playerId}";
++            playerIdText.text = string.IsNullOrWhiteSpace(playerId) ? "플레이어 ID 없음"
++                : playerId.Length > 12 ? $"{playerId[..4]}…{playerId[^4..]}" : playerId;
+         if (profileIcon != null)
+         {
+             profileIcon.sprite = icon;
+@@ -154,7 +155,7 @@ public sealed class ProfilePanel : UIBase
+         Sprite icon = string.IsNullOrWhiteSpace(profile.iconId)
+             ? null : Resources.Load<Sprite>(ProfileIconCatalog.SpritePath(profile.iconId));
+         ShowProfile(coordinator?.LocalPlayerId, profile.nickname, icon);
+-        if (goldText != null) goldText.text = $"보유 골드  {profile.gold:N0}";
++        if (goldText != null) goldText.text = $"{profile.gold:N0}";
+         RefreshIconOptions();
+     }
+ 
+@@ -200,12 +201,12 @@ public sealed class ProfilePanel : UIBase
+             {
+                 option.button.interactable = !busy && owned && !selected;
+                 if (option.button.targetGraphic != null)
+-                    option.button.targetGraphic.color = selected
+-                        ? new Color(0.88f, 0.58f, 0.16f) : new Color(0.93f, 0.87f, 0.75f);
++                    option.button.targetGraphic.color = Color.white;
+             }
+             if (option.icon != null) option.icon.color = owned || selected ? Color.white : new Color(0.3f, 0.3f, 0.3f);
+             if (option.stateText != null)
+                 option.stateText.text = selected ? "사용 중" : owned ? "선택" : "미보유";
++            option.button?.GetComponent<YutNori.UI.Common.ProfileIconOptionPresentation>()?.Show(selected, owned);
+         }
+     }
+ 

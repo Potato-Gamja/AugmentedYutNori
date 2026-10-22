@@ -1,0 +1,833 @@
+From commit: 97b2f7578afdaf965f7bb1b61b5deb7e62aff7ea
+Contributor: Potato-Gamja (Gamja)
+Subject: [feat] 멀티플레이 클라이언트 구성 및 완주 연출 개선
+Original: https://github.com/Potato-Gamja/AugmentedYutNori/commit/97b2f7578afdaf965f7bb1b61b5deb7e62aff7ea
+
+diff --git a/Assets/Scripts/Flow/GameFlowController.cs b/Assets/Scripts/Flow/GameFlowController.cs
+index a65d850..9aca35d 100644
+--- a/Assets/Scripts/Flow/GameFlowController.cs
++++ b/Assets/Scripts/Flow/GameFlowController.cs
+@@ -75,6 +75,7 @@ public class GameFlowController : MonoBehaviour
+         }
+ 
+         OpenHud();
++        EnsurePieceViewsForSetup();
+         CreateCoreState();
+         var errors = setup.CheckScenePieces(pieceViews.Select(v => (v.Team, v.SlotIndex)));
+         if (errors.Count > 0)
+@@ -125,6 +126,10 @@ public class GameFlowController : MonoBehaviour
+         try
+         {
+             setup.Validate();
++            if (setup.teamCount > 4)
++                throw new ArgumentException($"클라이언트는 2~4팀만 지원합니다. (현재 {setup.teamCount})");
++            if (setup.piecesPerTeam > 4)
++                throw new ArgumentException($"현재 HUD는 팀당 1~4개의 말만 지원합니다. (현재 {setup.piecesPerTeam})");
+             return true;
+         }
+         catch (ArgumentException exception)
+@@ -154,9 +159,44 @@ public class GameFlowController : MonoBehaviour
+         hud.ThrowClicked += OnThrowButtonClicked;
+         hud.RethrowClicked += OnRethrowButtonClicked;
+         hud.WaitingPieceClicked += OnWaitingPieceClicked;
++        hud.ConfigurePlayers(setup.teamCount, setup.piecesPerTeam);
+         hud.SetRethrowVisible(false);
+     }
+ 
++    private void EnsurePieceViewsForSetup()
++    {
++        pieceViews.RemoveAll(view => view == null);
++
++        foreach (PieceView view in pieceViews)
++        {
++            bool used = view.Team >= 0 && view.Team < setup.teamCount &&
++                        view.SlotIndex >= 0 && view.SlotIndex < setup.piecesPerTeam;
++            view.gameObject.SetActive(used);
++        }
++
++        for (int team = 0; team < setup.teamCount; team++)
++        {
++            for (int slot = 0; slot < setup.piecesPerTeam; slot++)
++            {
++                if (pieceViews.Exists(view => view.Team == team && view.SlotIndex == slot)) continue;
++
++                PieceView source = pieceViews.Find(view => view.Team == 0 && view.SlotIndex == slot);
++                if (source == null) source = pieceViews.Find(view => view.SlotIndex == slot);
++                if (source == null)
++                {
++                    Debug.LogError($"[GameFlow] 팀 {team + 1}, 말 {slot + 1}을 만들 기준 PieceView가 없습니다.", this);
++                    continue;
++                }
++
++                PieceView created = Instantiate(source, source.transform.parent);
++                created.ConfigureRuntimeIdentity(team, slot, GameHudPanel.GetTeamColor(team));
++                pieceViews.Add(created);
++            }
++        }
++
++        pieceViews.RemoveAll(view => !view.gameObject.activeSelf);
++    }
++    
+     private void CreateCoreState()
+     {
+         teamCount = setup.teamCount;
+@@ -175,7 +215,7 @@ public class GameFlowController : MonoBehaviour
+         // Installer가 없는 기존 단독 씬은 로컬 세션으로 계속 실행한다.
+         // 서버 게임은 GameInstaller가 주입한 Factory를 통해 RemoteGameSession을 생성한다.
+         gameSession = sessionFactory != null
+-            ? sessionFactory.Create(gameRules, gameEvents)
++            ? sessionFactory.Create(gameRules, gameEvents, gameState, turnManager)
+             : new LocalGameSession(gameRules, gameEvents);
+     }
+ 
+@@ -507,6 +547,10 @@ public class GameFlowController : MonoBehaviour
+         var points = new List<Vector3>();
+         foreach (BoardNode node in result.Path.Nodes)
+         {
++            // 골인은 참먹이(보이는 출발 칸)를 통과한 뒤 판 밖 Start 노드로 처리된다.
++            // 이동 연출은 참먹이에서 끝내고, 규칙상의 Start 이동과 완주 판정은 그대로 유지한다.
++            if (result.Path.IsFinished && node.Type == BoardNodeType.Start) continue;
++
+             NodeView view = boardView.GetView(node);
+             if (view != null) points.Add(view.Position);
+         }
+diff --git a/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs b/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
+index dfacd4f..f089da4 100644
+--- a/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
++++ b/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
+@@ -11,7 +11,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+     [SerializeField] private LobbyController lobbyController;
+     [SerializeField] private WebSocketClient webSocketClient;
+     [SerializeField] private string apiBaseUrl = "http://localhost:8080";
+-    [SerializeField] private string webSocketUrl = "ws://localhost:8080/ws";
++    [SerializeField] private string webSocketUrl = "ws://localhost:8080/ws/rooms/{roomCode}";
+     [SerializeField] private string playerPrefsKeyPrefix = "";
+ 
+     private static LobbyNetworkCoordinator instance;
+@@ -45,6 +45,10 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+         playerIdentity = new PlayerIdentity(playerPrefsKeyPrefix);
+         webSocketClient.Url = webSocketUrl;
+ 
++        // 게임 씬의 GameInstaller가 같은 WebSocket 연결로 RemoteGameSession을 만들 수 있게 등록한다.
++        GameInstaller.RegisterRemoteSessionFactory((rules, events, state, turn, setup) =>
++            new RemoteGameSession(webSocketClient, rules, events, state, turn, setup));
++
+         webSocketClient.Connected += OnConnected;
+         webSocketClient.Disconnected += OnDisconnected;
+         webSocketClient.Error += OnSocketError;
+@@ -154,15 +158,30 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+         pendingNickname = nickname?.Trim();
+         leaveRequested = false;
+ 
+-        // 서버 계약 확인 필요:
+-        // 현재는 공통 /ws 주소에 토큰으로 연결한 뒤 JOIN_ROOM payload로 roomCode를 보낸다.
+-        // 서버가 /ws/rooms/{roomCode} 형식을 사용하면 여기서 WebSocketClient.Url을 조합한다.
++        if (string.IsNullOrEmpty(pendingRoomCode))
++        {
++            lobbyController?.ReceiveError("방 코드를 입력해 주세요.");
++            return;
++        }
++
++        // 서버 확정 주소: ws://{host}/ws/rooms/{roomCode}
++        // webSocketUrl에는 방 코드를 제외한 ws://{host}/ws까지만 설정한다.
++        webSocketClient.Url = BuildRoomWebSocketUrl(pendingRoomCode);
+         if (webSocketClient.IsConnected)
+             SendJoinRoom();
+         else
+             webSocketClient.Connect(playerIdentity.Token);
+     }
+ 
++    private string BuildRoomWebSocketUrl(string roomCode)
++    {
++        string escapedRoomCode = Uri.EscapeDataString(roomCode);
++        if (webSocketUrl.Contains("{roomCode}"))
++            return webSocketUrl.Replace("{roomCode}", escapedRoomCode);
++
++        return $"{webSocketUrl.TrimEnd('/')}/rooms/{escapedRoomCode}";
++    }
++
+     private void OnConnected()
+     {
+         SendJoinRoom();
+diff --git a/Assets/Scripts/Network/Protocol/MessageType.cs b/Assets/Scripts/Network/Protocol/MessageType.cs
+index 2a08c55..cfa666a 100644
+--- a/Assets/Scripts/Network/Protocol/MessageType.cs
++++ b/Assets/Scripts/Network/Protocol/MessageType.cs
+@@ -20,6 +20,7 @@ public enum MessageType
+     MOVE_APPLIED,       // S→C 확정된 이동 (상대 기기는 이걸로 재계산)
+     TURN_CHANGED,       // S→C 턴 변경
+     GAME_ENDED,         // S→C 게임 종료
++    STATE_HASH,         // C→S MOVE_APPLIED 적용 후 내 상태 해시 (서버에서 양쪽 비교)
+ 
+     // ── 증강 ──
+     AUGMENT_CHOICES,    // S→C 증강 후보
+diff --git a/Assets/Scripts/Network/Protocol/Messages/GameMessages.cs b/Assets/Scripts/Network/Protocol/Messages/GameMessages.cs
+index 2d090b9..3f2f2ef 100644
+--- a/Assets/Scripts/Network/Protocol/Messages/GameMessages.cs
++++ b/Assets/Scripts/Network/Protocol/Messages/GameMessages.cs
+@@ -86,3 +86,10 @@ public enum GameEndReason
+     FORFEIT,        // 기권 / 방 나감
+     DISCONNECTED,   // 재접속 유예시간 초과
+ }
++
++// C→S STATE_HASH
++public class StateHashReport
++{
++    public long seq;
++    public string stateHash;
++}
+diff --git a/Assets/Scripts/Network/RemoteGameSession.cs b/Assets/Scripts/Network/RemoteGameSession.cs
+new file mode 100644
+index 0000000..f4e6854
+--- /dev/null
++++ b/Assets/Scripts/Network/RemoteGameSession.cs
+@@ -0,0 +1,399 @@
++using System;
++using System.Collections.Generic;
++
++/// <summary>
++/// IGameSession 요청을 WebSocket 메시지로 보내고, 서버가 확정한 메시지를 Core와 화면에 반영한다.
++/// WebSocket 연결 수명과 로비 메시지는 LobbyNetworkCoordinator가 담당한다.
++///
++/// 서버 담당 확인 사항:
++/// - 방 전체 broadcast는 seq를 1씩 증가시킨다. PONG/개인 ERROR처럼 seq=0인 메시지는 순서 검사에서 제외한다.
++/// - GAME_START의 teamCount는 2~4, localTeam은 0~teamCount-1로 보낸다.
++/// - THROW_RESULT/MOVE_APPLIED/AUGMENT_SELECTED에는 행동한 team을 반드시 포함한다.
++/// - MOVE는 현재 클라이언트 선적용 결과(MoveReport)를 전송하고, 서버의 MOVE_APPLIED를 최종 확정으로 취급한다.
++/// - MOVE 거절 또는 seq 누락 뒤 완전 복구는 향후 snapshot/RECONNECT 메시지 계약이 필요하다.
++/// </summary>
++public sealed class RemoteGameSession : IGameSession, IDisposable
++{
++    private const string RethrowAugmentId = "Rethrow";
++
++    private readonly WebSocketClient socket;
++    private readonly GameRules rules;
++    private readonly GameEvents gameEvents;
++    private readonly GameState gameState;
++    private readonly TurnManager turnManager;
++    private readonly GameSetup setup;
++
++    private bool commandPending;
++    private bool hasReceivedSequence;
++    private long lastSequence;
++    private MoveResult pendingLocalMove;
++    private int pendingMovePieceId = -1;
++    private int pendingMoveDestinationId = -1;
++
++    public bool IsCommandPending => commandPending;
++
++    public event Action<YutThrowOutcome> Thrown;
++    public event Action<MoveResult> Moved;
++    public event Action<int> TurnChanged;
++    public event Action<int, IReadOnlyList<string>> AugmentChoices;
++    public event Action<int, IAugment> AugmentSelected;
++    public event Action<int> GameEnded;
++    public event Action<string> RequestRejected;
++
++    public RemoteGameSession(
++        WebSocketClient socket,
++        GameRules rules,
++        GameEvents gameEvents,
++        GameState gameState,
++        TurnManager turnManager,
++        GameSetup setup)
++    {
++        this.socket = socket ?? throw new ArgumentNullException(nameof(socket));
++        this.rules = rules ?? throw new ArgumentNullException(nameof(rules));
++        this.gameEvents = gameEvents ?? throw new ArgumentNullException(nameof(gameEvents));
++        this.gameState = gameState ?? throw new ArgumentNullException(nameof(gameState));
++        this.turnManager = turnManager ?? throw new ArgumentNullException(nameof(turnManager));
++        this.setup = setup ?? throw new ArgumentNullException(nameof(setup));
++
++        socket.MessageReceived += OnMessageReceived;
++        socket.Error += OnSocketError;
++        socket.Disconnected += OnDisconnected;
++    }
++
++    public void Dispose()
++    {
++        socket.MessageReceived -= OnMessageReceived;
++        socket.Error -= OnSocketError;
++        socket.Disconnected -= OnDisconnected;
++    }
++
++    public void RequestThrow()
++    {
++        SendCommand(MessageType.THROW_REQUEST);
++    }
++
++    public void RequestRethrow()
++    {
++        SendCommand(MessageType.RETHROW_REQUEST, new RethrowRequest
++        {
++            augmentId = RethrowAugmentId,
++        });
++    }
++
++    public void RequestAugment(string augmentId)
++    {
++        if (string.IsNullOrWhiteSpace(augmentId))
++        {
++            Reject("선택할 증강 ID가 없습니다.");
++            return;
++        }
++
++        SendCommand(MessageType.SELECT_AUGMENT, new SelectAugmentRequest
++        {
++            augmentId = augmentId,
++        });
++    }
++
++    public void RequestMove(int pieceId, int resultIndex, int destinationNodeId)
++    {
++        if (!CanSendCommand()) return;
++
++        MoveOption? selected = FindMoveOption(pieceId, resultIndex, destinationNodeId);
++        if (!selected.HasValue)
++        {
++            Reject("현재 상태에서 선택한 이동을 적용할 수 없습니다.");
++            return;
++        }
++
++        MoveResult result = null;
++        void CaptureMove(MoveResult moved) => result = moved;
++
++        gameEvents.PieceMoved += CaptureMove;
++        bool moved;
++        try
++        {
++            // 현재 서버 계약의 MOVE에는 이동 후 MoveReport가 포함된다.
++            // 따라서 요청 측 Core에 먼저 적용해 보고 보고서를 만든 뒤 전송한다.
++            // 서버 거절 뒤 상태 복구는 RECONNECT/snapshot 계약이 추가될 때 이 경계에서 처리한다.
++            moved = rules.MovePiece(pieceId, resultIndex, destinationNodeId);
++        }
++        finally
++        {
++            gameEvents.PieceMoved -= CaptureMove;
++        }
++
++        if (!moved || result == null)
++        {
++            Reject("선택한 말을 이동할 수 없습니다.");
++            return;
++        }
++
++        MoveReport report = rules.BuildMoveReport(result);
++        MoveMessage message = MoveMessage.From(result.ToCommand(), report);
++        if (!socket.Send(MessageType.MOVE, message))
++        {
++            Reject("이동 요청을 서버에 보내지 못했습니다. 상태를 다시 동기화해 주세요.");
++            return;
++        }
++
++        pendingLocalMove = result;
++        pendingMovePieceId = pieceId;
++        pendingMoveDestinationId = destinationNodeId;
++        commandPending = true;
++    }
++
++    private void OnMessageReceived(WsEnvelope envelope)
++    {
++        if (envelope == null || !AcceptSequence(envelope)) return;
++
++        try
++        {
++            switch (envelope.type)
++            {
++                case MessageType.THROW_RESULT:
++                    ApplyThrow(MessageSerializer.ReadPayload<ThrowResultMessage>(envelope));
++                    break;
++                case MessageType.MOVE_APPLIED:
++                    ApplyMove(MessageSerializer.ReadPayload<MoveAppliedMessage>(envelope), envelope.seq);
++                    break;
++                case MessageType.TURN_CHANGED:
++                    ApplyTurn(MessageSerializer.ReadPayload<TurnChangedMessage>(envelope));
++                    break;
++                case MessageType.AUGMENT_CHOICES:
++                    ApplyAugmentChoices(MessageSerializer.ReadPayload<AugmentChoicesMessage>(envelope));
++                    break;
++                case MessageType.AUGMENT_SELECTED:
++                    ApplyAugmentSelected(MessageSerializer.ReadPayload<AugmentSelectedMessage>(envelope));
++                    break;
++                case MessageType.GAME_ENDED:
++                    ApplyGameEnded(MessageSerializer.ReadPayload<GameEndedMessage>(envelope));
++                    break;
++                case MessageType.ERROR:
++                    ErrorMessage error = MessageSerializer.ReadPayload<ErrorMessage>(envelope);
++                    commandPending = false;
++                    Reject(error?.message ?? error?.code ?? "서버가 요청을 거절했습니다.");
++                    break;
++            }
++        }
++        catch (Exception exception)
++        {
++            commandPending = false;
++            Reject($"서버 메시지를 적용하지 못했습니다: {exception.Message}");
++        }
++    }
++
++    private void ApplyThrow(ThrowResultMessage message)
++    {
++        if (message == null) throw new InvalidOperationException("THROW_RESULT 내용이 없습니다.");
++        if (message.team != turnManager.CurrentTeam)
++            throw new InvalidOperationException($"현재 팀과 던진 팀이 다릅니다. Current={turnManager.CurrentTeam}, Server={message.team}");
++
++        YutThrowOutcome outcome;
++        if (message.isRethrow)
++        {
++            if (!rules.ApplyRethrow(message.sticks, message.result))
++                throw new InvalidOperationException("서버 재던지기 결과를 적용할 수 없습니다.");
++            outcome = new YutThrowOutcome(message.sticks, message.result);
++        }
++        else
++        {
++            outcome = rules.ApplyThrow(message.sticks, message.result);
++        }
++
++        commandPending = false;
++        Thrown?.Invoke(outcome);
++    }
++
++    private void ApplyMove(MoveAppliedMessage message, long sequence)
++    {
++        if (message == null) throw new InvalidOperationException("MOVE_APPLIED 내용이 없습니다.");
++
++        MoveResult result;
++        bool isPendingLocalMove = pendingLocalMove != null &&
++                                  message.team == setup.localTeam &&
++                                  message.pieceId == pendingMovePieceId &&
++                                  message.destinationNodeId == pendingMoveDestinationId;
++
++        if (isPendingLocalMove)
++        {
++            result = pendingLocalMove;
++            ClearPendingMove();
++            commandPending = false;
++        }
++        else
++        {
++            int resultIndex = FindStoredResultIndex(message.moveCount);
++            if (resultIndex < 0)
++                throw new InvalidOperationException($"{message.moveCount}칸 이동에 사용할 저장 결과가 없습니다.");
++
++            result = null;
++            void CaptureMove(MoveResult moved) => result = moved;
++            gameEvents.PieceMoved += CaptureMove;
++            try
++            {
++                if (!rules.MovePiece(message.pieceId, resultIndex, message.destinationNodeId))
++                    throw new InvalidOperationException("서버가 확정한 이동을 Core에서 재현할 수 없습니다.");
++            }
++            finally
++            {
++                gameEvents.PieceMoved -= CaptureMove;
++            }
++        }
++
++        Moved?.Invoke(result);
++        ReportStateHash(sequence, message.stateHash);
++    }
++
++    private void ApplyTurn(TurnChangedMessage message)
++    {
++        if (message == null) throw new InvalidOperationException("TURN_CHANGED 내용이 없습니다.");
++        turnManager.ApplyServerTurn(message.team, message.remainingThrows);
++        commandPending = false;
++        ClearPendingMove();
++        TurnChanged?.Invoke(message.team);
++    }
++
++    private void ApplyAugmentChoices(AugmentChoicesMessage message)
++    {
++        if (message == null) throw new InvalidOperationException("AUGMENT_CHOICES 내용이 없습니다.");
++        rules.SetAugmentChoices(message.team, message.augmentIds);
++        AugmentChoices?.Invoke(message.team, message.augmentIds);
++    }
++
++    private void ApplyAugmentSelected(AugmentSelectedMessage message)
++    {
++        if (message == null) throw new InvalidOperationException("AUGMENT_SELECTED 내용이 없습니다.");
++        IAugment augment = rules.SelectAugment(message.team, message.augmentId);
++        if (message.team == setup.localTeam) commandPending = false;
++        AugmentSelected?.Invoke(message.team, augment);
++    }
++
++    private void ApplyGameEnded(GameEndedMessage message)
++    {
++        if (message == null) throw new InvalidOperationException("GAME_ENDED 내용이 없습니다.");
++        gameState.WinnerTeam = message.winnerTeam;
++        commandPending = false;
++        GameEnded?.Invoke(message.winnerTeam);
++    }
++
++    private void ReportStateHash(long sequence, string serverHash)
++    {
++        string localHash = StateHasher.HashHex(gameState, turnManager);
++        socket.Send(MessageType.STATE_HASH, new StateHashReport
++        {
++            seq = sequence,
++            stateHash = localHash,
++        });
++
++        if (!string.IsNullOrEmpty(serverHash) && !string.Equals(localHash, serverHash, StringComparison.Ordinal))
++            Reject($"게임 상태가 서버와 다릅니다. Local={localHash}, Server={serverHash}");
++    }
++
++    private MoveOption? FindMoveOption(int pieceId, int resultIndex, int destinationNodeId)
++    {
++        foreach (MoveOption option in rules.GetMoveOptions(pieceId))
++        {
++            if (option.ResultIndex == resultIndex && option.DestinationNodeId == destinationNodeId)
++                return option;
++        }
++        return null;
++    }
++
++    private int FindStoredResultIndex(int moveCount)
++    {
++        for (int i = 0; i < gameState.StoredResults.Count; i++)
++        {
++            if (gameState.StoredResults[i].Steps() == moveCount) return i;
++        }
++        return -1;
++    }
++
++    private bool AcceptSequence(WsEnvelope envelope)
++    {
++        // seq 0은 PONG/ERROR 같은 개인 메시지이므로 방 broadcast 순서 검사에서 제외한다.
++        // 재접속 시 첫 broadcast seq가 1보다 클 수 있어 첫 양수 seq는 기준값으로 받아들인다.
++        // 서버가 GAME_START에 기준 seq를 추가하면 이 초기화도 해당 값으로 교체할 것.
++        if (envelope.seq == 0) return true;
++
++        if (!hasReceivedSequence)
++        {
++            hasReceivedSequence = true;
++            lastSequence = envelope.seq;
++            return true;
++        }
++
++        if (envelope.seq <= lastSequence) return false;
++        if (envelope.seq != lastSequence + 1)
++        {
++            Reject($"서버 메시지 순서가 끊겼습니다. Last={lastSequence}, Received={envelope.seq}");
++            return false;
++        }
++
++        lastSequence = envelope.seq;
++        return true;
++    }
++
++    private void SendCommand(MessageType type)
++    {
++        if (!CanSendCommand()) return;
++        if (!socket.Send(type))
++        {
++            Reject("요청을 서버에 보내지 못했습니다.");
++            return;
++        }
++        commandPending = true;
++    }
++
++    private void SendCommand<T>(MessageType type, T payload)
++    {
++        if (!CanSendCommand()) return;
++        if (!socket.Send(type, payload))
++        {
++            Reject("요청을 서버에 보내지 못했습니다.");
++            return;
++        }
++        commandPending = true;
++    }
++
++    private bool CanSendCommand()
++    {
++        if (commandPending)
++        {
++            Reject("이전 요청의 서버 응답을 기다리고 있습니다.");
++            return false;
++        }
++        if (!socket.IsConnected)
++        {
++            Reject("서버에 연결되어 있지 않습니다.");
++            return false;
++        }
++        if (!setup.CanControl(turnManager.CurrentTeam))
++        {
++            Reject("현재 조작할 수 있는 팀의 차례가 아닙니다.");
++            return false;
++        }
++        return true;
++    }
++
++    private void OnSocketError(string message)
++    {
++        commandPending = false;
++        Reject($"서버 연결 오류: {message}");
++    }
++
++    private void OnDisconnected(bool byUser)
++    {
++        commandPending = false;
++        ClearPendingMove();
++        if (!byUser) Reject("서버 연결이 끊어졌습니다.");
++    }
++
++    private void ClearPendingMove()
++    {
++        pendingLocalMove = null;
++        pendingMovePieceId = -1;
++        pendingMoveDestinationId = -1;
++    }
++
++    private void Reject(string message) => RequestRejected?.Invoke(message);
++}
+diff --git a/Assets/Scripts/Presentation/Piece/PieceView.cs b/Assets/Scripts/Presentation/Piece/PieceView.cs
+index f5b9fdd..38df158 100644
+--- a/Assets/Scripts/Presentation/Piece/PieceView.cs
++++ b/Assets/Scripts/Presentation/Piece/PieceView.cs
+@@ -65,13 +65,13 @@ private void Awake()
+         normalColor = spriteRenderer.color;
+         if (availableGlowSprite != null)
+         {
+-            selectedFloor = CreateEffectRenderer("SelectedFloor", selectedFloorSprite, -3);
+-            selectedFloorShadow = CreateEffectRenderer("SelectedFloorShadow", selectedFloorShadowSprite, -2);
+-            availableGlow = CreateEffectRenderer("AvailableGlow", availableGlowSprite, -1);
+-            selectedRing = CreateEffectRenderer("SelectedRing", selectedRingSprite, 1);
++            selectedFloor = FindOrCreateEffectRenderer("SelectedFloor", selectedFloorSprite, -3);
++            selectedFloorShadow = FindOrCreateEffectRenderer("SelectedFloorShadow", selectedFloorShadowSprite, -2);
++            availableGlow = FindOrCreateEffectRenderer("AvailableGlow", availableGlowSprite, -1);
++            selectedRing = FindOrCreateEffectRenderer("SelectedRing", selectedRingSprite, 1);
+         }
+-        else highlightOutline = CreateHighlightOutline();
+-        stackText = CreateStackText();
++        else highlightOutline = FindOrCreateHighlightOutline();
++        stackText = transform.Find("StackCount")?.GetComponent<TextMesh>() ?? CreateStackText();
+         SetStackCount(1);
+         RefreshHighlight();
+     }
+@@ -85,6 +85,20 @@ public void Bind(Piece piece)
+         SetWorldVisible(!piece.IsWaiting);
+     }
+ 
++    /// <summary>
++    /// GAME_START에서 3·4팀을 받은 경우 씬에 없는 PieceView 복제본의 고정 ID와 표시색을 지정한다.
++    /// 서버의 pieceId 규칙은 GameSetup.PieceId(team, slot)과 같아야 한다.
++    /// </summary>
++    public void ConfigureRuntimeIdentity(int configuredTeam, int configuredSlot, Color teamColor)
++    {
++        team = configuredTeam;
++        slotIndex = configuredSlot;
++        name = $"Piece_Team{configuredTeam + 1}_{configuredSlot}";
++        normalColor = teamColor;
++        if (spriteRenderer != null) spriteRenderer.color = teamColor;
++        RefreshHighlight();
++    }
++
+     // 잡혔을 때 대기석으로 돌아감
+ public void ReturnHome()
+     {
+@@ -223,6 +237,12 @@ public bool Contains(Vector3 worldPosition)
+         return outline;
+     }
+ 
++    private SpriteRenderer FindOrCreateHighlightOutline()
++    {
++        SpriteRenderer existing = spriteRenderer.transform.Find("TurnHighlightOutline")?.GetComponent<SpriteRenderer>();
++        return existing != null ? existing : CreateHighlightOutline();
++    }
++
+ 
+ // P0 아트는 같은 캔버스와 Pivot을 사용하므로 로컬 좌표 0에서 정확히 겹친다.
+     private SpriteRenderer CreateEffectRenderer(string objectName, Sprite sprite, int orderOffset)
+@@ -238,6 +258,12 @@ public bool Contains(Vector3 worldPosition)
+         return renderer;
+     }
+ 
++    private SpriteRenderer FindOrCreateEffectRenderer(string objectName, Sprite sprite, int orderOffset)
++    {
++        SpriteRenderer existing = spriteRenderer.transform.Find(objectName)?.GetComponent<SpriteRenderer>();
++        return existing != null ? existing : CreateEffectRenderer(objectName, sprite, orderOffset);
++    }
++
+ 
+ /// <summary>
+     /// 대기석은 PlayerPanel UI가 대신 표시하므로 월드 스프라이트의 중복 노출을 제어한다.
+diff --git a/Assets/Scripts/Presentation/UI/GameHudPanel.cs b/Assets/Scripts/Presentation/UI/GameHudPanel.cs
+index 658fc0b..5fe110a 100644
+--- a/Assets/Scripts/Presentation/UI/GameHudPanel.cs
++++ b/Assets/Scripts/Presentation/UI/GameHudPanel.cs
+@@ -137,6 +137,11 @@ public class GameHudPanel : UIBase
+     }
+     public void SetTimerRunning(bool value) => turnView?.SetTimerRunning(value);
+ 
++    public void ConfigurePlayers(int teamCount, int piecesPerTeam)
++    {
++        playerView?.Configure(teamCount, piecesPerTeam);
++    }
++
+     public void SetPlayerState(
+         int team,
+         int waiting,
+diff --git a/Assets/Scripts/Presentation/UI/PlayerStatusView.cs b/Assets/Scripts/Presentation/UI/PlayerStatusView.cs
+index 0d93a60..4325f92 100644
+--- a/Assets/Scripts/Presentation/UI/PlayerStatusView.cs
++++ b/Assets/Scripts/Presentation/UI/PlayerStatusView.cs
+@@ -10,17 +10,34 @@ using UnityEngine.UI;
+ /// </summary>
+ public sealed class PlayerStatusView : MonoBehaviour
+ {
+-    private const int PieceSlotCount = 4;
++    private const int MaxTeamCount = 4;
++    private const int MaxPieceSlotCount = 4;
+     private const int AugmentSlotCount = 3;
++    private int activeTeamCount = 2;
++    private int pieceSlotCount = MaxPieceSlotCount;
++    private Action<int, int> waitingPieceClicked;
++
++    public void Configure(int teamCount, int piecesPerTeam)
++    {
++        activeTeamCount = Mathf.Clamp(teamCount, 2, MaxTeamCount);
++        pieceSlotCount = Mathf.Clamp(piecesPerTeam, 1, MaxPieceSlotCount);
++        EnsureFourPlayerPanels();
++
++        for (int team = 0; team < MaxTeamCount; team++)
++            ConfigureSeat(team, team < activeTeamCount);
++
++        if (waitingPieceClicked != null) BindWaitingPieceClicks(waitingPieceClicked);
++    }
+ 
+     public void BindWaitingPieceClicks(Action<int, int> onClicked)
+     {
+-        for (int team = 0; team < 4; team++)
++        waitingPieceClicked = onClicked;
++        for (int team = 0; team < MaxTeamCount; team++)
+         {
+             Transform panel = FindPanel(team);
+             if (panel == null) continue;
+ 
+-            for (int slotIndex = 0; slotIndex < PieceSlotCount; slotIndex++)
++            for (int slotIndex = 0; slotIndex < MaxPieceSlotCount; slotIndex++)
+             {
+                 Transform slot = panel.Find($"PieceSlot_{slotIndex}");
+                 if (slot == null) continue;
+@@ -36,7 +53,8 @@ public sealed class PlayerStatusView : MonoBehaviour
+                 int capturedTeam = team;
+                 int capturedSlot = slotIndex;
+                 button.onClick.RemoveAllListeners();
+-                button.onClick.AddListener(() => onClicked?.Invoke(capturedTeam, capturedSlot));
++                button.interactable = capturedTeam < activeTeamCount && capturedSlot < pieceSlotCount;
++                button.onClick.AddListener(() => waitingPieceClicked?.Invoke(capturedTeam, capturedSlot));
+             }
+         }
+     }
+@@ -50,20 +68,23 @@ public sealed class PlayerStatusView : MonoBehaviour
+         if (waitingLabel != null) waitingLabel.text = $"WAITING {waiting}  /  BOARD {onBoard}";
+ 
+         TMP_Text finishLabel = panel.Find("FinishLabel")?.GetComponent<TMP_Text>();
+-        if (finishLabel != null) finishLabel.text = $"FINISHED {finished}/{PieceSlotCount}";
++        if (finishLabel != null) finishLabel.text = $"FINISHED {finished}/{pieceSlotCount}";
+ 
+-        for (int i = 0; i < PieceSlotCount; i++)
++        for (int i = 0; i < MaxPieceSlotCount; i++)
+         {
+             Transform waitingSlot = panel.Find($"PieceSlot_{i}");
+             Transform piece = waitingSlot != null ? waitingSlot.Find("Piece") : null;
+-            if (piece != null) piece.gameObject.SetActive(i < waiting);
++            if (piece != null) piece.gameObject.SetActive(i < pieceSlotCount && i < waiting);
+ 
+             Image finishImage = panel.Find($"FinishSlot_{i}")?.GetComponent<Image>();
+             if (finishImage != null)
++            {
++                finishImage.gameObject.SetActive(i < pieceSlotCount);
+                 finishImage.color = i < finished
+                     ? TurnHudView.GetTeamColor(team)
+                     : new Color32(241, 226, 196, 255);
+             }
++        }
+ 
+         for (int i = 0; i < AugmentSlotCount; i++)
+         {
+@@ -76,12 +97,12 @@ public sealed class PlayerStatusView : MonoBehaviour
+ 
+     public void SetSelectedWaitingPiece(int team, int slotIndex)
+     {
+-        for (int panelTeam = 0; panelTeam < 4; panelTeam++)
++        for (int panelTeam = 0; panelTeam < MaxTeamCount; panelTeam++)
+         {
+             Transform panel = FindPanel(panelTeam);
+             if (panel == null) continue;
+ 
+-            for (int i = 0; i < PieceSlotCount; i++)
++            for (int i = 0; i < MaxPieceSlotCount; i++)
+             {
+                 Image slotImage = panel.Find($"PieceSlot_{i}")?.GetComponent<Image>();
+                 if (slotImage == null) continue;
+@@ -94,7 +115,7 @@ public sealed class PlayerStatusView : MonoBehaviour
+ 
+     public void SetActiveTeam(int activeTeam)
+     {
+-        for (int team = 0; team < 4; team++)
++        for (int team = 0; team < MaxTeamCount; team++)
+         {
+             Transform panel = FindPanel(team);
+             if (panel == null) continue;
+@@ -118,6 +139,59 @@ public sealed class PlayerStatusView : MonoBehaviour
+         };
+     }
+ 
++    private void EnsureFourPlayerPanels()
++    {
++        Transform left = FindPanel(0);
++        Transform right = FindPanel(1);
++        if (left == null || right == null) return;
++
++        if (FindPanel(2) == null)
++        {
++            Transform panel = Instantiate(left.gameObject, transform).transform;
++            panel.name = "PlayerPanel_3";
++        }
++        if (FindPanel(3) == null)
++        {
++            Transform panel = Instantiate(right.gameObject, transform).transform;
++            panel.name = "PlayerPanel_4";
++        }
++
++        PlacePanel(FindPanel(0), false, true);
++        PlacePanel(FindPanel(1), true, true);
++        PlacePanel(FindPanel(2), false, false);
++        PlacePanel(FindPanel(3), true, false);
++    }
++
++    private void ConfigureSeat(int team, bool occupied)
++    {
++        Transform panel = FindPanel(team);
++        if (panel == null) return;
++        panel.gameObject.SetActive(true); // 2·3인에서도 남은 자리를 빈 좌석으로 표시한다.
++
++        TMP_Text headerLabel = panel.Find("Header")?.GetComponentInChildren<TMP_Text>(true);
++        if (headerLabel != null)
++        {
++            headerLabel.text = occupied ? $"PLAYER {team + 1}" : "EMPTY";
++            headerLabel.color = occupied ? TurnHudView.GetTeamColor(team) : new Color32(150, 140, 125, 255);
++        }
++
++        for (int slot = 0; slot < MaxPieceSlotCount; slot++)
++        {
++            Transform waitingSlot = panel.Find($"PieceSlot_{slot}");
++            if (waitingSlot != null) waitingSlot.gameObject.SetActive(occupied && slot < pieceSlotCount);
++            Transform finishSlot = panel.Find($"FinishSlot_{slot}");
++            if (finishSlot != null) finishSlot.gameObject.SetActive(occupied && slot < pieceSlotCount);
++        }
++    }
++
++    private static void PlacePanel(Transform panel, bool right, bool top)
++    {
++        if (panel is not RectTransform rect) return;
++        rect.anchorMin = rect.anchorMax = new Vector2(right ? 1f : 0f, top ? 1f : 0f);
++        rect.pivot = new Vector2(right ? 1f : 0f, top ? 1f : 0f);
++        rect.anchoredPosition = new Vector2(right ? -24f : 24f, top ? -24f : 24f);
++    }
++
+     private static TMP_Text GetOrCreateAugmentLabel(Transform slot)
+     {
+         TMP_Text label = slot.Find("Label")?.GetComponent<TMP_Text>();

@@ -1,0 +1,1909 @@
+{
+  "base_commit": "a4fca4d4dd238c8c4abda41502fc847fe8503d6d",
+  "team_repository": "https://github.com/TeamYutNori/AugmentedYutNori",
+  "personal_repository": "https://github.com/Potato-Gamja/AugmentedYutNori",
+  "classification": "Path history within the agreed client scope; not a guarantee of exclusive authorship.",
+  "files": [
+    {
+      "source": "Assets/Editor/SettingsUiAssembler.cs",
+      "output": "PersonalCode/Assets/Editor/SettingsUiAssembler.cs",
+      "category": "personal",
+      "sha256": "369fdc275aa08760c83cc6fa09c64d7086cdd2c65033f8fb7cb61ba64dce29c1",
+      "commits": [
+        "51fef4ecab6c45ff8b185b3c3040443cbd382b50",
+        "ca07b9ff773ecafb5c5b6397bbca5633217ec9cc",
+        "4c786665da3e27df4b3637802be43235086787e6"
+      ]
+    },
+    {
+      "source": "Assets/Editor/SpriteReferenceTool.cs",
+      "output": "PersonalCode/Assets/Editor/SpriteReferenceTool.cs",
+      "category": "personal",
+      "sha256": "4e8317910e4f059266cfcd51a52f07b0bdd087952170b129910da97b4f94bf0a",
+      "commits": [
+        "7b6c7a32b90c60b796c29bd6862aacc7c2699e8f"
+      ]
+    },
+    {
+      "source": "Assets/Editor/UIAccountButtonsBuilder.cs",
+      "output": "PersonalCode/Assets/Editor/UIAccountButtonsBuilder.cs",
+      "category": "personal",
+      "sha256": "5f30295873bc72c1cf7e769ca5a83dc4b9e06903553e40b39413902581c0e6cc",
+      "commits": [
+        "40425f205172ec200ff7a0f54050d3eab17b8272"
+      ]
+    },
+    {
+      "source": "Assets/Editor/UIAugmentPlayVerification.cs",
+      "output": "PersonalCode/Assets/Editor/UIAugmentPlayVerification.cs",
+      "category": "personal",
+      "sha256": "9d0f8d0ffb03a21f6ac53dafd85a30b73df7886a9fa6e8040e564c8ea3921019",
+      "commits": [
+        "225a7292ad3296528948c62489ff6a5fa9219c16",
+        "da10c8d725faee1405651c2d29c38e698ee5185a",
+        "5aedecb144482bd01f146f173198fa6f6cb66fae"
+      ]
+    },
+    {
+      "source": "Assets/Editor/UIAugmentPrefabBuilder.cs",
+      "output": "PersonalCode/Assets/Editor/UIAugmentPrefabBuilder.cs",
+      "category": "personal",
+      "sha256": "e4081ea80df63329aa3fb5e0cf8d0314faaee12250155c00a1a51e8e12c5f58b",
+      "commits": [
+        "dc012ec9bacdac866befa37fa7db63e44df21426",
+        "da10c8d725faee1405651c2d29c38e698ee5185a",
+        "5aedecb144482bd01f146f173198fa6f6cb66fae"
+      ]
+    },
+    {
+      "source": "Assets/Editor/UICommonPrefabBuilder.cs",
+      "output": "PersonalCode/Assets/Editor/UICommonPrefabBuilder.cs",
+      "category": "personal",
+      "sha256": "36660da4e9edc425971d40c45c075a75ff4c6b9da1feadb9cb8893a0ba4861e1",
+      "commits": [
+        "5aedecb144482bd01f146f173198fa6f6cb66fae"
+      ]
+    },
+    {
+      "source": "Assets/Editor/UIFontMaintenance.cs",
+      "output": "PersonalCode/Assets/Editor/UIFontMaintenance.cs",
+      "category": "personal",
+      "sha256": "0d6898f12d2f0dec8fc7d16643492c3fae4adb5a071c1d55738650fc84478a9e",
+      "commits": [
+        "5aedecb144482bd01f146f173198fa6f6cb66fae"
+      ]
+    },
+    {
+      "source": "Assets/Editor/UIImportSettingsApplier.cs",
+      "output": "PersonalCode/Assets/Editor/UIImportSettingsApplier.cs",
+      "category": "personal",
+      "sha256": "44660a7fc099430bb2d5e5dc5dc6857aea572b71c41b278b96b03b51891adb12",
+      "commits": [
+        "5aedecb144482bd01f146f173198fa6f6cb66fae",
+        "7b6c7a32b90c60b796c29bd6862aacc7c2699e8f"
+      ]
+    },
+    {
+      "source": "Assets/Editor/UILoginPrefabBuilder.cs",
+      "output": "PersonalCode/Assets/Editor/UILoginPrefabBuilder.cs",
+      "category": "personal",
+      "sha256": "66c16a38dd9fd13c5b0b7b2ed328faa06207541284a399586e23aff879c2d7eb",
+      "commits": [
+        "40425f205172ec200ff7a0f54050d3eab17b8272",
+        "a27f531105f962bf72473ecd9b580fa4972d6986",
+        "5aedecb144482bd01f146f173198fa6f6cb66fae"
+      ]
+    },
+    {
+      "source": "Assets/Editor/UIOutgamePrefabBuilder.cs",
+      "output": "PersonalCode/Assets/Editor/UIOutgamePrefabBuilder.cs",
+      "category": "personal",
+      "sha256": "c919db1f92119bbde9472bca6f3a0f78fe2fc944b3294fce5d53fd01e7299e31",
+      "commits": [
+        "dc012ec9bacdac866befa37fa7db63e44df21426",
+        "40425f205172ec200ff7a0f54050d3eab17b8272",
+        "5aedecb144482bd01f146f173198fa6f6cb66fae"
+      ]
+    },
+    {
+      "source": "Assets/Editor/UIPopupPrefabBuilder.cs",
+      "output": "PersonalCode/Assets/Editor/UIPopupPrefabBuilder.cs",
+      "category": "personal",
+      "sha256": "44d4f3c470768afacde9cecff9379c4adb58d0e79a12d21ac363c3b29c1ac1f0",
+      "commits": [
+        "dc012ec9bacdac866befa37fa7db63e44df21426",
+        "40425f205172ec200ff7a0f54050d3eab17b8272",
+        "73d09749b4902a103958a4820a9708c4cc0ba6dd",
+        "da10c8d725faee1405651c2d29c38e698ee5185a",
+        "5aedecb144482bd01f146f173198fa6f6cb66fae"
+      ]
+    },
+    {
+      "source": "Assets/Editor/UIPopupPreview.cs",
+      "output": "PersonalCode/Assets/Editor/UIPopupPreview.cs",
+      "category": "personal",
+      "sha256": "200c27dd038f89ceba3cf2571357eba6d1fca0e69748f2bb0a17b44ebfc8f927",
+      "commits": [
+        "5aedecb144482bd01f146f173198fa6f6cb66fae"
+      ]
+    },
+    {
+      "source": "Assets/Editor/UIRoomPrefabBuilder.cs",
+      "output": "PersonalCode/Assets/Editor/UIRoomPrefabBuilder.cs",
+      "category": "personal",
+      "sha256": "85bc0f11bd729455c74c7f846df5e663575280953ff8e80ba46a2e63cfe8d43e",
+      "commits": [
+        "5aedecb144482bd01f146f173198fa6f6cb66fae"
+      ]
+    },
+    {
+      "source": "Assets/Editor/UIScreenPreparation.cs",
+      "output": "PersonalCode/Assets/Editor/UIScreenPreparation.cs",
+      "category": "personal",
+      "sha256": "27b28400174ce15da73f8489a758ec40cb5c1e7a2d048ebd3a56afa09d62c20d",
+      "commits": [
+        "5aedecb144482bd01f146f173198fa6f6cb66fae"
+      ]
+    },
+    {
+      "source": "Assets/Editor/UITutorialBuilder.cs",
+      "output": "PersonalCode/Assets/Editor/UITutorialBuilder.cs",
+      "category": "personal",
+      "sha256": "27b51293eda0425664da126d38aec44c01cce2129fb41c9bad20d906d2d50f28",
+      "commits": [
+        "40425f205172ec200ff7a0f54050d3eab17b8272"
+      ]
+    },
+    {
+      "source": "Assets/Editor/VeteranUIIntegration.cs",
+      "output": "PersonalCode/Assets/Editor/VeteranUIIntegration.cs",
+      "category": "personal",
+      "sha256": "1a6da1307f1a0cdb7c8158016b2451d1b435da6650031dec9bf0163c485035e8",
+      "commits": [
+        "da10c8d725faee1405651c2d29c38e698ee5185a"
+      ]
+    },
+    {
+      "source": "Assets/Plugins/WebGL/FirebaseGoogleAuth.jslib",
+      "category": "shared",
+      "commits": [
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+        "a27f531105f962bf72473ecd9b580fa4972d6986"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Plugins/WebGL/FirebaseGoogleAuth.jslib"
+    },
+    {
+      "source": "Assets/Plugins/WebGL/NicknameInput.jslib",
+      "output": "PersonalCode/Assets/Plugins/WebGL/NicknameInput.jslib",
+      "category": "personal",
+      "sha256": "2061679dd159ccf9f2f56b2bef3d29014c99f8a793d954db844c3154440fa60c",
+      "commits": [
+        "47c527110bad858c90d4c3964c6d5170f50ef76a"
+      ]
+    },
+    {
+      "source": "Assets/Plugins/WebGL/RoomClipboard.jslib",
+      "output": "PersonalCode/Assets/Plugins/WebGL/RoomClipboard.jslib",
+      "category": "personal",
+      "sha256": "50164e0724f3a03eaac6043b4807ab98b169f9f2c896019e54ed3f75d913bb18",
+      "commits": [
+        "40425f205172ec200ff7a0f54050d3eab17b8272",
+        "159519b3901de0f277588f65c5216d56cf8e5597"
+      ]
+    },
+    {
+      "source": "Assets/Scripts/Flow/GameFlowController.cs",
+      "category": "shared",
+      "commits": [
+        "b9f372d4c173461b6fd4eb6bed76e7dacbdbe59f",
+        "50be360a5b914063d0f90a7a49ab70f4fcd5d79c",
+        "294ea1e022dedffc5aade497a9955546ef6d3312",
+        "5b70beb813e22cdc8c9f8d62f1e926228e85bfae",
+        "49fb74cbc7e50db8c630574b1d7b37bae70a5b01",
+        "0f0e00a4d7d04365ce3b21d0830af68ec689ae9e",
+        "d9755b7ffcc2d1e4db861deea80dc323ca270af2",
+        "27b0773b9d91f197e6ee387448b1f16751306cc7",
+        "6add1571a653eaa3f699ab96046050b3b958c689",
+        "407c0acc90f8dcc51692419734b547d980f1bef4",
+        "033f10a65f5880b51df8cb152849ed9fefb98830",
+        "97b2f7578afdaf965f7bb1b61b5deb7e62aff7ea",
+        "7b6c7a32b90c60b796c29bd6862aacc7c2699e8f",
+        "4c786665da3e27df4b3637802be43235086787e6",
+        "ca07b9ff773ecafb5c5b6397bbca5633217ec9cc",
+        "51fef4ecab6c45ff8b185b3c3040443cbd382b50",
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+        "9dad7dc6a3ae5a5c9067c11a2512da806393c245",
+        "48773696f671d8db39db6dfd1829933c75395d0f",
+        "c3e0455797fb18720ef85a39d58ed56835cf43b3",
+        "171e85a8b3faabd4eff88f6b4ac21b232e60e808",
+        "2e4750da2af3d3b34c914b5579d8543b98473b1e",
+        "206dfe03cb4590a88c1c936c5c02ae0baab56c2c",
+        "5aedecb144482bd01f146f173198fa6f6cb66fae",
+        "da10c8d725faee1405651c2d29c38e698ee5185a",
+        "aa820155f81d724cd18ad73f9d3127378fe102a1",
+        "225a7292ad3296528948c62489ff6a5fa9219c16",
+        "c0ec46b3368db4a1d45ec1d5261d9bf5e4bbc378",
+        "dc012ec9bacdac866befa37fa7db63e44df21426"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Flow/GameFlowController.cs"
+    },
+    {
+      "source": "Assets/Scripts/Flow/GameFlowHudPresenter.cs",
+      "category": "shared",
+      "commits": [
+        "d9755b7ffcc2d1e4db861deea80dc323ca270af2",
+        "7b6c7a32b90c60b796c29bd6862aacc7c2699e8f",
+        "ca07b9ff773ecafb5c5b6397bbca5633217ec9cc",
+        "51fef4ecab6c45ff8b185b3c3040443cbd382b50",
+        "da10c8d725faee1405651c2d29c38e698ee5185a",
+        "225a7292ad3296528948c62489ff6a5fa9219c16",
+        "b2845c592edafe2b8795f8074e0c728ea7795ed5"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Flow/GameFlowHudPresenter.cs"
+    },
+    {
+      "source": "Assets/Scripts/Flow/GameFlowSelectionController.cs",
+      "output": "PersonalCode/Assets/Scripts/Flow/GameFlowSelectionController.cs",
+      "category": "personal",
+      "sha256": "1f5bd919ae239790c535d0ad1c7fceb3e9044d6d58a9432216d2b1c8a29921d6",
+      "commits": [
+        "b2845c592edafe2b8795f8074e0c728ea7795ed5",
+        "225a7292ad3296528948c62489ff6a5fa9219c16",
+        "c3e0455797fb18720ef85a39d58ed56835cf43b3",
+        "48773696f671d8db39db6dfd1829933c75395d0f",
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+        "ca07b9ff773ecafb5c5b6397bbca5633217ec9cc",
+        "4c786665da3e27df4b3637802be43235086787e6",
+        "7b6c7a32b90c60b796c29bd6862aacc7c2699e8f",
+        "97b2f7578afdaf965f7bb1b61b5deb7e62aff7ea",
+        "d9755b7ffcc2d1e4db861deea80dc323ca270af2"
+      ]
+    },
+    {
+      "source": "Assets/Scripts/Flow/GamePointerInput.cs",
+      "output": "PersonalCode/Assets/Scripts/Flow/GamePointerInput.cs",
+      "category": "personal",
+      "sha256": "e76968fdddbf4215b5777f01ae4fcde101cf6c550be171c38be90c92f50ce378",
+      "commits": [
+        "c0ec46b3368db4a1d45ec1d5261d9bf5e4bbc378"
+      ]
+    },
+    {
+      "source": "Assets/Scripts/Flow/LobbyController.cs",
+      "category": "shared",
+      "commits": [
+        "033f10a65f5880b51df8cb152849ed9fefb98830",
+        "4c786665da3e27df4b3637802be43235086787e6",
+        "aac5fc2a0d9062a24b8aaa2ecdfddae5cb444354",
+        "ca07b9ff773ecafb5c5b6397bbca5633217ec9cc",
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+        "7f82be95979b065c06c240cec9e6b149f1b6a117",
+        "159519b3901de0f277588f65c5216d56cf8e5597",
+        "48773696f671d8db39db6dfd1829933c75395d0f",
+        "69f08b9ca21e0f4734ccfdf6ce15c7605661ef60",
+        "0d0b47b6196cdee77091f8c199779453475c1082",
+        "c3e0455797fb18720ef85a39d58ed56835cf43b3",
+        "2a626b6d1bfcdf02b8179436a9438acbc327e87e",
+        "2abcfc5329e41e7f86d02cd4888589f3490f4771",
+        "206dfe03cb4590a88c1c936c5c02ae0baab56c2c",
+        "5aedecb144482bd01f146f173198fa6f6cb66fae",
+        "aa820155f81d724cd18ad73f9d3127378fe102a1",
+        "40425f205172ec200ff7a0f54050d3eab17b8272",
+        "a20d731e531b8ae60e63d626472cdbc73f0f1b04"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Flow/LobbyController.cs"
+    },
+    {
+      "source": "Assets/Scripts/Flow/LobbyNetworkCoordinator.cs",
+      "category": "shared",
+      "commits": [
+        "033f10a65f5880b51df8cb152849ed9fefb98830",
+        "97b2f7578afdaf965f7bb1b61b5deb7e62aff7ea",
+        "4c786665da3e27df4b3637802be43235086787e6",
+        "ca07b9ff773ecafb5c5b6397bbca5633217ec9cc",
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+        "7f82be95979b065c06c240cec9e6b149f1b6a117",
+        "9dad7dc6a3ae5a5c9067c11a2512da806393c245",
+        "159519b3901de0f277588f65c5216d56cf8e5597",
+        "48773696f671d8db39db6dfd1829933c75395d0f",
+        "69f08b9ca21e0f4734ccfdf6ce15c7605661ef60",
+        "0d0b47b6196cdee77091f8c199779453475c1082",
+        "c3e0455797fb18720ef85a39d58ed56835cf43b3",
+        "2a626b6d1bfcdf02b8179436a9438acbc327e87e",
+        "2abcfc5329e41e7f86d02cd4888589f3490f4771",
+        "206dfe03cb4590a88c1c936c5c02ae0baab56c2c",
+        "5aedecb144482bd01f146f173198fa6f6cb66fae",
+        "aa820155f81d724cd18ad73f9d3127378fe102a1",
+        "40425f205172ec200ff7a0f54050d3eab17b8272",
+        "a20d731e531b8ae60e63d626472cdbc73f0f1b04",
+        "bd2f7578f227c6db3e6fa7510151e7b3b8154055"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs"
+    },
+    {
+      "source": "Assets/Scripts/Flow/LoginController.cs",
+      "category": "shared",
+      "commits": [
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+        "40425f205172ec200ff7a0f54050d3eab17b8272",
+        "a20d731e531b8ae60e63d626472cdbc73f0f1b04"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Flow/LoginController.cs"
+    },
+    {
+      "source": "Assets/Scripts/Network/ApiClient.cs",
+      "category": "shared",
+      "commits": [
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+        "a20d731e531b8ae60e63d626472cdbc73f0f1b04"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Network/ApiClient.cs"
+    },
+    {
+      "source": "Assets/Scripts/Network/Auth/DesktopGoogleSignIn.cs",
+      "category": "shared",
+      "commits": [
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+        "159519b3901de0f277588f65c5216d56cf8e5597",
+        "dc012ec9bacdac866befa37fa7db63e44df21426"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Network/Auth/DesktopGoogleSignIn.cs"
+    },
+    {
+      "source": "Assets/Scripts/Network/Auth/IGoogleSignIn.cs",
+      "category": "shared",
+      "commits": [
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Network/Auth/IGoogleSignIn.cs"
+    },
+    {
+      "source": "Assets/Scripts/Network/Auth/WebGLGoogleSignIn.cs",
+      "category": "shared",
+      "commits": [
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Network/Auth/WebGLGoogleSignIn.cs"
+    },
+    {
+      "source": "Assets/Scripts/Network/AuthApi.cs",
+      "category": "shared",
+      "commits": [
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+        "a20d731e531b8ae60e63d626472cdbc73f0f1b04"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Network/AuthApi.cs"
+    },
+    {
+      "source": "Assets/Scripts/Network/GachaApi.cs",
+      "category": "shared",
+      "commits": [
+        "bd2f7578f227c6db3e6fa7510151e7b3b8154055"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Network/GachaApi.cs"
+    },
+    {
+      "source": "Assets/Scripts/Network/GameReconnectCache.cs",
+      "category": "shared",
+      "commits": [
+        "2a626b6d1bfcdf02b8179436a9438acbc327e87e",
+        "2abcfc5329e41e7f86d02cd4888589f3490f4771",
+        "73d09749b4902a103958a4820a9708c4cc0ba6dd"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Network/GameReconnectCache.cs"
+    },
+    {
+      "source": "Assets/Scripts/Network/LocalGameSession.cs",
+      "category": "shared",
+      "commits": [
+        "dc012ec9bacdac866befa37fa7db63e44df21426"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Network/LocalGameSession.cs"
+    },
+    {
+      "source": "Assets/Scripts/Network/PlayerIdentity.cs",
+      "category": "shared",
+      "commits": [
+        "7b6c7a32b90c60b796c29bd6862aacc7c2699e8f",
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+        "7f82be95979b065c06c240cec9e6b149f1b6a117",
+        "2a626b6d1bfcdf02b8179436a9438acbc327e87e",
+        "40425f205172ec200ff7a0f54050d3eab17b8272",
+        "a20d731e531b8ae60e63d626472cdbc73f0f1b04"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Network/PlayerIdentity.cs"
+    },
+    {
+      "source": "Assets/Scripts/Network/Protocol/MessageType.cs",
+      "category": "shared",
+      "commits": [
+        "97b2f7578afdaf965f7bb1b61b5deb7e62aff7ea",
+        "ca07b9ff773ecafb5c5b6397bbca5633217ec9cc",
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+        "aa820155f81d724cd18ad73f9d3127378fe102a1"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Network/Protocol/MessageType.cs"
+    },
+    {
+      "source": "Assets/Scripts/Network/Protocol/Messages/GameMessages.cs",
+      "category": "shared",
+      "commits": [
+        "97b2f7578afdaf965f7bb1b61b5deb7e62aff7ea",
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+        "bd2f7578f227c6db3e6fa7510151e7b3b8154055"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Network/Protocol/Messages/GameMessages.cs"
+    },
+    {
+      "source": "Assets/Scripts/Network/Protocol/Messages/RoomMessages.cs",
+      "category": "shared",
+      "commits": [
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+        "aa820155f81d724cd18ad73f9d3127378fe102a1"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Network/Protocol/Messages/RoomMessages.cs"
+    },
+    {
+      "source": "Assets/Scripts/Network/Protocol/Messages/SystemMessages.cs",
+      "category": "shared",
+      "commits": [
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+        "c3e0455797fb18720ef85a39d58ed56835cf43b3"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Network/Protocol/Messages/SystemMessages.cs"
+    },
+    {
+      "source": "Assets/Scripts/Network/RemoteGameSession.cs",
+      "category": "shared",
+      "commits": [
+        "97b2f7578afdaf965f7bb1b61b5deb7e62aff7ea",
+        "4c786665da3e27df4b3637802be43235086787e6",
+        "ca07b9ff773ecafb5c5b6397bbca5633217ec9cc",
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+        "9dad7dc6a3ae5a5c9067c11a2512da806393c245",
+        "c3e0455797fb18720ef85a39d58ed56835cf43b3",
+        "2abcfc5329e41e7f86d02cd4888589f3490f4771",
+        "da10c8d725faee1405651c2d29c38e698ee5185a",
+        "73d09749b4902a103958a4820a9708c4cc0ba6dd",
+        "225a7292ad3296528948c62489ff6a5fa9219c16",
+        "dc012ec9bacdac866befa37fa7db63e44df21426"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Network/RemoteGameSession.cs"
+    },
+    {
+      "source": "Assets/Scripts/Network/WebSocketClient.cs",
+      "category": "shared",
+      "commits": [
+        "7b6c7a32b90c60b796c29bd6862aacc7c2699e8f",
+        "ca07b9ff773ecafb5c5b6397bbca5633217ec9cc",
+        "206dfe03cb4590a88c1c936c5c02ae0baab56c2c"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Network/WebSocketClient.cs"
+    },
+    {
+      "source": "Assets/Scripts/Presentation/Audio/SoundManager.cs",
+      "category": "shared",
+      "commits": [
+        "c0ec46b3368db4a1d45ec1d5261d9bf5e4bbc378"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Presentation/Audio/SoundManager.cs"
+    },
+    {
+      "source": "Assets/Scripts/Presentation/Board/NodeView.cs",
+      "category": "shared",
+      "commits": [
+        "7b6c7a32b90c60b796c29bd6862aacc7c2699e8f"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Presentation/Board/NodeView.cs"
+    },
+    {
+      "source": "Assets/Scripts/Presentation/Piece/PieceView.cs",
+      "category": "shared",
+      "commits": [
+        "97b2f7578afdaf965f7bb1b61b5deb7e62aff7ea",
+        "7b6c7a32b90c60b796c29bd6862aacc7c2699e8f",
+        "ca07b9ff773ecafb5c5b6397bbca5633217ec9cc",
+        "206dfe03cb4590a88c1c936c5c02ae0baab56c2c"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Presentation/Piece/PieceView.cs"
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/AchievementItemView.cs",
+      "category": "shared",
+      "commits": [
+        "5aedecb144482bd01f146f173198fa6f6cb66fae"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Presentation/UI/AchievementItemView.cs"
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/AchievementPanel.cs",
+      "category": "shared",
+      "commits": [
+        "5aedecb144482bd01f146f173198fa6f6cb66fae"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Presentation/UI/AchievementPanel.cs"
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/AugmentCardView.cs",
+      "category": "shared",
+      "commits": [
+        "d9755b7ffcc2d1e4db861deea80dc323ca270af2",
+        "6add1571a653eaa3f699ab96046050b3b958c689",
+        "aac5fc2a0d9062a24b8aaa2ecdfddae5cb444354",
+        "51fef4ecab6c45ff8b185b3c3040443cbd382b50",
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+        "0d0b47b6196cdee77091f8c199779453475c1082",
+        "5aedecb144482bd01f146f173198fa6f6cb66fae",
+        "da10c8d725faee1405651c2d29c38e698ee5185a"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Presentation/UI/AugmentCardView.cs"
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/AugmentSelectPanel.cs",
+      "category": "shared",
+      "commits": [
+        "0f0e00a4d7d04365ce3b21d0830af68ec689ae9e",
+        "d9755b7ffcc2d1e4db861deea80dc323ca270af2",
+        "6add1571a653eaa3f699ab96046050b3b958c689",
+        "5aedecb144482bd01f146f173198fa6f6cb66fae",
+        "73d09749b4902a103958a4820a9708c4cc0ba6dd",
+        "5f6e161ee9f986bb9d1191efdb57d5474191590b"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Presentation/UI/AugmentSelectPanel.cs"
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/AugmentTooltipTrigger.cs",
+      "output": "PersonalCode/Assets/Scripts/Presentation/UI/AugmentTooltipTrigger.cs",
+      "category": "personal",
+      "sha256": "97b9aa74f471c989422f9de4981ae25e2f162b810528a9587f5e8d2229566b07",
+      "commits": [
+        "51fef4ecab6c45ff8b185b3c3040443cbd382b50"
+      ]
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/CollectionPanel.cs",
+      "category": "shared",
+      "commits": [
+        "ca07b9ff773ecafb5c5b6397bbca5633217ec9cc",
+        "0d0b47b6196cdee77091f8c199779453475c1082",
+        "c3e0455797fb18720ef85a39d58ed56835cf43b3"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Presentation/UI/CollectionPanel.cs"
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/Common/ApplicationVersionLabel.cs",
+      "output": "PersonalCode/Assets/Scripts/Presentation/UI/Common/ApplicationVersionLabel.cs",
+      "category": "personal",
+      "sha256": "7aa5863e9cc87aed0d54647ecde52cc1a43d37741c4f4dac6856601370654168",
+      "commits": [
+        "5aedecb144482bd01f146f173198fa6f6cb66fae"
+      ]
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/Common/ButtonPresentation.cs",
+      "output": "PersonalCode/Assets/Scripts/Presentation/UI/Common/ButtonPresentation.cs",
+      "category": "personal",
+      "sha256": "860d2621f37fcc7a38dc9279ec7a31382fc11e569d326c56a6c269d8169835dd",
+      "commits": [
+        "40425f205172ec200ff7a0f54050d3eab17b8272",
+        "5aedecb144482bd01f146f173198fa6f6cb66fae"
+      ]
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/Common/DecorativeFloat.cs",
+      "output": "PersonalCode/Assets/Scripts/Presentation/UI/Common/DecorativeFloat.cs",
+      "category": "personal",
+      "sha256": "769de0cbd01723bd45f7cf38e425fbe1453e074978019cae1cfeaca559a6f5cc",
+      "commits": [
+        "5aedecb144482bd01f146f173198fa6f6cb66fae"
+      ]
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/Common/GlowPulse.cs",
+      "output": "PersonalCode/Assets/Scripts/Presentation/UI/Common/GlowPulse.cs",
+      "category": "personal",
+      "sha256": "317bcb8d12dcd7c92ee25339b847e47ca5478d85ec7221fe3c74b3c27b5ea9ed",
+      "commits": [
+        "5aedecb144482bd01f146f173198fa6f6cb66fae"
+      ]
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/Common/InputFocusPresentation.cs",
+      "output": "PersonalCode/Assets/Scripts/Presentation/UI/Common/InputFocusPresentation.cs",
+      "category": "personal",
+      "sha256": "be18d95a510f6a597247dd7ea17e2585707d75b5172e59f77b1698418979967d",
+      "commits": [
+        "5aedecb144482bd01f146f173198fa6f6cb66fae"
+      ]
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/Common/InstructionStatusPresentation.cs",
+      "output": "PersonalCode/Assets/Scripts/Presentation/UI/Common/InstructionStatusPresentation.cs",
+      "category": "personal",
+      "sha256": "c4b219113b303d5a07c84ce0bb316bbd60ef156078d03025429a8f2fa834e7af",
+      "commits": [
+        "5aedecb144482bd01f146f173198fa6f6cb66fae"
+      ]
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/Common/LoginPanelPresentation.cs",
+      "output": "PersonalCode/Assets/Scripts/Presentation/UI/Common/LoginPanelPresentation.cs",
+      "category": "personal",
+      "sha256": "c5d96941543ebc7677887fd6f8ef5783511b052818f4139317cd2d1bc7c5f4e9",
+      "commits": [
+        "5aedecb144482bd01f146f173198fa6f6cb66fae"
+      ]
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/Common/MenuCardInteraction.cs",
+      "output": "PersonalCode/Assets/Scripts/Presentation/UI/Common/MenuCardInteraction.cs",
+      "category": "personal",
+      "sha256": "d40ffdae05950880e637b958cce89e988a0c62c08827bf86fce6b7de4b9f89b0",
+      "commits": [
+        "5aedecb144482bd01f146f173198fa6f6cb66fae"
+      ]
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/Common/PaperCardPresentation.cs",
+      "output": "PersonalCode/Assets/Scripts/Presentation/UI/Common/PaperCardPresentation.cs",
+      "category": "personal",
+      "sha256": "9b28c6ec747891dc8f27641796a8f86215c0e986f20c4af0256b8aed460e7314",
+      "commits": [
+        "5aedecb144482bd01f146f173198fa6f6cb66fae"
+      ]
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/Common/PixelIconSampling.cs",
+      "output": "PersonalCode/Assets/Scripts/Presentation/UI/Common/PixelIconSampling.cs",
+      "category": "personal",
+      "sha256": "0b327c28b724404ac437bbd87497604a619791aba6907cf96cc88a70d561b5cb",
+      "commits": [
+        "5aedecb144482bd01f146f173198fa6f6cb66fae"
+      ]
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/Common/PopupPresentation.cs",
+      "output": "PersonalCode/Assets/Scripts/Presentation/UI/Common/PopupPresentation.cs",
+      "category": "personal",
+      "sha256": "72cd7634ee38dfe98b9db72047012b32a71b6d0f5f62bfc0d146a676140f9fc2",
+      "commits": [
+        "5aedecb144482bd01f146f173198fa6f6cb66fae"
+      ]
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/Common/ProfileIconOptionPresentation.cs",
+      "output": "PersonalCode/Assets/Scripts/Presentation/UI/Common/ProfileIconOptionPresentation.cs",
+      "category": "personal",
+      "sha256": "dcfd2007fd64c11b0160a4867e7eb64f40c8dee35f9a9cb48b8e54131b27d7aa",
+      "commits": [
+        "5aedecb144482bd01f146f173198fa6f6cb66fae"
+      ]
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/Common/RoomReadyButtonPresentation.cs",
+      "output": "PersonalCode/Assets/Scripts/Presentation/UI/Common/RoomReadyButtonPresentation.cs",
+      "category": "personal",
+      "sha256": "00cb07ee42d3c399a6ac9316a66a2f2b8712c613d51f3bc66aff94e8ee67c1b7",
+      "commits": [
+        "5aedecb144482bd01f146f173198fa6f6cb66fae"
+      ]
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/Common/RoomSlotPresentation.cs",
+      "output": "PersonalCode/Assets/Scripts/Presentation/UI/Common/RoomSlotPresentation.cs",
+      "category": "personal",
+      "sha256": "935f730d0339c0ccf7eb303a7d99f7a958dbd92edf1c2443ddb4e2bf96a8b39f",
+      "commits": [
+        "5aedecb144482bd01f146f173198fa6f6cb66fae"
+      ]
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/Common/SegmentedPresentation.cs",
+      "output": "PersonalCode/Assets/Scripts/Presentation/UI/Common/SegmentedPresentation.cs",
+      "category": "personal",
+      "sha256": "9b128cdce4eef1b7e399378ac8927fb7b199f8e88fa6a19092dba4c39d4797d7",
+      "commits": [
+        "5aedecb144482bd01f146f173198fa6f6cb66fae"
+      ]
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/GachaPanel.cs",
+      "category": "shared",
+      "commits": [
+        "5aedecb144482bd01f146f173198fa6f6cb66fae",
+        "bd2f7578f227c6db3e6fa7510151e7b3b8154055"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Presentation/UI/GachaPanel.cs"
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/GachaResultView.cs",
+      "category": "shared",
+      "commits": [
+        "5aedecb144482bd01f146f173198fa6f6cb66fae",
+        "bd2f7578f227c6db3e6fa7510151e7b3b8154055"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Presentation/UI/GachaResultView.cs"
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/GameHudPanel.cs",
+      "category": "shared",
+      "commits": [
+        "294ea1e022dedffc5aade497a9955546ef6d3312",
+        "5b70beb813e22cdc8c9f8d62f1e926228e85bfae",
+        "0f0e00a4d7d04365ce3b21d0830af68ec689ae9e",
+        "d9755b7ffcc2d1e4db861deea80dc323ca270af2",
+        "27b0773b9d91f197e6ee387448b1f16751306cc7",
+        "97b2f7578afdaf965f7bb1b61b5deb7e62aff7ea",
+        "7b6c7a32b90c60b796c29bd6862aacc7c2699e8f",
+        "4c786665da3e27df4b3637802be43235086787e6",
+        "ca07b9ff773ecafb5c5b6397bbca5633217ec9cc",
+        "51fef4ecab6c45ff8b185b3c3040443cbd382b50",
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+        "48773696f671d8db39db6dfd1829933c75395d0f",
+        "c3e0455797fb18720ef85a39d58ed56835cf43b3",
+        "da10c8d725faee1405651c2d29c38e698ee5185a",
+        "225a7292ad3296528948c62489ff6a5fa9219c16"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Presentation/UI/GameHudPanel.cs"
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/LobbyPanel.cs",
+      "output": "PersonalCode/Assets/Scripts/Presentation/UI/LobbyPanel.cs",
+      "category": "personal",
+      "sha256": "70fbbac034f33b2ca8df9f38150e12f7dbea415ecd52c3dabcd4da018922724e",
+      "commits": [
+        "5aedecb144482bd01f146f173198fa6f6cb66fae",
+        "69f08b9ca21e0f4734ccfdf6ce15c7605661ef60",
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+        "ca07b9ff773ecafb5c5b6397bbca5633217ec9cc",
+        "aac5fc2a0d9062a24b8aaa2ecdfddae5cb444354",
+        "4c786665da3e27df4b3637802be43235086787e6",
+        "033f10a65f5880b51df8cb152849ed9fefb98830"
+      ]
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/LoginPanel.cs",
+      "category": "shared",
+      "commits": [
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+        "40425f205172ec200ff7a0f54050d3eab17b8272"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Presentation/UI/LoginPanel.cs"
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/MainMenuPanel.cs",
+      "output": "PersonalCode/Assets/Scripts/Presentation/UI/MainMenuPanel.cs",
+      "category": "personal",
+      "sha256": "3469efd0f25743fd3dafc2e5782d150540004a3c0f2ce794e5b2286b7e01bdc4",
+      "commits": [
+        "576871ddff0a455ba4ad54fa475af1c28a68a576",
+        "40425f205172ec200ff7a0f54050d3eab17b8272",
+        "5aedecb144482bd01f146f173198fa6f6cb66fae",
+        "ca07b9ff773ecafb5c5b6397bbca5633217ec9cc"
+      ]
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/NicknamePanel.cs",
+      "category": "shared",
+      "commits": [
+        "47c527110bad858c90d4c3964c6d5170f50ef76a",
+        "1e1269ddfbf62d304927f1d3e9dea3d0a560d450",
+        "a20d731e531b8ae60e63d626472cdbc73f0f1b04"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Presentation/UI/NicknamePanel.cs"
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/PlayerDisplayInfo.cs",
+      "output": "PersonalCode/Assets/Scripts/Presentation/UI/PlayerDisplayInfo.cs",
+      "category": "personal",
+      "sha256": "8aa2feede46c918934928e784fabac57878bd2f2f06b1d68b5475bfcd8172496",
+      "commits": [
+        "576871ddff0a455ba4ad54fa475af1c28a68a576",
+        "0d0b47b6196cdee77091f8c199779453475c1082",
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572"
+      ]
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/PlayerStatusView.cs",
+      "category": "shared",
+      "commits": [
+        "d9755b7ffcc2d1e4db861deea80dc323ca270af2",
+        "97b2f7578afdaf965f7bb1b61b5deb7e62aff7ea",
+        "7b6c7a32b90c60b796c29bd6862aacc7c2699e8f",
+        "4c786665da3e27df4b3637802be43235086787e6",
+        "ca07b9ff773ecafb5c5b6397bbca5633217ec9cc",
+        "51fef4ecab6c45ff8b185b3c3040443cbd382b50",
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+        "c3e0455797fb18720ef85a39d58ed56835cf43b3",
+        "171e85a8b3faabd4eff88f6b4ac21b232e60e808",
+        "2af0eef7c0e1469b2cda247aa7f6cffa8f609f44",
+        "da10c8d725faee1405651c2d29c38e698ee5185a",
+        "225a7292ad3296528948c62489ff6a5fa9219c16",
+        "576871ddff0a455ba4ad54fa475af1c28a68a576"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Presentation/UI/PlayerStatusView.cs"
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/ProfilePanel.cs",
+      "category": "shared",
+      "commits": [
+        "ca07b9ff773ecafb5c5b6397bbca5633217ec9cc",
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+        "159519b3901de0f277588f65c5216d56cf8e5597",
+        "0d0b47b6196cdee77091f8c199779453475c1082",
+        "5aedecb144482bd01f146f173198fa6f6cb66fae",
+        "40425f205172ec200ff7a0f54050d3eab17b8272",
+        "a20d731e531b8ae60e63d626472cdbc73f0f1b04"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Presentation/UI/ProfilePanel.cs"
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/ReconnectPanel.cs",
+      "output": "PersonalCode/Assets/Scripts/Presentation/UI/ReconnectPanel.cs",
+      "category": "personal",
+      "sha256": "4a5ec5efb3c7d389dd73187eff44a67653fd3981b50db93f6720d1f30237470f",
+      "commits": [
+        "5aedecb144482bd01f146f173198fa6f6cb66fae",
+        "2a626b6d1bfcdf02b8179436a9438acbc327e87e"
+      ]
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/ResultPopup.cs",
+      "category": "shared",
+      "commits": [
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+        "48773696f671d8db39db6dfd1829933c75395d0f",
+        "c3e0455797fb18720ef85a39d58ed56835cf43b3",
+        "171e85a8b3faabd4eff88f6b4ac21b232e60e808",
+        "206dfe03cb4590a88c1c936c5c02ae0baab56c2c",
+        "bd2f7578f227c6db3e6fa7510151e7b3b8154055"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Presentation/UI/ResultPopup.cs"
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/RoomPanel.cs",
+      "output": "PersonalCode/Assets/Scripts/Presentation/UI/RoomPanel.cs",
+      "category": "personal",
+      "sha256": "c4573cb83ecc4d7b9863db5c20988b028ed5ea7c33c0cbcb3e40ac86f9d9533a",
+      "commits": [
+        "576871ddff0a455ba4ad54fa475af1c28a68a576",
+        "40425f205172ec200ff7a0f54050d3eab17b8272",
+        "73d09749b4902a103958a4820a9708c4cc0ba6dd",
+        "aa820155f81d724cd18ad73f9d3127378fe102a1",
+        "5aedecb144482bd01f146f173198fa6f6cb66fae",
+        "2af0eef7c0e1469b2cda247aa7f6cffa8f609f44",
+        "206dfe03cb4590a88c1c936c5c02ae0baab56c2c",
+        "0d0b47b6196cdee77091f8c199779453475c1082",
+        "69f08b9ca21e0f4734ccfdf6ce15c7605661ef60",
+        "48773696f671d8db39db6dfd1829933c75395d0f",
+        "159519b3901de0f277588f65c5216d56cf8e5597",
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+        "033f10a65f5880b51df8cb152849ed9fefb98830"
+      ]
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/SettingsPanel.cs",
+      "output": "PersonalCode/Assets/Scripts/Presentation/UI/SettingsPanel.cs",
+      "category": "personal",
+      "sha256": "55274fbca20301cbc201163728a70a7d806149daa8ec9d7b36b5ad12832a2352",
+      "commits": [
+        "ca07b9ff773ecafb5c5b6397bbca5633217ec9cc",
+        "4c786665da3e27df4b3637802be43235086787e6"
+      ]
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/StoredResultView.cs",
+      "output": "PersonalCode/Assets/Scripts/Presentation/UI/StoredResultView.cs",
+      "category": "personal",
+      "sha256": "5c9bf3d38f1fec87d632c64b7213a3a87b889408728fc0f948e3b437c82f4ce2",
+      "commits": [
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+        "7b6c7a32b90c60b796c29bd6862aacc7c2699e8f",
+        "d9755b7ffcc2d1e4db861deea80dc323ca270af2"
+      ]
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/TurnHudView.cs",
+      "output": "PersonalCode/Assets/Scripts/Presentation/UI/TurnHudView.cs",
+      "category": "personal",
+      "sha256": "18c7f1d482706c00f836300180b0a381510a287e1c78e2c336457e1ca6be39eb",
+      "commits": [
+        "c3e0455797fb18720ef85a39d58ed56835cf43b3",
+        "d9755b7ffcc2d1e4db861deea80dc323ca270af2"
+      ]
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/TutorialPanel.cs",
+      "output": "PersonalCode/Assets/Scripts/Presentation/UI/TutorialPanel.cs",
+      "category": "personal",
+      "sha256": "99e11b741489428029f7128cec8d787b43f18bedd74fa53d310281ee4012a1f9",
+      "commits": [
+        "dc012ec9bacdac866befa37fa7db63e44df21426",
+        "40425f205172ec200ff7a0f54050d3eab17b8272"
+      ]
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/UIBase.cs",
+      "category": "shared",
+      "commits": [
+        "d9755b7ffcc2d1e4db861deea80dc323ca270af2",
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Presentation/UI/UIBase.cs"
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/YutResultPanel.cs",
+      "category": "shared",
+      "commits": [
+        "294ea1e022dedffc5aade497a9955546ef6d3312",
+        "5b70beb813e22cdc8c9f8d62f1e926228e85bfae"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Presentation/UI/YutResultPanel.cs"
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/YutResultRevealView.cs",
+      "output": "PersonalCode/Assets/Scripts/Presentation/UI/YutResultRevealView.cs",
+      "category": "personal",
+      "sha256": "83206dfacd83289d31e09c1b82fb59dc8797d57efe127e630aeb31d95ffffdd7",
+      "commits": [
+        "dc012ec9bacdac866befa37fa7db63e44df21426",
+        "0ef750dc9b056d4880ce3dde96bb2fa808539597",
+        "225a7292ad3296528948c62489ff6a5fa9219c16",
+        "2af0eef7c0e1469b2cda247aa7f6cffa8f609f44",
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+        "51fef4ecab6c45ff8b185b3c3040443cbd382b50",
+        "7b6c7a32b90c60b796c29bd6862aacc7c2699e8f",
+        "d9755b7ffcc2d1e4db861deea80dc323ca270af2"
+      ]
+    },
+    {
+      "source": "Assets/Scripts/Presentation/Yut/YutThrowView.cs",
+      "category": "shared",
+      "commits": [
+        "294ea1e022dedffc5aade497a9955546ef6d3312",
+        "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+        "7f82be95979b065c06c240cec9e6b149f1b6a117"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Scripts/Presentation/Yut/YutThrowView.cs"
+    },
+    {
+      "source": "Assets/Tests/EditMode/AccountButtonTests.cs",
+      "output": "PersonalCode/Assets/Tests/EditMode/AccountButtonTests.cs",
+      "category": "personal",
+      "sha256": "5c485960c1c038c5cb554beeb18f33317eb46ff89b882fd367641dec8c0bc2d0",
+      "commits": [
+        "a20d731e531b8ae60e63d626472cdbc73f0f1b04",
+        "40425f205172ec200ff7a0f54050d3eab17b8272"
+      ]
+    },
+    {
+      "source": "Assets/Tests/EditMode/GameEffectFeedbackTests.cs",
+      "output": "PersonalCode/Assets/Tests/EditMode/GameEffectFeedbackTests.cs",
+      "category": "personal",
+      "sha256": "41995290b86f22963f7c6098b1375bac2fffaab3c4de9c2ef7b3ecf2cd9bca47",
+      "commits": [
+        "225a7292ad3296528948c62489ff6a5fa9219c16"
+      ]
+    },
+    {
+      "source": "Assets/Tests/EditMode/GameExitLifecycleTests.cs",
+      "output": "PersonalCode/Assets/Tests/EditMode/GameExitLifecycleTests.cs",
+      "category": "personal",
+      "sha256": "bd2b496c866227994ea8b753845a73eb07bba995973162815b1754d341db2ae3",
+      "commits": [
+        "206dfe03cb4590a88c1c936c5c02ae0baab56c2c"
+      ]
+    },
+    {
+      "source": "Assets/Tests/EditMode/GamePointerInputTests.cs",
+      "output": "PersonalCode/Assets/Tests/EditMode/GamePointerInputTests.cs",
+      "category": "personal",
+      "sha256": "6673c939046d819a7dc51ac1ba1a20efa295cc0b79196d4221e7bd4be7fdf8c1",
+      "commits": [
+        "c0ec46b3368db4a1d45ec1d5261d9bf5e4bbc378"
+      ]
+    },
+    {
+      "source": "Assets/Tests/EditMode/GameReconnectCacheTests.cs",
+      "output": "PersonalCode/Assets/Tests/EditMode/GameReconnectCacheTests.cs",
+      "category": "personal",
+      "sha256": "a7761f48fc7bd0241944747f9750b7bcfcce0a1403fdb88f29791b865d721dcf",
+      "commits": [
+        "73d09749b4902a103958a4820a9708c4cc0ba6dd",
+        "2abcfc5329e41e7f86d02cd4888589f3490f4771",
+        "2a626b6d1bfcdf02b8179436a9438acbc327e87e"
+      ]
+    },
+    {
+      "source": "Assets/Tests/EditMode/HostGameStartTests.cs",
+      "output": "PersonalCode/Assets/Tests/EditMode/HostGameStartTests.cs",
+      "category": "personal",
+      "sha256": "71d2796e763092ba20588ba815a8330dc652905c8803f49a19ffd39b98662820",
+      "commits": [
+        "73d09749b4902a103958a4820a9708c4cc0ba6dd",
+        "aa820155f81d724cd18ad73f9d3127378fe102a1"
+      ]
+    },
+    {
+      "source": "Assets/Tests/EditMode/InGameDescriptionLayoutTests.cs",
+      "output": "PersonalCode/Assets/Tests/EditMode/InGameDescriptionLayoutTests.cs",
+      "category": "personal",
+      "sha256": "039eee945eb7fc9d0fc50238439c432510d6128f6a67dc5540eba83d318ca91a",
+      "commits": [
+        "dc012ec9bacdac866befa37fa7db63e44df21426",
+        "0ef750dc9b056d4880ce3dde96bb2fa808539597",
+        "225a7292ad3296528948c62489ff6a5fa9219c16",
+        "2af0eef7c0e1469b2cda247aa7f6cffa8f609f44"
+      ]
+    },
+    {
+      "source": "Assets/Tests/EditMode/LobbyLifecycleTests.cs",
+      "output": "PersonalCode/Assets/Tests/EditMode/LobbyLifecycleTests.cs",
+      "category": "personal",
+      "sha256": "033efddf564e66218028cd4c59bfcee20a98b5655a2296f378f7a1fc41c85ce0",
+      "commits": [
+        "576871ddff0a455ba4ad54fa475af1c28a68a576",
+        "bd2f7578f227c6db3e6fa7510151e7b3b8154055",
+        "225a7292ad3296528948c62489ff6a5fa9219c16",
+        "206dfe03cb4590a88c1c936c5c02ae0baab56c2c",
+        "c3e0455797fb18720ef85a39d58ed56835cf43b3"
+      ]
+    },
+    {
+      "source": "Assets/Tests/EditMode/LobbyTutorialTests.cs",
+      "output": "PersonalCode/Assets/Tests/EditMode/LobbyTutorialTests.cs",
+      "category": "personal",
+      "sha256": "cb86ca7f3d681763ce2476b8c5622115f4a6ecf2d14d4e7718e6030f0feb276b",
+      "commits": [
+        "40425f205172ec200ff7a0f54050d3eab17b8272"
+      ]
+    },
+    {
+      "source": "Assets/Tests/EditMode/LoginNicknameFlowTests.cs",
+      "output": "PersonalCode/Assets/Tests/EditMode/LoginNicknameFlowTests.cs",
+      "category": "personal",
+      "sha256": "9d68aa6addb9529d5b7e2020f58fa10b7d505f287a19ebfbe27d6780ec84afb6",
+      "commits": [
+        "a20d731e531b8ae60e63d626472cdbc73f0f1b04",
+        "40425f205172ec200ff7a0f54050d3eab17b8272",
+        "1e1269ddfbf62d304927f1d3e9dea3d0a560d450",
+        "a27f531105f962bf72473ecd9b580fa4972d6986"
+      ]
+    },
+    {
+      "source": "Assets/Tests/EditMode/MoveOptionChoiceTests.cs",
+      "output": "PersonalCode/Assets/Tests/EditMode/MoveOptionChoiceTests.cs",
+      "category": "personal",
+      "sha256": "b681e4c51c0984b043914c2917ff17a8fa2c1c83aec1fd675ed7793bef4102e1",
+      "commits": [
+        "b2845c592edafe2b8795f8074e0c728ea7795ed5"
+      ]
+    },
+    {
+      "source": "Assets/Tests/EditMode/NodeClickBoundsTests.cs",
+      "output": "PersonalCode/Assets/Tests/EditMode/NodeClickBoundsTests.cs",
+      "category": "personal",
+      "sha256": "99120633ab935bd020a768e9f89ea425ae65482f2184907378a9291afee19110",
+      "commits": [
+        "c3e0455797fb18720ef85a39d58ed56835cf43b3"
+      ]
+    },
+    {
+      "source": "Assets/Tests/EditMode/OverlappingDestinationClickTests.cs",
+      "output": "PersonalCode/Assets/Tests/EditMode/OverlappingDestinationClickTests.cs",
+      "category": "personal",
+      "sha256": "de1060bfcbada547dbc2b7b3e14663cdb277d7108384e7ba5313dc7f6f40452e",
+      "commits": [
+        "b2845c592edafe2b8795f8074e0c728ea7795ed5"
+      ]
+    },
+    {
+      "source": "Assets/Tests/EditMode/RemoteSnapshotTests.cs",
+      "output": "PersonalCode/Assets/Tests/EditMode/RemoteSnapshotTests.cs",
+      "category": "personal",
+      "sha256": "76a39bffa820dbcef4e42fbb44b1a0a67dfb6bc07ed777ff56316eea87dbe58d",
+      "commits": [
+        "225a7292ad3296528948c62489ff6a5fa9219c16",
+        "73d09749b4902a103958a4820a9708c4cc0ba6dd",
+        "da10c8d725faee1405651c2d29c38e698ee5185a",
+        "2abcfc5329e41e7f86d02cd4888589f3490f4771",
+        "c3e0455797fb18720ef85a39d58ed56835cf43b3"
+      ]
+    },
+    {
+      "source": "Assets/Tests/EditMode/RethrowHudTests.cs",
+      "output": "PersonalCode/Assets/Tests/EditMode/RethrowHudTests.cs",
+      "category": "personal",
+      "sha256": "f22da987fe0048e953027dbfdc48864c8364a61fc9e724c98cfbb214e426ddbb",
+      "commits": [
+        "2e4750da2af3d3b34c914b5579d8543b98473b1e"
+      ]
+    },
+    {
+      "source": "Assets/Tests/EditMode/RoomReconnectStatusTests.cs",
+      "output": "PersonalCode/Assets/Tests/EditMode/RoomReconnectStatusTests.cs",
+      "category": "personal",
+      "sha256": "f4ebcc66a23868e8785ddf7a995dbc90f298cde3ae38b9036a9b6d9853b44be0",
+      "commits": [
+        "576871ddff0a455ba4ad54fa475af1c28a68a576",
+        "40425f205172ec200ff7a0f54050d3eab17b8272",
+        "206dfe03cb4590a88c1c936c5c02ae0baab56c2c"
+      ]
+    },
+    {
+      "source": "Assets/Tests/EditMode/RoomSettingsLifecycleTests.cs",
+      "category": "shared",
+      "commits": [
+        "206dfe03cb4590a88c1c936c5c02ae0baab56c2c",
+        "2af0eef7c0e1469b2cda247aa7f6cffa8f609f44",
+        "bd2f7578f227c6db3e6fa7510151e7b3b8154055"
+      ],
+      "original_url": "https://github.com/Potato-Gamja/AugmentedYutNori/blob/a4fca4d4dd238c8c4abda41502fc847fe8503d6d/Assets/Tests/EditMode/RoomSettingsLifecycleTests.cs"
+    },
+    {
+      "source": "Assets/Tests/EditMode/SoundStartupTests.cs",
+      "output": "PersonalCode/Assets/Tests/EditMode/SoundStartupTests.cs",
+      "category": "personal",
+      "sha256": "c66de854213e5b719678ea21a8bd7c183b41a4f99dda34f08154eeaa33ded7de",
+      "commits": [
+        "c0ec46b3368db4a1d45ec1d5261d9bf5e4bbc378"
+      ]
+    },
+    {
+      "source": "Assets/Tests/EditMode/VeteranFlowLifecycleTests.cs",
+      "output": "PersonalCode/Assets/Tests/EditMode/VeteranFlowLifecycleTests.cs",
+      "category": "personal",
+      "sha256": "d81a72b62b0a012b54b114a3c708fc81655333ecfdbc757ec0456dc477a3bf28",
+      "commits": [
+        "da10c8d725faee1405651c2d29c38e698ee5185a"
+      ]
+    }
+  ],
+  "patches": [
+    {
+      "path": "SharedChanges/patches/001-b9f372d4.patch",
+      "commit": "b9f372d4c173461b6fd4eb6bed76e7dacbdbe59f",
+      "files": [
+        "Assets/Scripts/Flow/GameFlowController.cs"
+      ],
+      "sha256": "d47f478be1cb64f57fb92ace70b5d923ff3492ff7635fe95c531400635fcbef4"
+    },
+    {
+      "path": "SharedChanges/patches/002-50be360a.patch",
+      "commit": "50be360a5b914063d0f90a7a49ab70f4fcd5d79c",
+      "files": [
+        "Assets/Scripts/Flow/GameFlowController.cs"
+      ],
+      "sha256": "41600260e2278124b6b34b26eb2541f93e856bc6f5b933df1eb5a81aa5a48d78"
+    },
+    {
+      "path": "SharedChanges/patches/003-294ea1e0.patch",
+      "commit": "294ea1e022dedffc5aade497a9955546ef6d3312",
+      "files": [
+        "Assets/Scripts/Flow/GameFlowController.cs",
+        "Assets/Scripts/Presentation/UI/GameHudPanel.cs",
+        "Assets/Scripts/Presentation/UI/YutResultPanel.cs",
+        "Assets/Scripts/Presentation/Yut/YutThrowView.cs"
+      ],
+      "sha256": "32b00430026e4ba22ffe07af162d81a6f9e4e9291827c5aebb74d7aeacb87c1b"
+    },
+    {
+      "path": "SharedChanges/patches/004-5b70beb8.patch",
+      "commit": "5b70beb813e22cdc8c9f8d62f1e926228e85bfae",
+      "files": [
+        "Assets/Scripts/Flow/GameFlowController.cs",
+        "Assets/Scripts/Presentation/UI/GameHudPanel.cs",
+        "Assets/Scripts/Presentation/UI/YutResultPanel.cs"
+      ],
+      "sha256": "2f49ac9648b12ef1fc5479566173c10ebc23842878f1b508d90f6666891f7840"
+    },
+    {
+      "path": "SharedChanges/patches/005-0f0e00a4.patch",
+      "commit": "0f0e00a4d7d04365ce3b21d0830af68ec689ae9e",
+      "files": [
+        "Assets/Scripts/Flow/GameFlowController.cs",
+        "Assets/Scripts/Presentation/UI/AugmentSelectPanel.cs",
+        "Assets/Scripts/Presentation/UI/GameHudPanel.cs"
+      ],
+      "sha256": "1f0e13c3a568b3904817acb4593ffe24a85dc198fa74019a1ef3217b0a7aaf26"
+    },
+    {
+      "path": "SharedChanges/patches/006-49fb74cb.patch",
+      "commit": "49fb74cbc7e50db8c630574b1d7b37bae70a5b01",
+      "files": [
+        "Assets/Scripts/Flow/GameFlowController.cs"
+      ],
+      "sha256": "c0a5f596320c0ef61fe3f882592be77745fdaae22bdd46cea332f4296ed5e0fd"
+    },
+    {
+      "path": "SharedChanges/patches/007-d9755b7f.patch",
+      "commit": "d9755b7ffcc2d1e4db861deea80dc323ca270af2",
+      "files": [
+        "Assets/Scripts/Flow/GameFlowController.cs",
+        "Assets/Scripts/Flow/GameFlowHudPresenter.cs",
+        "Assets/Scripts/Presentation/UI/AugmentCardView.cs",
+        "Assets/Scripts/Presentation/UI/AugmentSelectPanel.cs",
+        "Assets/Scripts/Presentation/UI/GameHudPanel.cs",
+        "Assets/Scripts/Presentation/UI/PlayerStatusView.cs",
+        "Assets/Scripts/Presentation/UI/UIBase.cs"
+      ],
+      "sha256": "3c6fcda3b8bc6077f931f21116c86f5ee940206fc8c29855242889352bf3910e"
+    },
+    {
+      "path": "SharedChanges/patches/008-27b0773b.patch",
+      "commit": "27b0773b9d91f197e6ee387448b1f16751306cc7",
+      "files": [
+        "Assets/Scripts/Flow/GameFlowController.cs",
+        "Assets/Scripts/Presentation/UI/GameHudPanel.cs"
+      ],
+      "sha256": "583e01dd0fb3221f636f9ad2c62dd40390aa1d6ab892b378a1045bb68389baec"
+    },
+    {
+      "path": "SharedChanges/patches/009-6add1571.patch",
+      "commit": "6add1571a653eaa3f699ab96046050b3b958c689",
+      "files": [
+        "Assets/Scripts/Flow/GameFlowController.cs",
+        "Assets/Scripts/Presentation/UI/AugmentCardView.cs",
+        "Assets/Scripts/Presentation/UI/AugmentSelectPanel.cs"
+      ],
+      "sha256": "c477d11611b57c0c20e631e05f8dc9d20eec2c3bec19bcedd9e9ca3b8cb25678"
+    },
+    {
+      "path": "SharedChanges/patches/010-407c0acc.patch",
+      "commit": "407c0acc90f8dcc51692419734b547d980f1bef4",
+      "files": [
+        "Assets/Scripts/Flow/GameFlowController.cs"
+      ],
+      "sha256": "1902f7663a8f0aedb1a29c4bb9ef6eab88e47d229f87927a68162adce88005f3"
+    },
+    {
+      "path": "SharedChanges/patches/011-033f10a6.patch",
+      "commit": "033f10a65f5880b51df8cb152849ed9fefb98830",
+      "files": [
+        "Assets/Scripts/Flow/GameFlowController.cs",
+        "Assets/Scripts/Flow/LobbyController.cs",
+        "Assets/Scripts/Flow/LobbyNetworkCoordinator.cs"
+      ],
+      "sha256": "cf60676a4407e675519c812965ed7ad1a1e0907a7004f0e7ea5c6517521ba51c"
+    },
+    {
+      "path": "SharedChanges/patches/012-97b2f757.patch",
+      "commit": "97b2f7578afdaf965f7bb1b61b5deb7e62aff7ea",
+      "files": [
+        "Assets/Scripts/Flow/GameFlowController.cs",
+        "Assets/Scripts/Flow/LobbyNetworkCoordinator.cs",
+        "Assets/Scripts/Network/Protocol/MessageType.cs",
+        "Assets/Scripts/Network/Protocol/Messages/GameMessages.cs",
+        "Assets/Scripts/Network/RemoteGameSession.cs",
+        "Assets/Scripts/Presentation/Piece/PieceView.cs",
+        "Assets/Scripts/Presentation/UI/GameHudPanel.cs",
+        "Assets/Scripts/Presentation/UI/PlayerStatusView.cs"
+      ],
+      "sha256": "6f7777030bfc284e022c677c73f7ea76bce0246590939edd79e30013b50b2556"
+    },
+    {
+      "path": "SharedChanges/patches/013-7b6c7a32.patch",
+      "commit": "7b6c7a32b90c60b796c29bd6862aacc7c2699e8f",
+      "files": [
+        "Assets/Scripts/Flow/GameFlowController.cs",
+        "Assets/Scripts/Flow/GameFlowHudPresenter.cs",
+        "Assets/Scripts/Network/PlayerIdentity.cs",
+        "Assets/Scripts/Network/WebSocketClient.cs",
+        "Assets/Scripts/Presentation/Board/NodeView.cs",
+        "Assets/Scripts/Presentation/Piece/PieceView.cs",
+        "Assets/Scripts/Presentation/UI/GameHudPanel.cs",
+        "Assets/Scripts/Presentation/UI/PlayerStatusView.cs"
+      ],
+      "sha256": "e7b52c2ed5b24cfa433ad843326722bb191e4c0425565d172a74fd968174ed24"
+    },
+    {
+      "path": "SharedChanges/patches/014-4c786665.patch",
+      "commit": "4c786665da3e27df4b3637802be43235086787e6",
+      "files": [
+        "Assets/Scripts/Flow/GameFlowController.cs",
+        "Assets/Scripts/Flow/LobbyController.cs",
+        "Assets/Scripts/Flow/LobbyNetworkCoordinator.cs",
+        "Assets/Scripts/Network/RemoteGameSession.cs",
+        "Assets/Scripts/Presentation/UI/GameHudPanel.cs",
+        "Assets/Scripts/Presentation/UI/PlayerStatusView.cs"
+      ],
+      "sha256": "2202b2b5f0c4d9bd045e48f51cc2a192db58c7b9a9b9fcdc8d4cdfe58bb8f6c1"
+    },
+    {
+      "path": "SharedChanges/patches/015-aac5fc2a.patch",
+      "commit": "aac5fc2a0d9062a24b8aaa2ecdfddae5cb444354",
+      "files": [
+        "Assets/Scripts/Flow/LobbyController.cs",
+        "Assets/Scripts/Presentation/UI/AugmentCardView.cs"
+      ],
+      "sha256": "de3561734bf0728387e89a68620873816f340331754f9fb7a5963b480b4ab11e"
+    },
+    {
+      "path": "SharedChanges/patches/016-ca07b9ff.patch",
+      "commit": "ca07b9ff773ecafb5c5b6397bbca5633217ec9cc",
+      "files": [
+        "Assets/Scripts/Flow/GameFlowController.cs",
+        "Assets/Scripts/Flow/GameFlowHudPresenter.cs",
+        "Assets/Scripts/Flow/LobbyController.cs",
+        "Assets/Scripts/Flow/LobbyNetworkCoordinator.cs",
+        "Assets/Scripts/Network/Protocol/MessageType.cs",
+        "Assets/Scripts/Network/RemoteGameSession.cs",
+        "Assets/Scripts/Network/WebSocketClient.cs",
+        "Assets/Scripts/Presentation/Piece/PieceView.cs",
+        "Assets/Scripts/Presentation/UI/CollectionPanel.cs",
+        "Assets/Scripts/Presentation/UI/GameHudPanel.cs",
+        "Assets/Scripts/Presentation/UI/PlayerStatusView.cs",
+        "Assets/Scripts/Presentation/UI/ProfilePanel.cs"
+      ],
+      "sha256": "b1d18eb4070fa1bd374227a6d01b0ca30216d4eee3ccfecabf4fa71fe975af73"
+    },
+    {
+      "path": "SharedChanges/patches/017-51fef4ec.patch",
+      "commit": "51fef4ecab6c45ff8b185b3c3040443cbd382b50",
+      "files": [
+        "Assets/Scripts/Flow/GameFlowController.cs",
+        "Assets/Scripts/Flow/GameFlowHudPresenter.cs",
+        "Assets/Scripts/Presentation/UI/AugmentCardView.cs",
+        "Assets/Scripts/Presentation/UI/GameHudPanel.cs",
+        "Assets/Scripts/Presentation/UI/PlayerStatusView.cs"
+      ],
+      "sha256": "fd883a9e8cf23161b283f07642708a3fdc8be503f2a28ecccc4fa3b16bed9a9a"
+    },
+    {
+      "path": "SharedChanges/patches/018-f849e90f.patch",
+      "commit": "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+      "files": [
+        "Assets/Plugins/WebGL/FirebaseGoogleAuth.jslib",
+        "Assets/Scripts/Flow/GameFlowController.cs",
+        "Assets/Scripts/Flow/LobbyController.cs",
+        "Assets/Scripts/Flow/LobbyNetworkCoordinator.cs",
+        "Assets/Scripts/Flow/LoginController.cs",
+        "Assets/Scripts/Network/ApiClient.cs",
+        "Assets/Scripts/Network/Auth/DesktopGoogleSignIn.cs",
+        "Assets/Scripts/Network/Auth/IGoogleSignIn.cs",
+        "Assets/Scripts/Network/Auth/WebGLGoogleSignIn.cs",
+        "Assets/Scripts/Network/AuthApi.cs",
+        "Assets/Scripts/Network/PlayerIdentity.cs",
+        "Assets/Scripts/Network/Protocol/MessageType.cs",
+        "Assets/Scripts/Network/Protocol/Messages/GameMessages.cs",
+        "Assets/Scripts/Network/Protocol/Messages/RoomMessages.cs",
+        "Assets/Scripts/Network/Protocol/Messages/SystemMessages.cs",
+        "Assets/Scripts/Network/RemoteGameSession.cs",
+        "Assets/Scripts/Presentation/UI/AugmentCardView.cs",
+        "Assets/Scripts/Presentation/UI/GameHudPanel.cs",
+        "Assets/Scripts/Presentation/UI/LoginPanel.cs",
+        "Assets/Scripts/Presentation/UI/PlayerStatusView.cs",
+        "Assets/Scripts/Presentation/UI/ProfilePanel.cs",
+        "Assets/Scripts/Presentation/UI/ResultPopup.cs",
+        "Assets/Scripts/Presentation/UI/UIBase.cs",
+        "Assets/Scripts/Presentation/Yut/YutThrowView.cs"
+      ],
+      "sha256": "25e23d1cc3362edd5162c39281f714cc4d3a7ab579d67b6b841a449290662cb2"
+    },
+    {
+      "path": "SharedChanges/patches/019-7f82be95.patch",
+      "commit": "7f82be95979b065c06c240cec9e6b149f1b6a117",
+      "files": [
+        "Assets/Scripts/Flow/LobbyController.cs",
+        "Assets/Scripts/Flow/LobbyNetworkCoordinator.cs",
+        "Assets/Scripts/Network/PlayerIdentity.cs",
+        "Assets/Scripts/Presentation/Yut/YutThrowView.cs"
+      ],
+      "sha256": "08a0bfa25fca050b8245d80141cb407459d3d3e60ad22b61b53ed4e1cbfd6f34"
+    },
+    {
+      "path": "SharedChanges/patches/020-9dad7dc6.patch",
+      "commit": "9dad7dc6a3ae5a5c9067c11a2512da806393c245",
+      "files": [
+        "Assets/Scripts/Flow/GameFlowController.cs",
+        "Assets/Scripts/Flow/LobbyNetworkCoordinator.cs",
+        "Assets/Scripts/Network/RemoteGameSession.cs"
+      ],
+      "sha256": "0809b72abd6881d5d867ecd2408a091e9ba82452bd8cfe58b7bbb2ea44740c0b"
+    },
+    {
+      "path": "SharedChanges/patches/021-159519b3.patch",
+      "commit": "159519b3901de0f277588f65c5216d56cf8e5597",
+      "files": [
+        "Assets/Scripts/Flow/LobbyController.cs",
+        "Assets/Scripts/Flow/LobbyNetworkCoordinator.cs",
+        "Assets/Scripts/Network/Auth/DesktopGoogleSignIn.cs",
+        "Assets/Scripts/Presentation/UI/ProfilePanel.cs"
+      ],
+      "sha256": "df873a3403d1e02baae526ac328ef21df50d4c061a5689df0a5c956e56ce5082"
+    },
+    {
+      "path": "SharedChanges/patches/022-48773696.patch",
+      "commit": "48773696f671d8db39db6dfd1829933c75395d0f",
+      "files": [
+        "Assets/Scripts/Flow/GameFlowController.cs",
+        "Assets/Scripts/Flow/LobbyController.cs",
+        "Assets/Scripts/Flow/LobbyNetworkCoordinator.cs",
+        "Assets/Scripts/Presentation/UI/GameHudPanel.cs",
+        "Assets/Scripts/Presentation/UI/ResultPopup.cs"
+      ],
+      "sha256": "6841f8df940161e3d670ac6e82a430ffc95c484aea874b517b33075523e2f0b4"
+    },
+    {
+      "path": "SharedChanges/patches/023-69f08b9c.patch",
+      "commit": "69f08b9ca21e0f4734ccfdf6ce15c7605661ef60",
+      "files": [
+        "Assets/Scripts/Flow/LobbyController.cs",
+        "Assets/Scripts/Flow/LobbyNetworkCoordinator.cs"
+      ],
+      "sha256": "592e3f371cd8d13ed3b2f0d3e04c1f78a5c0b477442ac6f07ef779791ea816c7"
+    },
+    {
+      "path": "SharedChanges/patches/024-0d0b47b6.patch",
+      "commit": "0d0b47b6196cdee77091f8c199779453475c1082",
+      "files": [
+        "Assets/Scripts/Flow/LobbyController.cs",
+        "Assets/Scripts/Flow/LobbyNetworkCoordinator.cs",
+        "Assets/Scripts/Presentation/UI/AugmentCardView.cs",
+        "Assets/Scripts/Presentation/UI/CollectionPanel.cs",
+        "Assets/Scripts/Presentation/UI/ProfilePanel.cs"
+      ],
+      "sha256": "8020373eec16b877e50c14fe660b81aac2dd60633b457626f8d997a35453d7ad"
+    },
+    {
+      "path": "SharedChanges/patches/025-c3e04557.patch",
+      "commit": "c3e0455797fb18720ef85a39d58ed56835cf43b3",
+      "files": [
+        "Assets/Scripts/Flow/GameFlowController.cs",
+        "Assets/Scripts/Flow/LobbyController.cs",
+        "Assets/Scripts/Flow/LobbyNetworkCoordinator.cs",
+        "Assets/Scripts/Network/Protocol/Messages/SystemMessages.cs",
+        "Assets/Scripts/Network/RemoteGameSession.cs",
+        "Assets/Scripts/Presentation/UI/CollectionPanel.cs",
+        "Assets/Scripts/Presentation/UI/GameHudPanel.cs",
+        "Assets/Scripts/Presentation/UI/PlayerStatusView.cs",
+        "Assets/Scripts/Presentation/UI/ResultPopup.cs"
+      ],
+      "sha256": "30878ba9c05dba01c27fc0371000b830fe4fa52e7dde2621867d2e9add6b4c91"
+    },
+    {
+      "path": "SharedChanges/patches/026-171e85a8.patch",
+      "commit": "171e85a8b3faabd4eff88f6b4ac21b232e60e808",
+      "files": [
+        "Assets/Scripts/Flow/GameFlowController.cs",
+        "Assets/Scripts/Presentation/UI/PlayerStatusView.cs",
+        "Assets/Scripts/Presentation/UI/ResultPopup.cs"
+      ],
+      "sha256": "d5ba3d42e870233f4264697987de704f23a7e9944c0b6cb4708672560a7f524a"
+    },
+    {
+      "path": "SharedChanges/patches/027-2a626b6d.patch",
+      "commit": "2a626b6d1bfcdf02b8179436a9438acbc327e87e",
+      "files": [
+        "Assets/Scripts/Flow/LobbyController.cs",
+        "Assets/Scripts/Flow/LobbyNetworkCoordinator.cs",
+        "Assets/Scripts/Network/GameReconnectCache.cs",
+        "Assets/Scripts/Network/PlayerIdentity.cs"
+      ],
+      "sha256": "21ab0b1fbb06fa6bbbfc339795ab7a1b3bfad9f9dc7ec9933c14d9758fa37d01"
+    },
+    {
+      "path": "SharedChanges/patches/028-2abcfc53.patch",
+      "commit": "2abcfc5329e41e7f86d02cd4888589f3490f4771",
+      "files": [
+        "Assets/Scripts/Flow/LobbyController.cs",
+        "Assets/Scripts/Flow/LobbyNetworkCoordinator.cs",
+        "Assets/Scripts/Network/GameReconnectCache.cs",
+        "Assets/Scripts/Network/RemoteGameSession.cs"
+      ],
+      "sha256": "538b8351b4b646bab925e2cd62b7fbbc6c97683a7be5accb069d1a91f796f2a3"
+    },
+    {
+      "path": "SharedChanges/patches/029-2e4750da.patch",
+      "commit": "2e4750da2af3d3b34c914b5579d8543b98473b1e",
+      "files": [
+        "Assets/Scripts/Flow/GameFlowController.cs"
+      ],
+      "sha256": "0eacdad2281bb328b4ebb7fbdc98c530a57986b337368d47cff32848980a3dec"
+    },
+    {
+      "path": "SharedChanges/patches/030-206dfe03.patch",
+      "commit": "206dfe03cb4590a88c1c936c5c02ae0baab56c2c",
+      "files": [
+        "Assets/Scripts/Flow/GameFlowController.cs",
+        "Assets/Scripts/Flow/LobbyController.cs",
+        "Assets/Scripts/Flow/LobbyNetworkCoordinator.cs",
+        "Assets/Scripts/Network/WebSocketClient.cs",
+        "Assets/Scripts/Presentation/Piece/PieceView.cs",
+        "Assets/Scripts/Presentation/UI/ResultPopup.cs",
+        "Assets/Tests/EditMode/RoomSettingsLifecycleTests.cs"
+      ],
+      "sha256": "1474122dcbe3007e9e29ddd96d80efeccb4d07c62a24609750b1ea0b32cee6ef"
+    },
+    {
+      "path": "SharedChanges/patches/031-2af0eef7.patch",
+      "commit": "2af0eef7c0e1469b2cda247aa7f6cffa8f609f44",
+      "files": [
+        "Assets/Scripts/Presentation/UI/PlayerStatusView.cs",
+        "Assets/Tests/EditMode/RoomSettingsLifecycleTests.cs"
+      ],
+      "sha256": "5f5dd28792c9503617efe09e2bef97d15ccf34988e704663fddb2e441dc4c4b8"
+    },
+    {
+      "path": "SharedChanges/patches/032-5aedecb1.patch",
+      "commit": "5aedecb144482bd01f146f173198fa6f6cb66fae",
+      "files": [
+        "Assets/Scripts/Flow/GameFlowController.cs",
+        "Assets/Scripts/Flow/LobbyController.cs",
+        "Assets/Scripts/Flow/LobbyNetworkCoordinator.cs",
+        "Assets/Scripts/Presentation/UI/AchievementItemView.cs",
+        "Assets/Scripts/Presentation/UI/AchievementPanel.cs",
+        "Assets/Scripts/Presentation/UI/AugmentCardView.cs",
+        "Assets/Scripts/Presentation/UI/AugmentSelectPanel.cs",
+        "Assets/Scripts/Presentation/UI/GachaPanel.cs",
+        "Assets/Scripts/Presentation/UI/GachaResultView.cs",
+        "Assets/Scripts/Presentation/UI/ProfilePanel.cs"
+      ],
+      "sha256": "71788ae0d02bebfa7da4ab17c5e082d6483a6b8b979c99f93058d9c2cbc08b44"
+    },
+    {
+      "path": "SharedChanges/patches/033-da10c8d7.patch",
+      "commit": "da10c8d725faee1405651c2d29c38e698ee5185a",
+      "files": [
+        "Assets/Scripts/Flow/GameFlowController.cs",
+        "Assets/Scripts/Flow/GameFlowHudPresenter.cs",
+        "Assets/Scripts/Network/RemoteGameSession.cs",
+        "Assets/Scripts/Presentation/UI/AugmentCardView.cs",
+        "Assets/Scripts/Presentation/UI/GameHudPanel.cs",
+        "Assets/Scripts/Presentation/UI/PlayerStatusView.cs"
+      ],
+      "sha256": "81b2119e1e0987551b7a990a4c73cb389e2f08269816a355dbed963d0ea2b8aa"
+    },
+    {
+      "path": "SharedChanges/patches/034-aa820155.patch",
+      "commit": "aa820155f81d724cd18ad73f9d3127378fe102a1",
+      "files": [
+        "Assets/Scripts/Flow/GameFlowController.cs",
+        "Assets/Scripts/Flow/LobbyController.cs",
+        "Assets/Scripts/Flow/LobbyNetworkCoordinator.cs",
+        "Assets/Scripts/Network/Protocol/MessageType.cs",
+        "Assets/Scripts/Network/Protocol/Messages/RoomMessages.cs"
+      ],
+      "sha256": "f5ebd71ef58f71a1a51103803727d21b7a90ab69535021458c3e17c30f588413"
+    },
+    {
+      "path": "SharedChanges/patches/035-73d09749.patch",
+      "commit": "73d09749b4902a103958a4820a9708c4cc0ba6dd",
+      "files": [
+        "Assets/Scripts/Network/GameReconnectCache.cs",
+        "Assets/Scripts/Network/RemoteGameSession.cs",
+        "Assets/Scripts/Presentation/UI/AugmentSelectPanel.cs"
+      ],
+      "sha256": "4893c849827b0aef0156ba3298fadded14d2808530eb82019b3d1c9d605561df"
+    },
+    {
+      "path": "SharedChanges/patches/036-225a7292.patch",
+      "commit": "225a7292ad3296528948c62489ff6a5fa9219c16",
+      "files": [
+        "Assets/Scripts/Flow/GameFlowController.cs",
+        "Assets/Scripts/Flow/GameFlowHudPresenter.cs",
+        "Assets/Scripts/Network/RemoteGameSession.cs",
+        "Assets/Scripts/Presentation/UI/GameHudPanel.cs",
+        "Assets/Scripts/Presentation/UI/PlayerStatusView.cs"
+      ],
+      "sha256": "308df611566f1a5290f02d5c1f5dd8a61a24fbbe8430414f808e941428f610a9"
+    },
+    {
+      "path": "SharedChanges/patches/037-c0ec46b3.patch",
+      "commit": "c0ec46b3368db4a1d45ec1d5261d9bf5e4bbc378",
+      "files": [
+        "Assets/Scripts/Flow/GameFlowController.cs",
+        "Assets/Scripts/Presentation/Audio/SoundManager.cs"
+      ],
+      "sha256": "7ed5b7fe82627eff8285157c1b0abba31ed2342852ed1192150805c5036161b7"
+    },
+    {
+      "path": "SharedChanges/patches/038-5f6e161e.patch",
+      "commit": "5f6e161ee9f986bb9d1191efdb57d5474191590b",
+      "files": [
+        "Assets/Scripts/Presentation/UI/AugmentSelectPanel.cs"
+      ],
+      "sha256": "a846e12da26c0fe4eafe92205010185f35e93454c821aff9bb6f12c154e139ce"
+    },
+    {
+      "path": "SharedChanges/patches/039-b2845c59.patch",
+      "commit": "b2845c592edafe2b8795f8074e0c728ea7795ed5",
+      "files": [
+        "Assets/Scripts/Flow/GameFlowHudPresenter.cs"
+      ],
+      "sha256": "545128bda4101e2465422ae3fa5a23f02e53f1cf40a9765c819f29a11a2bff79"
+    },
+    {
+      "path": "SharedChanges/patches/040-a27f5311.patch",
+      "commit": "a27f531105f962bf72473ecd9b580fa4972d6986",
+      "files": [
+        "Assets/Plugins/WebGL/FirebaseGoogleAuth.jslib"
+      ],
+      "sha256": "c04361db4ec49f2aacf031265f2f577c5d037f760252c3eaa92a550543bb705b"
+    },
+    {
+      "path": "SharedChanges/patches/041-47c52711.patch",
+      "commit": "47c527110bad858c90d4c3964c6d5170f50ef76a",
+      "files": [
+        "Assets/Scripts/Presentation/UI/NicknamePanel.cs"
+      ],
+      "sha256": "b40705ec450f9ceb3d6fb98a56eb14fce2f82fcd6dfc603c597e4dba733a35a8"
+    },
+    {
+      "path": "SharedChanges/patches/042-1e1269dd.patch",
+      "commit": "1e1269ddfbf62d304927f1d3e9dea3d0a560d450",
+      "files": [
+        "Assets/Scripts/Presentation/UI/NicknamePanel.cs"
+      ],
+      "sha256": "334ab1288d17b2e06c74f0494ccf2ae824f009dec7acdb7b4d5a4c061c61906d"
+    },
+    {
+      "path": "SharedChanges/patches/043-40425f20.patch",
+      "commit": "40425f205172ec200ff7a0f54050d3eab17b8272",
+      "files": [
+        "Assets/Scripts/Flow/LobbyController.cs",
+        "Assets/Scripts/Flow/LobbyNetworkCoordinator.cs",
+        "Assets/Scripts/Flow/LoginController.cs",
+        "Assets/Scripts/Network/PlayerIdentity.cs",
+        "Assets/Scripts/Presentation/UI/LoginPanel.cs",
+        "Assets/Scripts/Presentation/UI/ProfilePanel.cs"
+      ],
+      "sha256": "0be90d157d366c5e647085237a53231c548687465a5d24de9b7f3dd5140dd210"
+    },
+    {
+      "path": "SharedChanges/patches/044-a20d731e.patch",
+      "commit": "a20d731e531b8ae60e63d626472cdbc73f0f1b04",
+      "files": [
+        "Assets/Scripts/Flow/LobbyController.cs",
+        "Assets/Scripts/Flow/LobbyNetworkCoordinator.cs",
+        "Assets/Scripts/Flow/LoginController.cs",
+        "Assets/Scripts/Network/ApiClient.cs",
+        "Assets/Scripts/Network/AuthApi.cs",
+        "Assets/Scripts/Network/PlayerIdentity.cs",
+        "Assets/Scripts/Presentation/UI/NicknamePanel.cs",
+        "Assets/Scripts/Presentation/UI/ProfilePanel.cs"
+      ],
+      "sha256": "87d33667c872bbe6d4efd2b5aea093cc0f00e3e791e28f9daca79d7a6b38116a"
+    },
+    {
+      "path": "SharedChanges/patches/045-bd2f7578.patch",
+      "commit": "bd2f7578f227c6db3e6fa7510151e7b3b8154055",
+      "files": [
+        "Assets/Scripts/Flow/LobbyNetworkCoordinator.cs",
+        "Assets/Scripts/Network/GachaApi.cs",
+        "Assets/Scripts/Network/Protocol/Messages/GameMessages.cs",
+        "Assets/Scripts/Presentation/UI/GachaPanel.cs",
+        "Assets/Scripts/Presentation/UI/GachaResultView.cs",
+        "Assets/Scripts/Presentation/UI/ResultPopup.cs",
+        "Assets/Tests/EditMode/RoomSettingsLifecycleTests.cs"
+      ],
+      "sha256": "d0bfcf0997d5addbe0b9e42a274e5221ef33eb96e2e2009fbdfb04a629013bea"
+    },
+    {
+      "path": "SharedChanges/patches/046-576871dd.patch",
+      "commit": "576871ddff0a455ba4ad54fa475af1c28a68a576",
+      "files": [
+        "Assets/Scripts/Presentation/UI/PlayerStatusView.cs"
+      ],
+      "sha256": "5406de527259fb792de407d2114d178f9445f8208c2ed090b706d9b4588972ca"
+    },
+    {
+      "path": "SharedChanges/patches/047-dc012ec9.patch",
+      "commit": "dc012ec9bacdac866befa37fa7db63e44df21426",
+      "files": [
+        "Assets/Scripts/Flow/GameFlowController.cs",
+        "Assets/Scripts/Network/Auth/DesktopGoogleSignIn.cs",
+        "Assets/Scripts/Network/LocalGameSession.cs",
+        "Assets/Scripts/Network/RemoteGameSession.cs"
+      ],
+      "sha256": "e1999afe05f9be63bdd741906138a8bec48e5e1ea7c1db5274dea0f6df5868b4"
+    }
+  ],
+  "excluded_imports": [
+    {
+      "source": "Assets/Editor/BoardLayoutExporter.cs",
+      "commit": "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Editor/ProfileIconSync.cs",
+      "commit": "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Network/AchievementApi.cs",
+      "commit": "c3e0455797fb18720ef85a39d58ed56835cf43b3",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Network/ApiClient.cs",
+      "commit": "033f10a65f5880b51df8cb152849ed9fefb98830",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Network/Auth/FirebaseAnonymousSignIn.cs",
+      "commit": "a20d731e531b8ae60e63d626472cdbc73f0f1b04",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Network/Auth/FirebaseTokenRefresher.cs",
+      "commit": "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Network/Auth/JwtToken.cs",
+      "commit": "a20d731e531b8ae60e63d626472cdbc73f0f1b04",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Network/GachaApi.cs",
+      "commit": "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Network/IGameSession.cs",
+      "commit": "407c0acc90f8dcc51692419734b547d980f1bef4",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Network/IconApi.cs",
+      "commit": "0d0b47b6196cdee77091f8c199779453475c1082",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Network/LocalGameSession.cs",
+      "commit": "407c0acc90f8dcc51692419734b547d980f1bef4",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Network/PlayerIdentity.cs",
+      "commit": "033f10a65f5880b51df8cb152849ed9fefb98830",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Network/Protocol/MessageSerializer.cs",
+      "commit": "a72357a0a049c65de14ab0c7435bd948b7c2aba1",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Network/Protocol/MessageType.cs",
+      "commit": "a72357a0a049c65de14ab0c7435bd948b7c2aba1",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Network/Protocol/Messages/AugmentMessages.cs",
+      "commit": "a72357a0a049c65de14ab0c7435bd948b7c2aba1",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Network/Protocol/Messages/GameMessages.cs",
+      "commit": "a72357a0a049c65de14ab0c7435bd948b7c2aba1",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Network/Protocol/Messages/RoomMessages.cs",
+      "commit": "a72357a0a049c65de14ab0c7435bd948b7c2aba1",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Network/Protocol/Messages/SystemMessages.cs",
+      "commit": "a72357a0a049c65de14ab0c7435bd948b7c2aba1",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Network/Protocol/WsEnvelope.cs",
+      "commit": "a72357a0a049c65de14ab0c7435bd948b7c2aba1",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Network/WebSocketClient.cs",
+      "commit": "033f10a65f5880b51df8cb152849ed9fefb98830",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Presentation/Audio/GameSoundBinder.cs",
+      "commit": "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Presentation/Audio/SoundId.cs",
+      "commit": "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Presentation/Audio/SoundManager.cs",
+      "commit": "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Presentation/Board/BoardView.cs",
+      "commit": "a72357a0a049c65de14ab0c7435bd948b7c2aba1",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Presentation/Board/NodeView.cs",
+      "commit": "a72357a0a049c65de14ab0c7435bd948b7c2aba1",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Presentation/Board/PathView.cs",
+      "commit": "a72357a0a049c65de14ab0c7435bd948b7c2aba1",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Presentation/Piece/PieceView.cs",
+      "commit": "a72357a0a049c65de14ab0c7435bd948b7c2aba1",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/AchievementItemView.cs",
+      "commit": "c3e0455797fb18720ef85a39d58ed56835cf43b3",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/AchievementPanel.cs",
+      "commit": "c3e0455797fb18720ef85a39d58ed56835cf43b3",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/AugmentCardView.cs",
+      "commit": "5b70beb813e22cdc8c9f8d62f1e926228e85bfae",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/AugmentSelectPanel.cs",
+      "commit": "5b70beb813e22cdc8c9f8d62f1e926228e85bfae",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/CollectionPanel.cs",
+      "commit": "aac5fc2a0d9062a24b8aaa2ecdfddae5cb444354",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/GachaPanel.cs",
+      "commit": "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/GachaResultSlot.cs",
+      "commit": "bd2f7578f227c6db3e6fa7510151e7b3b8154055",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/GachaResultView.cs",
+      "commit": "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/IconCollectionItemView.cs",
+      "commit": "0d0b47b6196cdee77091f8c199779453475c1082",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/NicknamePanel.cs",
+      "commit": "f849e90fd12bb7f4bc4540076854e0b895ec0572",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/ResultPopup.cs",
+      "commit": "294ea1e022dedffc5aade497a9955546ef6d3312",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/ResultRankRowView.cs",
+      "commit": "c3e0455797fb18720ef85a39d58ed56835cf43b3",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/UIBase.cs",
+      "commit": "294ea1e022dedffc5aade497a9955546ef6d3312",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    },
+    {
+      "source": "Assets/Scripts/Presentation/UI/UIManager.cs",
+      "commit": "294ea1e022dedffc5aade497a9955546ef6d3312",
+      "reason": "Team-origin file added on another history path; import is not a personal implementation."
+    }
+  ]
+}

@@ -1,0 +1,80 @@
+From commit: 171e85a8b3faabd4eff88f6b4ac21b232e60e808
+Contributor: Potato-Gamja (Gamja)
+Subject: [feat] 재연결 표시 추가
+Original: https://github.com/Potato-Gamja/AugmentedYutNori/commit/171e85a8b3faabd4eff88f6b4ac21b232e60e808
+
+diff --git a/Assets/Scripts/Flow/GameFlowController.cs b/Assets/Scripts/Flow/GameFlowController.cs
+index f3461fe..da1285f 100644
+--- a/Assets/Scripts/Flow/GameFlowController.cs
++++ b/Assets/Scripts/Flow/GameFlowController.cs
+@@ -303,6 +303,8 @@ public class GameFlowController : MonoBehaviour
+         OnBoardLayoutReloaded();
+         hudPresenter.RefreshStoredResults();
+         lastStateHash = StateHasher.HashHex(gameState, turnManager);
++        if (boardState.Pieces.Any(piece => piece.Team == setup.localTeam))
++            hud?.SetPlayerConnectionState(setup.localTeam, PlayerStatusView.ConnectionState.Connected);
+ 
+         if (snapshot.phase == "ENDED")
+         {
+@@ -595,6 +596,7 @@ public class GameFlowController : MonoBehaviour
+         {
+             selectionController?.Clear();
+             hud?.SetTimerRunning(false);
++            hud?.SetPlayerConnectionState(setup.localTeam, PlayerStatusView.ConnectionState.Reconnecting);
+             hud?.SetInstruction("서버 재접속을 기다리는 중입니다.");
+             return;
+         }
+diff --git a/Assets/Scripts/Presentation/UI/PlayerStatusView.cs b/Assets/Scripts/Presentation/UI/PlayerStatusView.cs
+index dfdecc4..c00ad65 100644
+--- a/Assets/Scripts/Presentation/UI/PlayerStatusView.cs
++++ b/Assets/Scripts/Presentation/UI/PlayerStatusView.cs
+@@ -352,12 +352,12 @@ public sealed class PlayerStatusView : MonoBehaviour
+                 overlay.Root.SetActive(false);
+                 break;
+             case ConnectionState.Reconnecting:
+-                reconnectDeadlines[team] = Time.unscaledTime + Mathf.Max(0, graceSec);
++                if (graceSec > 0) reconnectDeadlines[team] = Time.unscaledTime + graceSec;
+                 overlay.Background.color = new Color32(255, 249, 236, 225);
+-                overlay.StatusText.text = "재접속 중...";
++                overlay.StatusText.text = graceSec > 0 ? "재접속 중..." : "재연결 대기 중...";
+                 overlay.StatusText.color = new Color32(92, 62, 42, 255);
+                 overlay.TimerText.SetText("{0}초 남음", Mathf.Max(0, graceSec));
+-                overlay.TimerText.gameObject.SetActive(true);
++                overlay.TimerText.gameObject.SetActive(graceSec > 0);
+                 overlay.Root.SetActive(true);
+                 overlay.Root.transform.SetAsLastSibling();
+                 break;
+@@ -391,10 +391,17 @@ public sealed class PlayerStatusView : MonoBehaviour
+         RectTransform rootRect = root.GetComponent<RectTransform>();
+         rootRect.anchorMin = Vector2.zero;
+         rootRect.anchorMax = Vector2.one;
+-        rootRect.offsetMin = new Vector2(6f, 6f);
+-        rootRect.offsetMax = new Vector2(-6f, -6f);
++        rootRect.offsetMin = Vector2.zero;
++        rootRect.offsetMax = Vector2.zero;
+ 
+         Image background = root.GetComponent<Image>();
++        Image panelBackground = panel.GetComponent<Image>();
++        if (panelBackground != null)
++        {
++            background.sprite = panelBackground.sprite;
++            background.type = panelBackground.type;
++            background.pixelsPerUnitMultiplier = panelBackground.pixelsPerUnitMultiplier;
++        }
+         background.raycastTarget = false;
+ 
+         TMP_Text statusText = GetOrCreateOverlayText(root.transform, "ReconnectText");
+diff --git a/Assets/Scripts/Presentation/UI/ResultPopup.cs b/Assets/Scripts/Presentation/UI/ResultPopup.cs
+index 6858718..5ef8c48 100644
+--- a/Assets/Scripts/Presentation/UI/ResultPopup.cs
++++ b/Assets/Scripts/Presentation/UI/ResultPopup.cs
+@@ -52,7 +52,8 @@ public class ResultPopup : UIBase
+     public ResultPopup SetWinner(string winnername, Color winnerColor, Sprite profileIcon = null)
+     {
+         if (winnerText != null) winnerText.text = string.Format("{0} win", winnername);
+-        if (winnerColorImage != null) winnerColorImage.color = winnerColor;
++        // 기존 배경 참조는 프로필 테두리로 사용하며 팀 색을 입히지 않는다.
++        if (winnerColorImage != null) winnerColorImage.color = Color.white;
+         if (winnerProfileIcon != null)
+         {
+             winnerProfileIcon.sprite = profileIcon;

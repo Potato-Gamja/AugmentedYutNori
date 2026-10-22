@@ -1,0 +1,156 @@
+From commit: 69f08b9ca21e0f4734ccfdf6ce15c7605661ef60
+Contributor: Potato-Gamja (Gamja)
+Subject: [feat] 멀티플레이 빠른 참가 연결
+Original: https://github.com/Potato-Gamja/AugmentedYutNori/commit/69f08b9ca21e0f4734ccfdf6ce15c7605661ef60
+
+diff --git a/Assets/Scripts/Flow/LobbyController.cs b/Assets/Scripts/Flow/LobbyController.cs
+index 0dd2798..ae7bc7b 100644
+--- a/Assets/Scripts/Flow/LobbyController.cs
++++ b/Assets/Scripts/Flow/LobbyController.cs
+@@ -17,6 +17,8 @@ public class LobbyController : MonoBehaviour
+     private ProfilePanel profilePanel;
+     private string localPlayerId;
+ 
++    public bool IsPublicRoom => lobbyPanel == null || lobbyPanel.IsPublicRoom;
++
+     // 네트워크 계약:
+     // CreateRoomRequested -> ApiClient에서 POST /players 후 POST /rooms 호출.
+     // JoinRoomRequested   -> POST /players 후 WebSocketClient.Connect(roomCode, guestToken), JOIN_ROOM 전송.
+@@ -228,6 +230,12 @@ public class LobbyController : MonoBehaviour
+         }
+     }
+ 
++    public void ReceiveRoomVisibility(string roomCode, bool? isPublic)
++    {
++        if (isPublic.HasValue) roomPanel?.ShowRoomVisibility(roomCode, isPublic);
++        else roomPanel?.ShowRoomVisibilityUnavailable(roomCode);
++    }
++
+     // WebSocketClient 계약: GAME_START payload를 역직렬화한 뒤 호출한다.
+     // GameInstaller가 메시지를 보관하고 다음 씬의 GameFlowController 시작 전에 GameSetup을 적용한다.
+     public void ReceiveGameStart(GameStartMessage message)
+diff --git a/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs b/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
+index df2474a..7db054d 100644
+--- a/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
++++ b/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
+@@ -46,6 +46,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+     private bool returnToRoomRequested;
+     private bool gameEnded;
+     private RoomStateMessage lastRoomState;
++    private int roomVisibilityRequestVersion;
+     private readonly List<WsEnvelope> pendingGameMessages = new();
+     private readonly Dictionary<string, int> playerTeams = new();
+     private readonly List<PlayerDisplayInfo> playerProfiles = new();
+@@ -139,6 +140,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+ 
+         lobbyController.CreateRoomRequested += OnCreateRoomRequested;
+         lobbyController.JoinRoomRequested += OnJoinRoomRequested;
++        lobbyController.QuickJoinRequested += OnQuickJoinRequested;
+         lobbyController.ReadyRequested += OnReadyRequested;
+         lobbyController.LeaveRoomRequested += OnLeaveRoomRequested;
+ 
+@@ -208,6 +210,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+         if (lobbyController == null) return;
+         lobbyController.CreateRoomRequested -= OnCreateRoomRequested;
+         lobbyController.JoinRoomRequested -= OnJoinRoomRequested;
++        lobbyController.QuickJoinRequested -= OnQuickJoinRequested;
+         lobbyController.ReadyRequested -= OnReadyRequested;
+         lobbyController.LeaveRoomRequested -= OnLeaveRoomRequested;
+         lobbyController = null;
+@@ -215,6 +218,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+ 
+     private async void OnCreateRoomRequested(string nickname)
+     {
++        bool isPublic = lobbyController != null ? lobbyController.IsPublicRoom : createRoomIsPublic;
+         try
+         {
+             await EnsurePlayer(nickname);
+@@ -225,7 +229,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+             CreateRoomRestResponse response = await apiClient.Post<CreateRoomRequest, CreateRoomRestResponse>(
+                 "/rooms", new CreateRoomRequest
+                 {
+-                    isPublic = createRoomIsPublic,
++                    isPublic = isPublic,
+                     maxPlayers = createRoomMaxPlayers,
+                     timeLimit = createRoomTimeLimitSec,
+                 });
+@@ -241,6 +245,30 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+         }
+     }
+ 
++    private async void OnQuickJoinRequested(string nickname)
++    {
++        try
++        {
++            await EnsurePlayer(nickname);
++            CreateRoomRestResponse response = await apiClient.Post<CreateRoomRequest, CreateRoomRestResponse>(
++                "/rooms/quick-join", new CreateRoomRequest
++                {
++                    isPublic = true,
++                    maxPlayers = createRoomMaxPlayers,
++                    timeLimit = createRoomTimeLimitSec,
++                });
++
++            if (response == null || string.IsNullOrWhiteSpace(response.code))
++                throw new InvalidOperationException("빠른 참가 응답에 방 코드가 없습니다.");
++
++            ConnectAndJoin(response.code, playerIdentity.Nickname);
++        }
++        catch (Exception exception)
++        {
++            lobbyController?.ReceiveError(ToUserMessage(exception));
++        }
++    }
++
+     private async void OnJoinRoomRequested(string nickname, string roomCode)
+     {
+         try
+@@ -429,6 +457,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+         returnToRoomRequested = false;
+         controller.SetLocalPlayer(LocalPlayerId, LocalNickname);
+         controller.ReceiveRoomState(lastRoomState);
++        _ = RefreshRoomVisibilityAsync(lastRoomState.roomCode);
+     }
+ 
+     public bool CanReadyInCurrentRoom => !gameEnded;
+@@ -468,6 +497,8 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+                     if (gameEnded && room?.status == "WAITING") gameEnded = false;
+                     CachePlayerTeams(room);
+                     lobbyController?.ReceiveRoomState(room);
++                    if (lobbyController != null && room != null)
++                        _ = RefreshRoomVisibilityAsync(room.roomCode);
+                     break;
+ 
+                 case MessageType.GAME_START:
+@@ -510,6 +541,25 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+         }
+     }
+ 
++    private async Task RefreshRoomVisibilityAsync(string roomCode)
++    {
++        int version = ++roomVisibilityRequestVersion;
++        try
++        {
++            // ROOM_STATE에는 공개 여부가 없으므로 기존 방 조회 API를 사용한다.
++            CreateRoomRestResponse response = await apiClient.Get<CreateRoomRestResponse>(
++                $"/rooms/{Uri.EscapeDataString(roomCode)}");
++            if (version != roomVisibilityRequestVersion || lastRoomState?.roomCode != roomCode) return;
++            lobbyController?.ReceiveRoomVisibility(roomCode, response?.code == roomCode ? response.isPublic : null);
++        }
++        catch (Exception exception)
++        {
++            if (version != roomVisibilityRequestVersion || lastRoomState?.roomCode != roomCode) return;
++            lobbyController?.ReceiveRoomVisibility(roomCode, null);
++            Debug.LogWarning($"[LobbyNetwork] 방 공개 여부 조회 실패: {exception.Message}");
++        }
++    }
++
+     private void OnSocketError(string message)
+     {
+         lobbyController?.ReceiveError($"서버 연결 오류: {message}");
+@@ -578,4 +628,5 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+ public class CreateRoomRestResponse
+ {
+     public string code;
++    public bool? isPublic;
+ }

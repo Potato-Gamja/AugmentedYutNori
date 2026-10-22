@@ -1,0 +1,19 @@
+From commit: 2e4750da2af3d3b34c914b5579d8543b98473b1e
+Contributor: Potato-Gamja (Gamja)
+Subject: [fix] 야바위꾼의 다시 던지기 판정 수정
+Original: https://github.com/Potato-Gamja/AugmentedYutNori/commit/2e4750da2af3d3b34c914b5579d8543b98473b1e
+
+diff --git a/Assets/Scripts/Flow/GameFlowController.cs b/Assets/Scripts/Flow/GameFlowController.cs
+index da1285f..5fce541 100644
+--- a/Assets/Scripts/Flow/GameFlowController.cs
++++ b/Assets/Scripts/Flow/GameFlowController.cs
+@@ -453,7 +453,8 @@ public class GameFlowController : MonoBehaviour
+             ChangeState(GameFlowState.Throw);
+             hud?.SetInstruction($"{GameFlowHudPresenter.ResultLabel(outcome.Result)}! 한 번 더 던지세요.");
+         }
+-        else if (gameRules.HasAnyStoredMove())
++        // 이동할 말이 없어도 야바위꾼을 쓸 수 있으면 일반 던지기를 끄고 재던지기를 표시한다.
++        else if (gameRules.HasAnyStoredMove() || hudPresenter.CanUseRethrow(CurrentTeam))
+         {
+             ChangeState(GameFlowState.Move);
+         }

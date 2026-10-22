@@ -1,0 +1,349 @@
+From commit: 50be360a5b914063d0f90a7a49ab70f4fcd5d79c
+Contributor: Potato-Gamja (Gamja)
+Subject: feat: 저장된 윷 결과 기반 말 선택 이동 구현
+Original: https://github.com/Potato-Gamja/AugmentedYutNori/commit/50be360a5b914063d0f90a7a49ab70f4fcd5d79c
+
+diff --git a/Assets/Scripts/Flow/GameFlowController.cs b/Assets/Scripts/Flow/GameFlowController.cs
+index 5a4380d..6572816 100644
+--- a/Assets/Scripts/Flow/GameFlowController.cs
++++ b/Assets/Scripts/Flow/GameFlowController.cs
+@@ -1,44 +1,58 @@
+ using System.Collections.Generic;
++using TMPro;
+ using UnityEngine;
+ using UnityEngine.InputSystem;
+ 
+ public enum GameFlowState { GameStart, AugmentSelect, Throw, Move, EndTurn, Finish }
+ 
+-/// <summary>Game 씬 입력과 BoardState를 연결하는 실제 게임 흐름 컨트롤러.</summary>
++/// <summary>저장된 윷 결과를 말 선택 후 도착 노드를 눌러 소비하는 게임 흐름.</summary>
+ public class GameFlowController : MonoBehaviour
+ {
+     [Header("Scene References")]
+     [SerializeField] private BoardView boardView;
+-    [SerializeField] private List<PieceView> pieceViews = new List<PieceView>();
++    [SerializeField] private List<PieceView> pieceViews = new();
+     [SerializeField] private PathView pathView;
++    [SerializeField] private TMP_Text yutResultText;
++    [SerializeField] private TMP_Text turnText;
+     [Header("Prototype Flow")]
+     [SerializeField] private bool skipAugmentSelection = true;
+     [SerializeField] private bool allowSkipShortcut;
+     [Header("Read Only")]
+     [SerializeField] private GameFlowState currentState;
+     [SerializeField] private int currentTeam;
+-    [SerializeField] private int currentMoveCount;
+     [SerializeField] private string lastYutResult;
+ 
++    private sealed class MoveOption
++    {
++        public YutResult Result;
++        public BoardPath Path;
++    }
++
+     private readonly Dictionary<Piece, PieceView> viewByPiece = new();
+-    private readonly Dictionary<NodeView, BoardPath> moveTargets = new();
++    private readonly Dictionary<NodeView, List<MoveOption>> moveTargets = new();
+     private readonly HashSet<NodeView> highlighted = new();
++    private readonly List<GameObject> resultLabels = new();
++    private readonly List<YutResult> storedResults = new();
+     private BoardState state;
+     private PieceView selectedPiece;
+     private Camera mainCamera;
+-    private bool extraThrow;
+     private bool isMoving;
+ 
+     public GameFlowState CurrentState => currentState;
+     public int CurrentTeam => currentTeam;
+     public string LastYutResult => lastYutResult;
++    public IReadOnlyList<YutResult> StoredResults => storedResults;
+ 
+     private void Start()
+     {
+         mainCamera = Camera.main;
+         if (boardView == null) boardView = FindFirstObjectByType<BoardView>();
+         if (pathView == null) pathView = FindFirstObjectByType<PathView>();
+-        if (pieceViews.Count == 0) pieceViews.AddRange(FindObjectsByType<PieceView>(FindObjectsSortMode.None));
++        if (yutResultText == null) yutResultText = FindText("YutResultText");
++        if (turnText == null) turnText = FindText("TurnText");
++        foreach (PieceView view in FindObjectsByType<PieceView>(FindObjectsSortMode.None))
++            if (!pieceViews.Contains(view)) pieceViews.Add(view);
++
+         if (boardView == null || boardView.Graph == null)
+         {
+             Debug.LogError("[GameFlow] BoardView/BoardGraph 연결을 확인하세요.", this);
+@@ -80,11 +94,17 @@ public class GameFlowController : MonoBehaviour
+         if (currentState != GameFlowState.Throw) return;
+         YutThrowOutcome outcome = new YutThrower(new SystemRandomProvider())
+             .Throw(StandardGetResult.StickCount, new StandardGetResult());
+-        currentMoveCount = outcome.Result.Steps();
+-        extraThrow = outcome.Result.GrantsExtraThrow();
++        storedResults.Add(outcome.Result);
+         lastYutResult = outcome.Result.DisplayName();
+-        Debug.Log($"[GameFlow] Team {currentTeam + 1}: {lastYutResult} ({currentMoveCount}칸)");
+-        ChangeState(HasMovablePiece() ? GameFlowState.Move : GameFlowState.EndTurn);
++        RefreshStoredResultText();
++        Debug.Log($"[GameFlow] Team {currentTeam + 1}: {lastYutResult} 저장 ({outcome.Result.Steps()}칸)");
++
++        if (outcome.Result.GrantsExtraThrow())
++        {
++            if (turnText != null) turnText.text = $"Team {currentTeam + 1} Turn  |  Throw Again";
++            return;
++        }
++        BeginMoveSelectionOrEndTurn();
+     }
+ 
+     public void OnAugmentSelected(string augmentId)
+@@ -92,47 +112,71 @@ public class GameFlowController : MonoBehaviour
+         if (currentState == GameFlowState.AugmentSelect) ChangeState(GameFlowState.Throw);
+     }
+ 
++    private void BeginMoveSelectionOrEndTurn()
++    {
++        if (HasAnyStoredMove()) ChangeState(GameFlowState.Move);
++        else
++        {
++            Debug.Log("[GameFlow] 저장된 결과로 이동할 수 없어 턴을 종료합니다.");
++            storedResults.Clear();
++            RefreshStoredResultText();
++            ChangeState(GameFlowState.EndTurn);
++        }
++    }
++
+     private void ChangeState(GameFlowState next)
+     {
+         currentState = next;
+         if (next == GameFlowState.GameStart)
+         {
+             currentTeam = 0;
++            storedResults.Clear();
+             ChangeState(skipAugmentSelection ? GameFlowState.Throw : GameFlowState.AugmentSelect);
+         }
+         else if (next == GameFlowState.Throw)
+         {
+             ClearSelection();
+-            Debug.Log($"[GameFlow] Team {currentTeam + 1}: 윷을 던져 주세요.");
++            RefreshTurnHighlights();
++            if (turnText != null)
++                turnText.text = storedResults.Count > 0
++                    ? $"Team {currentTeam + 1} Turn  |  Bonus Throw"
++                    : $"Team {currentTeam + 1} Turn  |  Throw Yut";
++        }
++        else if (next == GameFlowState.Move)
++        {
++            ClearSelection();
++            RefreshTurnHighlights();
++            if (turnText != null) turnText.text = $"Team {currentTeam + 1} Turn  |  Select a Piece";
+         }
+-        else if (next == GameFlowState.Move) Debug.Log($"[GameFlow] Team {currentTeam + 1}: 말을 선택하세요.");
+         else if (next == GameFlowState.EndTurn) EndTurn();
+         else if (next == GameFlowState.Finish)
+         {
+             ClearSelection();
+-            Debug.Log($"[GameFlow] Team {currentTeam + 1} 승리");
++            RefreshTurnHighlights(false);
++            if (turnText != null) turnText.text = $"Team {currentTeam + 1} Wins!";
+         }
+     }
+ 
+     private void HandleClick(Vector3 world)
+     {
+         NodeView node = PickNode(world);
+-        PieceView piece = PickPiece(world);
++        PieceView clickedPiece = PickPiece(world);
++
+         if (selectedPiece != null)
+         {
+             NodeView target = node;
+-            if ((target == null || !moveTargets.ContainsKey(target)) && piece != null && piece.Piece.IsOnBoard)
+-                target = boardView.GetView(piece.Piece.Node);
+-            if (target != null && moveTargets.TryGetValue(target, out BoardPath path))
++            if ((target == null || !moveTargets.ContainsKey(target)) && clickedPiece != null && clickedPiece.Piece.IsOnBoard)
++                target = boardView.GetView(clickedPiece.Piece.Node);
++
++            if (target != null && moveTargets.TryGetValue(target, out List<MoveOption> options) && options.Count > 0)
+             {
+-                Piece moving = selectedPiece.Piece;
+-                ClearSelection();
+-                state.TryMove(moving, currentMoveCount, path.Destination, out _);
++                MoveUsingOption(options[0]);
+                 return;
+             }
+         }
+-        if (piece != null && piece.Team == currentTeam && !piece.Piece.IsFinished)
+-            SelectPiece(piece == selectedPiece ? null : piece);
++
++        if (clickedPiece != null && clickedPiece.Team == currentTeam && !clickedPiece.Piece.IsFinished)
++            SelectPiece(clickedPiece == selectedPiece ? null : clickedPiece);
+     }
+ 
+     private void SelectPiece(PieceView piece)
+@@ -141,21 +185,67 @@ public class GameFlowController : MonoBehaviour
+         selectedPiece = piece;
+         if (piece == null) return;
+         piece.SetSelected(true);
+-        foreach (BoardPath path in state.GetMovePaths(piece.Piece, currentMoveCount))
++
++        foreach (YutResult result in storedResults)
+         {
+-            NodeView previous = boardView.GetView(path.Start);
+-            for (int i = 0; i < path.Nodes.Count; i++)
++            foreach (BoardPath path in state.GetMovePaths(piece.Piece, result.Steps()))
+             {
+-                NodeView current = boardView.GetView(path.Nodes[i]);
+-                if (current == null) continue;
+-                current.SetHighlight(i == path.Nodes.Count - 1 ? (path.IsFinished ? Color.green : Color.red) : Color.yellow);
+-                highlighted.Add(current);
+-                if (pathView != null && previous != null) pathView.SetHighlight(previous, current, Color.yellow);
+-                previous = current;
+-            }
+                 NodeView destination = boardView.GetView(path.Destination);
+-            if (destination != null) moveTargets[destination] = path;
++                if (destination == null) continue;
++                if (!moveTargets.TryGetValue(destination, out List<MoveOption> options))
++                {
++                    options = new List<MoveOption>();
++                    moveTargets.Add(destination, options);
++                }
++                options.Add(new MoveOption { Result = result, Path = path });
++            }
++        }
++
++        foreach (KeyValuePair<NodeView, List<MoveOption>> pair in moveTargets)
++        {
++            Color color = pair.Value.Count == 1 ? GetResultColor(pair.Value[0].Result) : Color.white;
++            pair.Key.SetHighlight(color);
++            highlighted.Add(pair.Key);
++            CreateDestinationLabel(pair.Key, pair.Value);
++        }
+     }
++
++    private void MoveUsingOption(MoveOption option)
++    {
++        Piece moving = selectedPiece.Piece;
++        int moveCount = option.Result.Steps();
++        BoardNode destination = option.Path.Destination;
++        storedResults.Remove(option.Result);
++        RefreshStoredResultText();
++        ClearSelection();
++        if (!state.TryMove(moving, moveCount, destination, out _))
++            Debug.LogWarning("[GameFlow] 선택한 결과로 이동할 수 없습니다.");
++    }
++
++    private void CreateDestinationLabel(NodeView destination, IReadOnlyList<MoveOption> options)
++    {
++        var labelObject = new GameObject("MoveResultLabel");
++        labelObject.transform.SetParent(destination.transform, false);
++        labelObject.transform.localPosition = new Vector3(0f, 0.62f, 0f);
++        TextMesh text = labelObject.AddComponent<TextMesh>();
++        text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
++        text.fontSize = 54;
++        text.characterSize = 0.055f;
++        text.anchor = TextAnchor.MiddleCenter;
++        text.alignment = TextAlignment.Center;
++        text.fontStyle = FontStyle.Bold;
++        var names = new List<string>();
++        foreach (MoveOption option in options)
++        {
++            string name = GetResultLabel(option.Result);
++            if (!names.Contains(name)) names.Add(name);
++        }
++        text.text = string.Join("/", names);
++        text.color = options.Count == 1 ? GetResultColor(options[0].Result) : Color.white;
++        MeshRenderer renderer = labelObject.GetComponent<MeshRenderer>();
++        renderer.sharedMaterial = text.font.material;
++        renderer.sortingOrder = 35;
++        resultLabels.Add(labelObject);
+     }
+ 
+     private void OnMoved(MoveResult result)
+@@ -181,26 +271,27 @@ public class GameFlowController : MonoBehaviour
+             view.SetStackCount(state.GetStack(view.Piece).Count);
+         }
+         isMoving = false;
++
+         if (TeamFinished(currentTeam)) ChangeState(GameFlowState.Finish);
+-        else
+-        {
+-            if (result.CapturedPieces.Count > 0) extraThrow = true;
+-            ChangeState(GameFlowState.EndTurn);
+-        }
++        else if (result.CapturedPieces.Count > 0) ChangeState(GameFlowState.Throw);
++        else if (storedResults.Count > 0) BeginMoveSelectionOrEndTurn();
++        else ChangeState(GameFlowState.EndTurn);
+     }
+ 
+     private void EndTurn()
+     {
+-        if (!extraThrow) currentTeam = currentTeam == 0 ? 1 : 0;
+-        extraThrow = false;
++        storedResults.Clear();
++        currentTeam = currentTeam == 0 ? 1 : 0;
++        RefreshStoredResultText();
+         ChangeState(GameFlowState.Throw);
+     }
+ 
+-    private bool HasMovablePiece()
++    private bool HasAnyStoredMove()
+     {
++        foreach (YutResult result in storedResults)
+             foreach (PieceView view in pieceViews)
+-            if (view.Team == currentTeam && !view.Piece.IsFinished && state.GetMovePaths(view.Piece, currentMoveCount).Count > 0)
+-                return true;
++                if (view.Team == currentTeam && !view.Piece.IsFinished &&
++                    state.GetMovePaths(view.Piece, result.Steps()).Count > 0) return true;
+         return false;
+     }
+ 
+@@ -246,6 +337,51 @@ public class GameFlowController : MonoBehaviour
+         foreach (NodeView view in highlighted) view.ClearHighlight();
+         highlighted.Clear();
+         moveTargets.Clear();
++        foreach (GameObject label in resultLabels) if (label != null) Destroy(label);
++        resultLabels.Clear();
+         if (pathView != null) pathView.ClearHighlights();
+     }
++
++    private void RefreshTurnHighlights(bool enabled = true)
++    {
++        foreach (PieceView view in pieceViews)
++            view.SetTurnHighlighted(enabled && view.Team == currentTeam && view.Piece != null && !view.Piece.IsFinished);
++    }
++
++    private void RefreshStoredResultText()
++    {
++        if (yutResultText == null) return;
++        if (storedResults.Count == 0) { yutResultText.text = "Stored Results: -"; return; }
++        var labels = new List<string>();
++        foreach (YutResult result in storedResults) labels.Add($"{GetResultLabel(result)}({result.Steps()})");
++        yutResultText.text = $"Stored: {string.Join("  ", labels)}";
++    }
++
++    private static TMP_Text FindText(string objectName)
++    {
++        GameObject target = GameObject.Find(objectName);
++        return target != null ? target.GetComponent<TMP_Text>() : null;
++    }
++
++    private static Color GetResultColor(YutResult result) => result switch
++    {
++        YutResult.BackDo => new Color(1f, 0.25f, 1f),
++        YutResult.Do => Color.yellow,
++        YutResult.Gae => new Color(1f, 0.55f, 0.1f),
++        YutResult.Geol => Color.red,
++        YutResult.Yut => Color.green,
++        YutResult.Mo => Color.cyan,
++        _ => Color.white
++    };
++
++    private static string GetResultLabel(YutResult result) => result switch
++    {
++        YutResult.BackDo => "빽도",
++        YutResult.Do => "도",
++        YutResult.Gae => "개",
++        YutResult.Geol => "걸",
++        YutResult.Yut => "윷",
++        YutResult.Mo => "모",
++        _ => "-"
++    };
+ }

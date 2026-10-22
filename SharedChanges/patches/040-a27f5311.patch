@@ -1,0 +1,20 @@
+From commit: a27f531105f962bf72473ecd9b580fa4972d6986
+Contributor: Potato-Gamja (Gamja)
+Subject: [fix] 닉네임 패널 수정
+Original: https://github.com/Potato-Gamja/AugmentedYutNori/commit/a27f531105f962bf72473ecd9b580fa4972d6986
+
+diff --git a/Assets/Plugins/WebGL/FirebaseGoogleAuth.jslib b/Assets/Plugins/WebGL/FirebaseGoogleAuth.jslib
+index 12ea76a..2f43b16 100644
+--- a/Assets/Plugins/WebGL/FirebaseGoogleAuth.jslib
++++ b/Assets/Plugins/WebGL/FirebaseGoogleAuth.jslib
+@@ -9,7 +9,9 @@ mergeInto(LibraryManager.library, {
+ 
+     var state = window.__yutFirebaseAuth = window.__yutFirebaseAuth || {};
+     state.receiver = receiver;
+-    state.send = function (method, value) { SendMessage(state.receiver, method, value || ""); };
++    state.send = function (method, value) {
++      SendMessage(state.receiver, method, value || "");
++    };
+ 
+     if (state.auth) { state.send("OnFirebaseReady"); return; }
+ 

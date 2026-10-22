@@ -1,0 +1,105 @@
+From commit: c0ec46b3368db4a1d45ec1d5261d9bf5e4bbc378
+Contributor: Potato-Gamja (Gamja)
+Subject: [fix] 모바일 터치·화면 배치 및 저장 음량 적용 수정
+Original: https://github.com/Potato-Gamja/AugmentedYutNori/commit/c0ec46b3368db4a1d45ec1d5261d9bf5e4bbc378
+
+diff --git a/Assets/Scripts/Flow/GameFlowController.cs b/Assets/Scripts/Flow/GameFlowController.cs
+index 82558a9..3370363 100644
+--- a/Assets/Scripts/Flow/GameFlowController.cs
++++ b/Assets/Scripts/Flow/GameFlowController.cs
+@@ -1,9 +1,7 @@
+-﻿using System;
++using System;
+ using System.Collections.Generic;
+ using System.Linq;
+ using UnityEngine;
+-using UnityEngine.EventSystems;
+-using UnityEngine.InputSystem;
+ using UnityEngine.SceneManagement;
+ 
+ public enum GameFlowState { GameStart, AugmentSelect, Throw, Move, EndTurn, Finish }
+@@ -438,11 +436,8 @@ public class GameFlowController : MonoBehaviour
+     {
+         if (leavingGame || gameState.WinnerTeam.HasValue || currentState != GameFlowState.Move || isMoving || gameSession == null ||
+             gameSession.IsCommandPending || !setup.CanControl(CurrentTeam) ||
+-            Mouse.current == null || mainCamera == null ||
+-            !Mouse.current.leftButton.wasPressedThisFrame) return;
+-        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
+-
+-        Vector2 screen = Mouse.current.position.ReadValue();
++            mainCamera == null || !GamePointerInput.TryGetPress(out Vector2 screen)) return;
++        if (!mainCamera.pixelRect.Contains(screen) || GamePointerInput.IsOverUI(screen)) return;
+         Vector3 world = mainCamera.ScreenToWorldPoint(
+             new Vector3(screen.x, screen.y, -mainCamera.transform.position.z));
+         world.z = 0f;
+diff --git a/Assets/Scripts/Presentation/Audio/SoundManager.cs b/Assets/Scripts/Presentation/Audio/SoundManager.cs
+index 0b1befb..fe3e1cd 100644
+--- a/Assets/Scripts/Presentation/Audio/SoundManager.cs
++++ b/Assets/Scripts/Presentation/Audio/SoundManager.cs
+@@ -24,6 +24,7 @@ public class SoundManager : MonoBehaviour
+     private SoundId currentBgm = SoundId.None;
+     private float currentBgmClipVolume = 1f;
+     private bool initialized;
++    private bool started;
+ 
+     // 어느 씬에서 시작해도 사운드가 동작하도록 자동 생성
+     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+@@ -68,6 +69,15 @@ public class SoundManager : MonoBehaviour
+         if (library != null) Initialize(library);   // 씬에 직접 배치하고 Inspector에서 연결한 경우
+     }
+ 
++    private void Start()
++    {
++        // AudioMixer.SetFloat는 Awake/AfterSceneLoad에서 적용하면 초기화 중 덮어써질 수 있다.
++        started = true;
++        if (!initialized) return;
++        ApplyVolume();
++        PlaySceneBgm(SceneManager.GetActiveScene().name);
++    }
++
+     private void Initialize(SoundLibrarySO soundLibrary)
+     {
+         if (initialized) return;
+@@ -77,18 +87,23 @@ public class SoundManager : MonoBehaviour
+         bgmSource = gameObject.AddComponent<AudioSource>();
+         bgmSource.loop = true;
+         bgmSource.playOnAwake = false;
++        bgmSource.volume = 0f; // 저장된 믹서 음량 적용 전에는 재생하지 않는다.
+         bgmSource.outputAudioMixerGroup = library.BgmGroup;
+ 
+         sfxSource = gameObject.AddComponent<AudioSource>();
+         sfxSource.playOnAwake = false;
++        sfxSource.volume = 0f;
+         sfxSource.outputAudioMixerGroup = library.SfxGroup;
+ 
+         AudioSettings.Changed += ApplyVolume;
+         SceneManager.sceneLoaded += OnSceneLoaded;
+ 
++        if (started)
++        {
+             ApplyVolume();
+             PlaySceneBgm(SceneManager.GetActiveScene().name);
+         }
++    }
+ 
+     private void OnDestroy()
+     {
+@@ -100,7 +115,7 @@ public class SoundManager : MonoBehaviour
+ 
+     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+     {
+-        if (mode == LoadSceneMode.Single) PlaySceneBgm(scene.name);
++        if (started && mode == LoadSceneMode.Single) PlaySceneBgm(scene.name);
+     }
+ 
+     private void PlaySceneBgm(string sceneName)
+@@ -156,7 +171,8 @@ public class SoundManager : MonoBehaviour
+ 
+     private void ApplyVolume()
+     {
+-        if (!initialized) return;
++        if (!initialized || !started) return;
++        sfxSource.volume = 1f;
+ 
+         if (library.Mixer != null)
+         {

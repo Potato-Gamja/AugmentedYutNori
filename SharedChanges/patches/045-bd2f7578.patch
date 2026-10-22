@@ -1,0 +1,742 @@
+From commit: bd2f7578f227c6db3e6fa7510151e7b3b8154055
+Contributor: Potato-Gamja (Gamja)
+Subject: [fix] 빠른 참가 만석 오류 시 자동 재시도 추가
+Original: https://github.com/Potato-Gamja/AugmentedYutNori/commit/bd2f7578f227c6db3e6fa7510151e7b3b8154055
+
+diff --git a/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs b/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
+index 14e8211..cbcfbb7 100644
+--- a/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
++++ b/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
+@@ -52,6 +52,10 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+     private bool changingRoomSocket;
+     private int roomJoinVersion;
+     private Task roomSocketCleanupTask = Task.CompletedTask;
++    private const int MaxQuickJoinRetries = 2;
++    private bool quickJoinInProgress;
++    private int quickJoinVersion;
++    private int quickJoinRetryCount;
+     private bool leaveRequested;
+     private bool gameExitInProgress;
+     private readonly HashSet<string> reconnectingRoomPlayers = new();
+@@ -135,6 +139,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+ 
+     private void OnDestroy()
+     {
++        CancelQuickJoin();
+         if (instance != this) return;
+ 
+         CancelReconnect();
+@@ -343,10 +348,10 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+     }
+ 
+ 
+-    public async Task<GachaResultResponse> DrawGachaAsync()
++    public async Task<GachaResultResponse> DrawGachaAsync(int count = 1)
+     {
+         await EnsureAccountFeaturesAsync();
+-        GachaResultResponse response = await gachaApi.DrawAsync();
++        GachaResultResponse response = await gachaApi.DrawAsync(count);
+         playerIdentity.ApplyGold(response.gold);
+         LocalDisplayChanged?.Invoke();
+         return response;
+@@ -414,6 +419,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+ 
+     private async void OnCreateRoomRequested(string nickname)
+     {
++        if (quickJoinInProgress) return;
+         bool isPublic = lobbyController != null ? lobbyController.IsPublicRoom : createRoomIsPublic;
+         try
+         {
+@@ -443,9 +449,31 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+ 
+     private async void OnQuickJoinRequested(string nickname)
+     {
++        if (quickJoinInProgress || awaitingRoomJoin || changingRoomSocket || logoutRequested || reconnecting) return;
++        quickJoinInProgress = true;
++        quickJoinRetryCount = 0;
++        leaveRequested = false;
++        int version = ++quickJoinVersion;
+         try
+         {
++            await RequestQuickJoinAsync(nickname, version);
++        }
++        catch (Exception exception)
++        {
++            if (IsCurrentQuickJoin(version)) FailRoomJoin(ToUserMessage(exception));
++        }
++    }
++
++    private bool IsCurrentQuickJoin(int version) => this != null && quickJoinInProgress &&
++        version == quickJoinVersion && !logoutRequested && !leaveRequested;
++
++    private async Task RequestQuickJoinAsync(string nickname, int version)
++    {
++        // 방 코드가 소켓 주소에 포함되므로 실패한 연결부터 닫고 새 방을 조회한다.
++        await CloseRoomSocketForJoin();
++        if (!IsCurrentQuickJoin(version)) return;
+         await EnsurePlayer(nickname);
++        if (!IsCurrentQuickJoin(version)) return;
+         CreateRoomRestResponse response = await apiClient.Post<CreateRoomRequest, CreateRoomRestResponse>(
+             "/rooms/quick-join", new CreateRoomRequest
+             {
+@@ -453,20 +481,35 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+                 maxPlayers = createRoomMaxPlayers,
+                 timeLimit = createRoomTimeLimitSec,
+             });
+-
++        if (!IsCurrentQuickJoin(version)) return;
+         if (response == null || string.IsNullOrWhiteSpace(response.code))
+             throw new InvalidOperationException("빠른 참가 응답에 방 코드가 없습니다.");
+-
+         ConnectAndJoin(response.code, playerIdentity.Nickname);
+     }
++
++    private async void RetryQuickJoin()
++    {
++        int version = quickJoinVersion;
++        quickJoinRetryCount++;
++        ++roomJoinVersion;
++        awaitingRoomJoin = false;
++        try { await RequestQuickJoinAsync(LocalNickname, version); }
+         catch (Exception exception)
+         {
+-            ActiveLobbyController?.ReceiveError(ToUserMessage(exception));
++            if (IsCurrentQuickJoin(version)) FailRoomJoin(ToUserMessage(exception));
+         }
+     }
+ 
++    private void CancelQuickJoin()
++    {
++        quickJoinInProgress = false;
++        quickJoinRetryCount = 0;
++        ++quickJoinVersion;
++    }
++
+     private async void OnJoinRoomRequested(string nickname, string roomCode)
+     {
++        if (quickJoinInProgress) return;
+         try
+         {
+             await EnsurePlayer(nickname);
+@@ -543,6 +586,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+ 
+     private async Task ClearSessionAndGoToLoginAsync()
+     {
++        CancelQuickJoin();
+         try
+         {
+             // 진행 중인 자동 로그인이 로그아웃 후 토큰을 다시 저장하지 않도록 완료를 기다린다.
+@@ -600,6 +644,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+ 
+     private void GoToLogin()
+     {
++        CancelQuickJoin();
+         ++loginRedirectCount;
+         ++roomJoinVersion;
+         awaitingRoomJoin = false;
+@@ -657,6 +702,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+ 
+     private async void FailRoomJoin(string message)
+     {
++        CancelQuickJoin();
+         int version = ++roomJoinVersion;
+         awaitingRoomJoin = false;
+         try { await CloseRoomSocketForJoin(); }
+@@ -739,6 +785,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+     private async void OnLeaveRoomRequested()
+     {
+         if (leaveRequested) return;
++        CancelQuickJoin();
+         ++roomJoinVersion;
+         awaitingRoomJoin = false;
+         leaveRequested = true;
+@@ -815,7 +862,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+ 
+     private void OnMessageReceived(WsEnvelope envelope)
+     {
+-        if (changingRoomSocket) return;
++        if (changingRoomSocket || (quickJoinInProgress && !awaitingRoomJoin)) return;
+         // GAME_START 직후의 개인 선택지·확정 메시지가 씬 로딩 중 사라지지 않도록 보관한다.
+         if (waitingForGameSession && envelope.type != MessageType.GAME_START &&
+             envelope.type != MessageType.ROOM_STATE && envelope.type != MessageType.PONG)
+@@ -833,6 +880,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+                         if (room?.roomCode != pendingRoomCode ||
+                             room.members?.Exists(member => member.playerId == LocalPlayerId) != true) break;
+                         awaitingRoomJoin = false;
++                        CancelQuickJoin();
+                     }
+                     if (lastRoomState?.roomCode != room?.roomCode) reconnectingRoomPlayers.Clear();
+                     reconnectingRoomPlayers.RemoveWhere(id => room?.members == null || !room.members.Exists(member => member.playerId == id));
+@@ -955,7 +1003,15 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+                         break;
+                     }
+                     if (awaitingRoomJoin)
+-                        FailRoomJoin(error?.message ?? "방 참가에 실패했습니다.");
++                    {
++                        if (quickJoinInProgress && error?.code == "ROOM_FULL" &&
++                            quickJoinRetryCount < MaxQuickJoinRetries)
++                            RetryQuickJoin();
++                        else
++                            FailRoomJoin(quickJoinInProgress && error?.code == "ROOM_FULL"
++                                ? "참가 가능한 방에 입장하지 못했습니다. 잠시 후 다시 시도해 주세요."
++                                : error?.message ?? "방 참가에 실패했습니다.");
++                    }
+                     else ActiveLobbyController?.ReceiveError(error?.message ?? "서버 요청이 거절됐습니다.");
+                     break;
+             }
+@@ -988,7 +1044,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+ 
+     private void OnSocketError(string message)
+     {
+-        if (changingRoomSocket) return;
++        if (changingRoomSocket || (quickJoinInProgress && !awaitingRoomJoin)) return;
+         if (reconnecting)
+         {
+             reconnectSnapshot?.TrySetException(new InvalidOperationException("서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요."));
+@@ -1000,7 +1056,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+ 
+     private void OnDisconnected(bool byUser)
+     {
+-        if (changingRoomSocket) return;
++        if (changingRoomSocket || (quickJoinInProgress && !awaitingRoomJoin)) return;
+         if (reconnecting)
+         {
+             if (!byUser) reconnectSnapshot?.TrySetException(new InvalidOperationException("재접속 중 연결이 끊어졌습니다."));
+diff --git a/Assets/Scripts/Network/GachaApi.cs b/Assets/Scripts/Network/GachaApi.cs
+index 742c330..84d90df 100644
+--- a/Assets/Scripts/Network/GachaApi.cs
++++ b/Assets/Scripts/Network/GachaApi.cs
+@@ -1,10 +1,13 @@
++using System.Collections.Generic;
+ using System.Threading.Tasks;
+ 
+ // 프로필 아이콘 뽑기 REST 호출 (로그인 토큰 필요). 받은 골드의 저장은 PlayerIdentity가 맡는다.
+-//   POST /gacha/draw  뽑기 1회 → GachaResultResponse (골드 부족 409 NOT_ENOUGH_GOLD)
++//   POST /gacha/draw?count=N  뽑기 N회(1 또는 10) → GachaResultResponse (골드 부족 409 NOT_ENOUGH_GOLD)
+ // 보유 아이콘 조회는 도감, 프로필 아이콘 변경은 내 정보 담당
+ public class GachaApi
+ {
++    public const int TenDrawCount = 10;
++
+     private readonly ApiClient api;
+ 
+     public GachaApi(ApiClient api)
+@@ -12,12 +15,22 @@ public class GachaApi
+         this.api = api;
+     }
+ 
+-    public async Task<GachaResultResponse> DrawAsync()
++    public async Task<GachaResultResponse> DrawAsync(int count = 1)
+     {
+-        GachaResultResponse response = await api.Post<object, GachaResultResponse>("/gacha/draw", null);
++        string path = count == 1 ? "/gacha/draw" : $"/gacha/draw?count={count}";
++        GachaResultResponse response = await api.Post<object, GachaResultResponse>(path, null);
+ 
+         if (response == null || string.IsNullOrEmpty(response.iconId))
+-            throw new ApiException("POST", "/gacha/draw", 200, "응답에 iconId가 없습니다.", null);
++            throw new ApiException("POST", path, 200, "응답에 iconId가 없습니다.", null);
++
++        // results가 없는 예전 서버는 1회 결과만 준다
++        if (response.results == null || response.results.Count == 0)
++        {
++            response.results = new List<GachaDrawResult>
++            {
++                new GachaDrawResult { iconId = response.iconId, duplicate = response.duplicate, count = response.count },
++            };
++        }
+ 
+         return response;
+     }
+@@ -26,9 +39,20 @@ public class GachaApi
+ // POST /gacha/draw 응답
+ public class GachaResultResponse
+ {
+-    public string iconId;
+-    public bool duplicate;  // 이미 가진 아이콘 (보상 없음)
+-    public int count;       // 이 아이콘을 뽑은 총 횟수
++    public List<GachaDrawResult> results;  // 뽑은 순서대로 (1회면 1개, 10연차면 10개)
+     public int gold;        // 차감 후 보유 골드
+-    public int price;
++    public int price;       // 이번에 쓴 골드 (가격 × 횟수)
++
++    // 첫 번째 결과와 같다 (1회 뽑기 호환용)
++    public string iconId;
++    public bool duplicate;
++    public int count;
++}
++
++// 뽑기 한 번의 결과
++public class GachaDrawResult
++{
++    public string iconId;
++    public bool duplicate;  // 이미 가진 아이콘 (보상 없음). 같은 10연차 안에서 두 번째로 나온 것도 true
++    public int count;       // 이 결과까지 반영한 보유 횟수
+ }
+diff --git a/Assets/Scripts/Network/Protocol/Messages/GameMessages.cs b/Assets/Scripts/Network/Protocol/Messages/GameMessages.cs
+index b459516..391bc4d 100644
+--- a/Assets/Scripts/Network/Protocol/Messages/GameMessages.cs
++++ b/Assets/Scripts/Network/Protocol/Messages/GameMessages.cs
+@@ -76,13 +76,15 @@ public class GameEndedMessage
+ }
+ 
+ // GAME_ENDED 순위 한 줄 (플레이어 = 팀). rank는 1부터, 같은 등수 다음은 건너뜀
+-// 기권·끊김으로 나간 플레이어는 꼴찌 등수 + rewardGold 0
++// 기권·끊김으로 나간 플레이어는 꼴찌 등수 + rewardGold 0 + leftGame true
++// 남아 있어도 rewardGold가 0일 수 있다 (보상 인원 1명 이하 등). 나갔는지는 leftGame으로 판단할 것
+ public class RankingEntry
+ {
+     public string playerId;
+     public int team;
+     public int rank;
+     public int rewardGold;
++    public bool leftGame;   // 기권·끊김으로 나간 플레이어
+ }
+ 
+ public enum GameEndReason
+diff --git a/Assets/Scripts/Presentation/UI/GachaPanel.cs b/Assets/Scripts/Presentation/UI/GachaPanel.cs
+index 0c709ec..53e8f5b 100644
+--- a/Assets/Scripts/Presentation/UI/GachaPanel.cs
++++ b/Assets/Scripts/Presentation/UI/GachaPanel.cs
+@@ -4,7 +4,8 @@ using UnityEngine;
+ using UnityEngine.UI;
+ 
+ /// <summary>
+-/// 프로필 아이콘 뽑기 화면. 보유 골드와 뽑기 버튼을 보여 주고, 뽑으면 GachaResultView로 결과를 띄운다.
++/// 프로필 아이콘 뽑기 화면. 보유 골드와 뽑기(1회·10연차) 버튼을 보여 주고, 뽑으면 GachaResultView로 결과를 띄운다.
++/// 10연차는 할인 없이 가격 × 10이고, 골드가 모자라면 버튼이 꺼진다.
+ /// 서버 호출은 LobbyNetworkCoordinator, 아이콘 이름은 profile_icons.json, 그림은 Resources/ProfileIcons/{id}.png
+ /// 보유 아이콘 목록은 도감, 프로필 아이콘 변경은 내 정보 화면 담당
+ /// </summary>
+@@ -12,29 +13,36 @@ public sealed class GachaPanel : UIBase
+ {
+     // 화면을 처음 열 때 보여 줄 가격. 뽑은 뒤에는 서버 응답의 price로 맞춘다 (서버 GachaService.PRICE)
+     private const int DefaultPrice = 200;
++    private const string DrawingLabel = "뽑는 중...";
+ 
+     [SerializeField] private TextAsset profileIconsJson;
+     [SerializeField] private Button closeButton;
+     [SerializeField] private Button drawButton;
+     [SerializeField] private TMP_Text drawButtonLabel;
++    [SerializeField] private Button drawTenButton;
++    [SerializeField] private TMP_Text drawTenButtonLabel;
+     [SerializeField] private TMP_Text goldText;
+     [SerializeField] private TMP_Text statusText;
+ 
+     private ProfileIconCatalog catalog;
+     private LobbyNetworkCoordinator coordinator;
+     private int price = DefaultPrice;
++    private int gold;
+     private bool busy;
++    private int drawingCount;   // 지금 기다리는 뽑기 횟수 (0이면 없음). 누른 버튼에 "뽑는 중..."을 보여 준다
+ 
+     public override void Init()
+     {
+         closeButton?.onClick.AddListener(Close);
+         drawButton?.onClick.AddListener(OnDrawClicked);
++        drawTenButton?.onClick.AddListener(OnDrawTenClicked);
+     }
+ 
+     private void OnDestroy()
+     {
+         closeButton?.onClick.RemoveListener(Close);
+         drawButton?.onClick.RemoveListener(OnDrawClicked);
++        drawTenButton?.onClick.RemoveListener(OnDrawTenClicked);
+     }
+ 
+     protected override async void OnOpen()
+@@ -49,7 +57,10 @@ public sealed class GachaPanel : UIBase
+         {
+             await coordinator.WaitForLoginAsync();
+             if (this != null && IsOpen && coordinator != null)
++            {
+                 ShowGold(coordinator.LocalGold);
++                SetBusy(busy);
++            }
+         }
+     }
+ 
+@@ -63,23 +74,40 @@ public sealed class GachaPanel : UIBase
+         return new ProfileIconCatalog(JsonUtility.FromJson<ProfileIconDefinitionFile>(profileIconsJson.text));
+     }
+ 
+-    private async void OnDrawClicked()
++    private void OnDrawClicked() => Draw(1);
++
++    private void OnDrawTenClicked() => Draw(GachaApi.TenDrawCount);
++
++    private async void Draw(int count)
+     {
+         if (busy || coordinator == null) return;
+ 
++        drawingCount = count;
+         SetBusy(true);
+         ShowStatus(string.Empty);
+         try
+         {
+-            GachaResultResponse result = await coordinator.DrawGachaAsync();
++            GachaResultResponse result = await coordinator.DrawGachaAsync(count);
+             if (this == null) return;
+ 
+-            if (result.price > 0) price = result.price;
++            int drawn = result.results?.Count ?? 1;
++            if (result.price > 0 && drawn > 0) price = result.price / drawn;
+             ShowGold(result.gold);
+ 
+             UIManager uiManager = FindFirstObjectByType<UIManager>();
+             GachaResultView view = uiManager != null ? uiManager.Open<GachaResultView>() : null;
+-            view?.Show(result, FindName(result.iconId), LoadSprite(result.iconId));
++            view?.Show(result, FindName, LoadSprite);
++        }
++        catch (ApiException exception) when (exception.StatusCode == 0)
++        {
++            // 시간 초과·연결 끊김: 서버에서는 뽑기가 끝났을 수도 있어서 골드를 다시 받아 오고 크게 안내한다
++            if (this == null) return;
++            ShowStatus(string.Empty);
++            UIManager uiManager = FindFirstObjectByType<UIManager>();
++            GachaResultView view = uiManager != null ? uiManager.Open<GachaResultView>() : null;
++            view?.ShowNotice("결과를 확인하지 못했어요", "도감에서 확인해 주세요");
++            if (view == null) ShowStatus("결과를 확인하지 못했어요. 도감에서 확인해 주세요.");
++            await RefreshGoldAsync();
+         }
+         catch (Exception exception)
+         {
+@@ -88,20 +116,43 @@ public sealed class GachaPanel : UIBase
+         }
+         finally
+         {
++            drawingCount = 0;
+             if (this != null) SetBusy(false);
+         }
+     }
+ 
++    // 서버의 보유 골드로 다시 맞춘다. 이것도 실패하면 화면 골드는 그대로 둔다
++    private async System.Threading.Tasks.Task RefreshGoldAsync()
++    {
++        if (coordinator == null) return;
++        try
++        {
++            await coordinator.GetProfileAsync();
++            if (this != null) ShowGold(coordinator.LocalGold);
++        }
++        catch (Exception exception)
++        {
++            Debug.LogWarning($"[Gacha] 골드를 다시 받아 오지 못했습니다: {exception.Message}");
++        }
++    }
++
+     private void SetBusy(bool value)
+     {
+         busy = value;
+         if (drawButton != null) drawButton.interactable = !value && coordinator != null;
+-        if (drawButtonLabel != null) drawButtonLabel.text = $"뽑기 ({price}골드)";
++        if (drawButtonLabel != null)
++            drawButtonLabel.text = value && drawingCount == 1 ? DrawingLabel : $"뽑기 ({price}골드)";
++
++        int tenPrice = price * GachaApi.TenDrawCount;
++        if (drawTenButton != null) drawTenButton.interactable = !value && coordinator != null && gold >= tenPrice;
++        if (drawTenButtonLabel != null)
++            drawTenButtonLabel.text = value && drawingCount == GachaApi.TenDrawCount ? DrawingLabel : $"10연차 ({tenPrice:N0}골드)";
+     }
+ 
+-    private void ShowGold(int gold)
++    private void ShowGold(int value)
+     {
+-        if (goldText != null) goldText.text = $"{gold:N0}";
++        gold = value;
++        if (goldText != null) goldText.text = $"{value:N0}";
+     }
+ 
+     private void ShowStatus(string message)
+diff --git a/Assets/Scripts/Presentation/UI/GachaResultView.cs b/Assets/Scripts/Presentation/UI/GachaResultView.cs
+index df42abd..474f8ab 100644
+--- a/Assets/Scripts/Presentation/UI/GachaResultView.cs
++++ b/Assets/Scripts/Presentation/UI/GachaResultView.cs
+@@ -1,9 +1,15 @@
++using System;
+ using System.Collections;
++using System.Collections.Generic;
+ using TMPro;
+ using UnityEngine;
+ using UnityEngine.UI;
+ 
+-/// <summary>뽑기 결과 팝업. 뽑힌 아이콘을 작게 시작해 튀어나오듯 키우며 보여 준다.</summary>
++/// <summary>
++/// 뽑기 결과 팝업. 1회는 아이콘 하나를 크게, 10연차는 칸 10개를 한 화면에 보여 준다.
++/// 아이콘은 작게 시작해 튀어나오듯 커지고, 10연차는 칸마다 조금씩 늦게 나온다. 새 아이콘은 NEW로 강조한다.
++/// 결과를 받지 못했을 때(시간 초과 등)는 ShowNotice로 아이콘 없이 안내 문구만 크게 보여 준다.
++/// </summary>
+ public sealed class GachaResultView : UIBase
+ {
+     [SerializeField] private RectTransform iconRoot;
+@@ -14,11 +20,32 @@ public sealed class GachaResultView : UIBase
+     [SerializeField] private Button confirmButton;
+     [SerializeField] private float revealDuration = 0.35f;
+ 
++    [Header("10연차")]
++    [SerializeField] private RectTransform popup;
++    [SerializeField] private RectTransform confirmRoot;
++    [SerializeField] private TMP_Text descriptionText;
++    [SerializeField] private GameObject[] singleOnly;    // 1회 결과에만 보이는 것 (큰 아이콘, 이름, 결과 표시 등)
++    [SerializeField] private GameObject multiRoot;       // 10연차 칸들의 부모
++    [SerializeField] private GachaResultSlot[] slots;
++    [SerializeField] private Vector2 multiPopupSize = new Vector2(1000f, 700f);
++    [SerializeField] private float slotRevealDelay = 0.08f;
++
++    [Header("안내 (결과를 받지 못했을 때)")]
++    [SerializeField] private float noticeNameY = -270f;
++    [SerializeField] private float noticePillY = -340f;
++
+     private Coroutine reveal;
++    private Vector2 singlePopupSize;
++    private Vector2 singleConfirmPosition;
++    private string singleDescription;
++    private Vector2 singleNamePosition;
++    private Vector2 singlePillPosition;
++    private bool layoutSaved;
+ 
+     public override void Init()
+     {
+         confirmButton?.onClick.AddListener(Close);
++        SaveSingleLayout();
+     }
+ 
+     private void OnDestroy()
+@@ -26,8 +53,55 @@ public sealed class GachaResultView : UIBase
+         confirmButton?.onClick.RemoveListener(Close);
+     }
+ 
++    public void Show(GachaResultResponse result, Func<string, string> nameOf, Func<string, Sprite> spriteOf)
++    {
++        List<GachaDrawResult> results = result.results;
++        if (results == null || results.Count <= 1 || slots == null || slots.Length == 0)
++        {
++            GachaDrawResult first = results != null && results.Count > 0
++                ? results[0]
++                : new GachaDrawResult { iconId = result.iconId, duplicate = result.duplicate, count = result.count };
++            ShowSingle(first, nameOf(first.iconId), spriteOf(first.iconId));
++            return;
++        }
++
++        ShowMany(results, nameOf, spriteOf);
++    }
++
++    // 1회 결과 (에디터 미리보기 UIPopupPreview가 사용)
+     public void Show(GachaResultResponse result, string iconName, Sprite icon)
+     {
++        ShowSingle(new GachaDrawResult { iconId = result.iconId, duplicate = result.duplicate, count = result.count },
++            iconName, icon);
++    }
++
++    // 아이콘 없이 큰 글씨(message)와 작은 설명(detail)만 보여 준다
++    public void ShowNotice(string message, string detail)
++    {
++        ApplyLayout(multi: false);
++
++        GameObject nameObject = nameText != null ? nameText.gameObject : null;
++        GameObject pillObject = resultPill != null ? resultPill.gameObject : null;
++        foreach (GameObject target in singleOnly ?? Array.Empty<GameObject>())
++            if (target != null) target.SetActive(target == nameObject || target == pillObject);
++
++        if (nameText != null)
++        {
++            nameText.text = message;
++            ((RectTransform)nameText.transform).anchoredPosition = new Vector2(singleNamePosition.x, noticeNameY);
++        }
++        if (resultText != null) resultText.text = detail;
++        if (resultPill != null)
++        {
++            resultPill.color = new Color32(243, 230, 207, 255);
++            resultPill.rectTransform.anchoredPosition = new Vector2(singlePillPosition.x, noticePillY);
++        }
++    }
++
++    private void ShowSingle(GachaDrawResult result, string iconName, Sprite icon)
++    {
++        ApplyLayout(multi: false);
++
+         if (iconImage != null)
+         {
+             iconImage.sprite = icon;
+@@ -39,8 +113,33 @@ public sealed class GachaResultView : UIBase
+         if (resultPill != null) resultPill.color = result.duplicate
+             ? new Color32(243, 230, 207, 255) : new Color32(224, 149, 15, 255);
+ 
+-        if (reveal != null) StopCoroutine(reveal);
+-        reveal = StartCoroutine(Reveal());
++        StartReveal(Reveal());
++    }
++
++    private void ShowMany(List<GachaDrawResult> results, Func<string, string> nameOf, Func<string, Sprite> spriteOf)
++    {
++        ApplyLayout(multi: true);
++
++        int newCount = 0;
++        for (int i = 0; i < slots.Length; i++)
++        {
++            GachaResultSlot slot = slots[i];
++            if (slot == null) continue;
++
++            bool used = i < results.Count;
++            slot.gameObject.SetActive(used);
++            if (!used) continue;
++
++            GachaDrawResult result = results[i];
++            if (!result.duplicate) newCount++;
++            slot.Show(result, nameOf(result.iconId), spriteOf(result.iconId));
++            if (slot.IconRoot != null) slot.IconRoot.localScale = Vector3.zero;
++        }
++
++        if (descriptionText != null)
++            descriptionText.text = newCount > 0 ? $"{results.Count}연차 결과 · 새 아이콘 {newCount}개!" : $"{results.Count}연차 결과 · 새 아이콘은 없어요";
++
++        StartReveal(RevealSlots());
+     }
+ 
+     protected override void OnClose()
+@@ -48,23 +147,95 @@ public sealed class GachaResultView : UIBase
+         if (reveal != null) StopCoroutine(reveal);
+         reveal = null;
+         if (iconRoot != null) iconRoot.localScale = Vector3.one;
++        if (slots == null) return;
++        foreach (GachaResultSlot slot in slots)
++            if (slot != null && slot.IconRoot != null) slot.IconRoot.localScale = Vector3.one;
++    }
++
++    private void SaveSingleLayout()
++    {
++        if (layoutSaved) return;
++        layoutSaved = true;
++        if (popup != null) singlePopupSize = popup.sizeDelta;
++        if (confirmRoot != null) singleConfirmPosition = confirmRoot.anchoredPosition;
++        if (descriptionText != null) singleDescription = descriptionText.text;
++        if (nameText != null) singleNamePosition = ((RectTransform)nameText.transform).anchoredPosition;
++        if (resultPill != null) singlePillPosition = resultPill.rectTransform.anchoredPosition;
++    }
++
++    // 10연차는 팝업을 넓히고 확인 버튼을 가운데로 옮긴다. 1회는 프리팹 그대로
++    private void ApplyLayout(bool multi)
++    {
++        SaveSingleLayout();
++
++        foreach (GameObject target in singleOnly ?? Array.Empty<GameObject>())
++            if (target != null) target.SetActive(!multi);
++        if (multiRoot != null) multiRoot.SetActive(multi);
++
++        if (popup != null) popup.sizeDelta = multi ? multiPopupSize : singlePopupSize;
++        if (confirmRoot != null)
++        {
++            float widthGrowth = multi ? multiPopupSize.x - singlePopupSize.x : 0f;
++            float heightGrowth = multi ? multiPopupSize.y - singlePopupSize.y : 0f;
++            confirmRoot.anchoredPosition = singleConfirmPosition + new Vector2(widthGrowth / 2f, -heightGrowth);
++        }
++        if (!multi && descriptionText != null) descriptionText.text = singleDescription;
++
++        // ShowNotice가 옮겨 둔 위치를 되돌린다
++        if (nameText != null) ((RectTransform)nameText.transform).anchoredPosition = singleNamePosition;
++        if (resultPill != null) resultPill.rectTransform.anchoredPosition = singlePillPosition;
++    }
++
++    private void StartReveal(IEnumerator routine)
++    {
++        if (reveal != null) StopCoroutine(reveal);
++        reveal = StartCoroutine(routine);
+     }
+ 
+-    // 0 → 1.15 → 1 로 커지는 간단한 연출
+     private IEnumerator Reveal()
+     {
+-        if (iconRoot == null) yield break;
++        yield return Pop(iconRoot);
++        reveal = null;
++    }
++
++    // 칸마다 slotRevealDelay씩 늦게 튀어나온다
++    private IEnumerator RevealSlots()
++    {
++        float time = 0f;
++        float total = revealDuration + slotRevealDelay * (slots.Length - 1);
++        while (time < total)
++        {
++            time += Time.unscaledDeltaTime;
++            for (int i = 0; i < slots.Length; i++)
++            {
++                if (slots[i] == null || slots[i].IconRoot == null) continue;
++                slots[i].IconRoot.localScale = Vector3.one * PopScale((time - slotRevealDelay * i) / revealDuration);
++            }
++            yield return null;
++        }
++        foreach (GachaResultSlot slot in slots)
++            if (slot != null && slot.IconRoot != null) slot.IconRoot.localScale = Vector3.one;
++        reveal = null;
++    }
++
++    private IEnumerator Pop(RectTransform target)
++    {
++        if (target == null) yield break;
+ 
+         float time = 0f;
+         while (time < revealDuration)
+         {
+             time += Time.unscaledDeltaTime;
+-            float t = Mathf.Clamp01(time / revealDuration);
+-            float scale = t < 0.7f ? Mathf.Lerp(0f, 1.15f, t / 0.7f) : Mathf.Lerp(1.15f, 1f, (t - 0.7f) / 0.3f);
+-            iconRoot.localScale = Vector3.one * scale;
++            target.localScale = Vector3.one * PopScale(time / revealDuration);
+             yield return null;
+         }
+-        iconRoot.localScale = Vector3.one;
+-        reveal = null;
++        target.localScale = Vector3.one;
++    }
++
++    // 0 → 1.15 → 1 로 커지는 간단한 연출
++    private static float PopScale(float t)
++    {
++        t = Mathf.Clamp01(t);
++        return t < 0.7f ? Mathf.Lerp(0f, 1.15f, t / 0.7f) : Mathf.Lerp(1.15f, 1f, (t - 0.7f) / 0.3f);
+     }
+ }
+diff --git a/Assets/Scripts/Presentation/UI/ResultPopup.cs b/Assets/Scripts/Presentation/UI/ResultPopup.cs
+index 1946561..898fa11 100644
+--- a/Assets/Scripts/Presentation/UI/ResultPopup.cs
++++ b/Assets/Scripts/Presentation/UI/ResultPopup.cs
+@@ -68,7 +68,7 @@ public class ResultPopup : UIBase
+     // 순위 목록 표시 (등수 → 팀 순)
+     //  iconResolver: (iconId, team) → 프로필 아이콘 스프라이트 (HUD의 ResolveProfileIcon 사용)
+     //  localTeam: 내 팀 (내 줄 강조용, -1이면 강조 안 함)
+-    // 나간 플레이어: 보상 0 (서버 규칙상 1~4등은 모두 골드를 받으므로 0이면 나간 것)
++    // 나간 플레이어: 서버가 보내는 leftGame (남아 있어도 보상이 0일 수 있어서 금액으로 판단하지 않는다)
+     public ResultPopup SetRankings(
+         IReadOnlyList<RankingEntry> rankings,
+         IReadOnlyList<PlayerDisplayInfo> profiles,
+@@ -93,7 +93,7 @@ public class ResultPopup : UIBase
+             PlayerDisplayInfo profile = FindProfile(profiles, entry);
+             string name = DisplayName(profile, entry);
+             Sprite icon = iconResolver?.Invoke(profile?.iconId, entry.team);
+-            bool left = entry.rewardGold <= 0;
++            bool left = entry.leftGame;
+ 
+             ResultRankRowView row = Instantiate(rankRowPrefab, rankRowContainer);
+             row.Init();
+diff --git a/Assets/Tests/EditMode/RoomSettingsLifecycleTests.cs b/Assets/Tests/EditMode/RoomSettingsLifecycleTests.cs
+index a10232d..664cafa 100644
+--- a/Assets/Tests/EditMode/RoomSettingsLifecycleTests.cs
++++ b/Assets/Tests/EditMode/RoomSettingsLifecycleTests.cs
+@@ -54,7 +54,7 @@ public class RoomSettingsLifecycleTests
+     {
+         Component coordinator = Create("LobbyNetworkCoordinator");
+         Component controller = Create("LobbyController");
+-        GameObject room = UnityEngine.Object.Instantiate(UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/UI/RoomPanel.prefab"));
++        GameObject room = UnityEngine.Object.Instantiate(UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/UIv2/Panels/RoomPanel.prefab"));
+         objects.Add(room);
+         Component panel = room.GetComponent(RuntimeType("RoomPanel"));
+         Set(controller, "roomPanel", panel);
+@@ -92,7 +92,7 @@ public class RoomSettingsLifecycleTests
+     [TestCase(4, true)]
+     public void StartButtonRequiresHostAndTwoToFourReadyPlayers(int count, bool expected)
+     {
+-        GameObject roomOwner = UnityEngine.Object.Instantiate(UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/UI/RoomPanel.prefab"));
++        GameObject roomOwner = UnityEngine.Object.Instantiate(UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/UIv2/Panels/RoomPanel.prefab"));
+         objects.Add(roomOwner);
+         Component panel = roomOwner.GetComponent(RuntimeType("RoomPanel"));
+         panel.GetType().GetMethod("Init").Invoke(panel, null);

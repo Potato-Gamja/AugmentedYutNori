@@ -1,0 +1,308 @@
+From commit: 48773696f671d8db39db6dfd1829933c75395d0f
+Contributor: Potato-Gamja (Gamja)
+Subject: [feat] 메인메뉴, 다시하기 추가
+Original: https://github.com/Potato-Gamja/AugmentedYutNori/commit/48773696f671d8db39db6dfd1829933c75395d0f
+
+diff --git a/Assets/Scripts/Flow/GameFlowController.cs b/Assets/Scripts/Flow/GameFlowController.cs
+index 66953e5..0c1b445 100644
+--- a/Assets/Scripts/Flow/GameFlowController.cs
++++ b/Assets/Scripts/Flow/GameFlowController.cs
+@@ -38,6 +38,7 @@ public class GameFlowController : MonoBehaviour
+     private GameFlowHudPresenter hudPresenter;
+     private GameFlowSelectionController selectionController;
+     private SettingsPanel settingsPanel;
++    private ResultPopup resultPopup;
+     private Camera mainCamera;
+     private AugmentCatalog augmentCatalog;
+     private GameFlowState currentState;
+@@ -311,6 +312,11 @@ public class GameFlowController : MonoBehaviour
+             hud.SettingsClicked -= OnSettingsClicked;
+         }
+         if (settingsPanel != null) settingsPanel.ExitGameRequested -= OnExitGameRequested;
++        if (resultPopup != null)
++        {
++            resultPopup.MainMenuClicked -= OnExitGameRequested;
++            resultPopup.ReturnToRoomClicked -= OnReturnToRoomRequested;
++        }
+ 
+         if (gameSession != null)
+         {
+@@ -435,6 +441,13 @@ public class GameFlowController : MonoBehaviour
+         settingsPanel.ExitGameRequested += OnExitGameRequested;
+     }
+ 
++    private void OnReturnToRoomRequested()
++    {
++        LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
++        if (coordinator != null) coordinator.ReturnToWaitingRoom();
++        else SceneManager.LoadScene(mainMenuSceneName);
++    }
++
+     private void OnExitGameRequested()
+     {
+         settingsPanel?.Close();
+@@ -629,13 +642,21 @@ public class GameFlowController : MonoBehaviour
+                 hudPresenter.RefreshPlayerPanels();
+                 hud?.SetInteractionState(false, false);
+                 int winner = pendingWinnerTeam ?? gameState.WinnerTeam ?? CurrentTeam;
+-                hud?.SetInstruction($"{PlayerName(winner)} 승리!");
++                hud?.SetInstruction($"{PlayerName(winner)} win");
+                 hud?.SetThrowInteractable(false);
+                 hud?.SetRethrowVisible(false);
+                 hud?.SetTimerRunning(false);
+-                ResultPopup resultPopup = uiManager?.Open<ResultPopup>()?.SetWinner(
++                resultPopup = uiManager?.Open<ResultPopup>()?.SetWinner(
+                     PlayerName(winner),
+-                    GameHudPanel.GetTeamColor(winner));
++                    GameHudPanel.GetTeamColor(winner),
++                    hud?.ResolveProfileIcon(playerProfiles.FirstOrDefault(profile => profile.team == winner)?.iconId, winner));
++                if (resultPopup != null)
++                {
++                    resultPopup.MainMenuClicked -= OnExitGameRequested;
++                    resultPopup.MainMenuClicked += OnExitGameRequested;
++                    resultPopup.ReturnToRoomClicked -= OnReturnToRoomRequested;
++                    resultPopup.ReturnToRoomClicked += OnReturnToRoomRequested;
++                }
+                 if (resultPopup != null && gameSession is RemoteGameSession remoteSession)
+                     resultPopup.SetRankings(remoteSession.Rankings, playerProfiles);
+                 break;
+diff --git a/Assets/Scripts/Flow/LobbyController.cs b/Assets/Scripts/Flow/LobbyController.cs
+index cf6500d..0dd2798 100644
+--- a/Assets/Scripts/Flow/LobbyController.cs
++++ b/Assets/Scripts/Flow/LobbyController.cs
+@@ -64,6 +64,7 @@ public class LobbyController : MonoBehaviour
+         mainMenuPanel.ProfileRequested += OnProfileRequested;
+         mainMenuPanel.AchievementRequested += OnAchievementRequested;
+         mainMenuPanel.SettingsRequested += OnSettingsRequested;
++        FindFirstObjectByType<LobbyNetworkCoordinator>()?.RestoreWaitingRoom(this);
+     }
+ 
+     private void OnDestroy()
+@@ -213,11 +214,18 @@ public class LobbyController : MonoBehaviour
+     // WebSocketClient 계약: ROOM_STATE payload를 역직렬화한 뒤 호출한다.
+     public void ReceiveRoomState(RoomStateMessage room)
+     {
++        uiManager.Close<MainMenuPanel>();
+         uiManager.Close<LobbyPanel>();
+         uiManager.Open<RoomPanel>();
+         roomPanel.ShowRoom(room, localPlayerId);
+         roomPanel.SetInteraction(true);
+         roomPanel.ShowStatus("다른 플레이어를 기다리는 중입니다.");
++        LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
++        if (coordinator != null && !coordinator.CanReadyInCurrentRoom)
++        {
++            roomPanel.SetReadyInteractable(false);
++            roomPanel.ShowStatus("경기가 종료되었습니다. 재경기는 서버의 방 초기화 기능 연결 후 가능합니다.");
++        }
+     }
+ 
+     // WebSocketClient 계약: GAME_START payload를 역직렬화한 뒤 호출한다.
+diff --git a/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs b/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
+index 56d0b8c..df2474a 100644
+--- a/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
++++ b/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
+@@ -43,6 +43,9 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+     private Task silentLoginTask = Task.CompletedTask;
+     private bool waitingForGameSession;
+     private bool logoutRequested;
++    private bool returnToRoomRequested;
++    private bool gameEnded;
++    private RoomStateMessage lastRoomState;
+     private readonly List<WsEnvelope> pendingGameMessages = new();
+     private readonly Dictionary<string, int> playerTeams = new();
+     private readonly List<PlayerDisplayInfo> playerProfiles = new();
+@@ -389,6 +392,11 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+ 
+     private void OnReadyRequested(bool ready)
+     {
++        if (!CanReadyInCurrentRoom)
++        {
++            lobbyController?.ReceiveError("재경기는 서버의 방 초기화 기능 연결 후 가능합니다.");
++            return;
++        }
+         if (!webSocketClient.IsConnected ||
+             !webSocketClient.Send(MessageType.READY, new ReadyRequest { ready = ready }))
+         {
+@@ -403,6 +411,28 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+         webSocketClient.Close();
+     }
+ 
++    public void ReturnToWaitingRoom()
++    {
++        if (!webSocketClient.IsConnected || lastRoomState == null)
++        {
++            LeaveGameToMainMenu();
++            return;
++        }
++        returnToRoomRequested = true;
++        SceneManager.LoadScene(lobbySceneName);
++    }
++
++    // LobbyController.Start에서 패널 생성과 이벤트 연결이 끝난 뒤 호출한다.
++    public void RestoreWaitingRoom(LobbyController controller)
++    {
++        if (!returnToRoomRequested || controller == null || lastRoomState == null) return;
++        returnToRoomRequested = false;
++        controller.SetLocalPlayer(LocalPlayerId, LocalNickname);
++        controller.ReceiveRoomState(lastRoomState);
++    }
++
++    public bool CanReadyInCurrentRoom => !gameEnded;
++
+     public async void LeaveGameToMainMenu()
+     {
+         if (leaveRequested) return;
+@@ -417,6 +447,8 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+         pendingRoomCode = null;
+         pendingNickname = null;
+         leaveRequested = false;
++        returnToRoomRequested = false;
++        lastRoomState = null;
+         SceneManager.LoadScene(lobbySceneName);
+     }
+ 
+@@ -432,6 +464,8 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+             {
+                 case MessageType.ROOM_STATE:
+                     RoomStateMessage room = MessageSerializer.ReadPayload<RoomStateMessage>(envelope);
++                    lastRoomState = room;
++                    if (gameEnded && room?.status == "WAITING") gameEnded = false;
+                     CachePlayerTeams(room);
+                     lobbyController?.ReceiveRoomState(room);
+                     break;
+@@ -446,6 +480,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+ 
+                     // 서버 공통 GameSetup에는 localTeam이 없으므로 최신 ROOM_STATE의 배정을 사용한다.
+                     started.localTeam = localTeam;
++                    gameEnded = false;
+                     pendingGameMessages.Clear();
+                     waitingForGameSession = true;
+                     rewardAppliedThisGame = false;
+@@ -454,6 +489,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+                     break;
+ 
+                 case MessageType.GAME_ENDED:
++                    gameEnded = true;
+                     // 게임 화면 처리는 RemoteGameSession이 하고, 여기서는 내 보상만 보유 골드 캐시에 더한다
+                     if (rewardAppliedThisGame) break;
+                     GameEndedMessage ended = MessageSerializer.ReadPayload<GameEndedMessage>(envelope);
+diff --git a/Assets/Scripts/Presentation/UI/GameHudPanel.cs b/Assets/Scripts/Presentation/UI/GameHudPanel.cs
+index 765c790..88017f7 100644
+--- a/Assets/Scripts/Presentation/UI/GameHudPanel.cs
++++ b/Assets/Scripts/Presentation/UI/GameHudPanel.cs
+@@ -172,6 +172,14 @@ public class GameHudPanel : UIBase
+         playerView?.SetPlayerProfiles(profiles, profileIcons);
+     }
+ 
++    public Sprite ResolveProfileIcon(string iconId, int team)
++    {
++        Sprite icon = !string.IsNullOrWhiteSpace(iconId)
++            ? Resources.Load<Sprite>(ProfileIconCatalog.SpritePath(iconId))
++            : null;
++        return icon != null ? icon : PlayerProfileIconResolver.Resolve(profileIcons, iconId, team);
++    }
++
+     public void SetPlayerState(
+         int team,
+         int waiting,
+diff --git a/Assets/Scripts/Presentation/UI/ResultPopup.cs b/Assets/Scripts/Presentation/UI/ResultPopup.cs
+index 3531689..1902527 100644
+--- a/Assets/Scripts/Presentation/UI/ResultPopup.cs
++++ b/Assets/Scripts/Presentation/UI/ResultPopup.cs
+@@ -5,6 +5,7 @@ using System.Text;
+ using TMPro;
+ using UnityEngine;
+ using UnityEngine.SceneManagement;
++using UnityEngine.Serialization;
+ using UnityEngine.UI;
+ 
+ 
+@@ -14,24 +15,43 @@ public class ResultPopup : UIBase
+     [SerializeField] private TextMeshProUGUI winnerText;
+     [SerializeField] private Image winnerColorImage;
+     [SerializeField] private TextMeshProUGUI rankingsText;
+-    [SerializeField] private Button restartButton;
++    [FormerlySerializedAs("restartButton")]
++    [SerializeField] private Button mainMenuButton;
++    [SerializeField] private Button returnToRoomButton;
++    [SerializeField] private Image winnerProfileIcon;
+ 
+-    public event Action RestartClicked;
++    public event Action MainMenuClicked;
++    public event Action ReturnToRoomClicked;
+ 
+     public override void Init()
+     {
+-        restartButton.onClick.AddListener(HandleRestart);
++        mainMenuButton?.onClick.AddListener(HandleMainMenu);
++        returnToRoomButton?.onClick.AddListener(HandleReturnToRoom);
++    }
++
++    private void OnDestroy()
++    {
++        mainMenuButton?.onClick.RemoveListener(HandleMainMenu);
++        returnToRoomButton?.onClick.RemoveListener(HandleReturnToRoom);
+     }
+ 
+     protected override void OnOpen()
+     {
++        if (mainMenuButton != null) mainMenuButton.interactable = true;
++        if (returnToRoomButton != null) returnToRoomButton.interactable = true;
+         SoundManager.Play(SoundId.ResultPopup);
+     }
+ 
+-    public ResultPopup SetWinner(string winnername, Color winnerColor)
++    public ResultPopup SetWinner(string winnername, Color winnerColor, Sprite profileIcon = null)
+     {
+         if (winnerText != null) winnerText.text = string.Format("{0} win", winnername);
+         if (winnerColorImage != null) winnerColorImage.color = winnerColor;
++        if (winnerProfileIcon != null)
++        {
++            winnerProfileIcon.sprite = profileIcon;
++            winnerProfileIcon.enabled = profileIcon != null;
++            winnerProfileIcon.preserveAspect = true;
++        }
+         return this;
+     }
+ 
+@@ -62,12 +82,37 @@ public class ResultPopup : UIBase
+         return this;
+     }
+ 
+-    private void HandleRestart()
++    private void HandleMainMenu()
++    {
++        DisableReturnButtons();
++        Close();
++
++        if (MainMenuClicked != null) MainMenuClicked.Invoke();
++        else
++        {
++            LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
++            if (coordinator != null) coordinator.LeaveGameToMainMenu();
++            else SceneManager.LoadScene("Lobby");
++        }
++    }
++
++    private void HandleReturnToRoom()
+     {
++        DisableReturnButtons();
+         Close();
++        if (ReturnToRoomClicked != null) ReturnToRoomClicked.Invoke();
++        else
++        {
++            LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
++            if (coordinator != null) coordinator.ReturnToWaitingRoom();
++            else SceneManager.LoadScene("Lobby");
++        }
++    }
+ 
+-        if (RestartClicked != null) RestartClicked.Invoke();
+-        else SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
++    private void DisableReturnButtons()
++    {
++        if (mainMenuButton != null) mainMenuButton.interactable = false;
++        if (returnToRoomButton != null) returnToRoomButton.interactable = false;
+     }
+ 
+ }

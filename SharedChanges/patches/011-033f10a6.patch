@@ -1,0 +1,463 @@
+From commit: 033f10a65f5880b51df8cb152849ed9fefb98830
+Contributor: Potato-Gamja (Gamja)
+Subject: [Feat] 로비 네트워크 연결 및 게임 세션 주입 구성
+Original: https://github.com/Potato-Gamja/AugmentedYutNori/commit/033f10a65f5880b51df8cb152849ed9fefb98830
+
+diff --git a/Assets/Scripts/Flow/GameFlowController.cs b/Assets/Scripts/Flow/GameFlowController.cs
+index 0bcbda1..a65d850 100644
+--- a/Assets/Scripts/Flow/GameFlowController.cs
++++ b/Assets/Scripts/Flow/GameFlowController.cs
+@@ -30,6 +30,7 @@ public class GameFlowController : MonoBehaviour
+     private GameRules gameRules;
+     // Flow는 규칙 구현을 직접 실행하지 않고 세션에 명령을 보낸 뒤 확정 이벤트만 화면에 반영한다.
+     private IGameSession gameSession;
++    private IGameSessionFactory sessionFactory;
+     private GameHudPanel hud;
+     private GameFlowHudPresenter hudPresenter;
+     private GameFlowSelectionController selectionController;
+@@ -108,6 +109,16 @@ public class GameFlowController : MonoBehaviour
+         setup = gameSetup ?? throw new ArgumentNullException(nameof(gameSetup));
+     }
+ 
++    /// <summary>
++    /// GameInstaller가 게임 설정과 Local/Remote 세션 생성 방식을 함께 주입할 때 사용한다.
++    /// Network 담당은 GameFlowController를 직접 수정하지 않고 GameInstaller에 Remote Factory를 등록한다.
++    /// </summary>
++    public void Configure(GameSetup gameSetup, IGameSessionFactory factory)
++    {
++        Configure(gameSetup);
++        sessionFactory = factory ?? throw new ArgumentNullException(nameof(factory));
++    }
++
+     private bool ValidateSetup()
+     {
+         setup ??= GameSetup.CreateLocalDefault();
+@@ -161,8 +172,11 @@ public class GameFlowController : MonoBehaviour
+             new YutThrower(new SystemRandomProvider()),
+             new StandardGetResult(),
+             CreateAugmentPool());
+-        // MVP는 로컬 세션을 사용한다. RemoteGameSession이 준비되면 생성 책임을 Installer로 옮긴다.
+-        gameSession = new LocalGameSession(gameRules, gameEvents);
++        // Installer가 없는 기존 단독 씬은 로컬 세션으로 계속 실행한다.
++        // 서버 게임은 GameInstaller가 주입한 Factory를 통해 RemoteGameSession을 생성한다.
++        gameSession = sessionFactory != null
++            ? sessionFactory.Create(gameRules, gameEvents)
++            : new LocalGameSession(gameRules, gameEvents);
+     }
+ 
+     // json에 저장되어 있는 모든 증강 가져오기
+diff --git a/Assets/Scripts/Flow/LobbyController.cs b/Assets/Scripts/Flow/LobbyController.cs
+new file mode 100644
+index 0000000..22fdce5
+--- /dev/null
++++ b/Assets/Scripts/Flow/LobbyController.cs
+@@ -0,0 +1,142 @@
++using System;
++using UnityEngine;
++using UnityEngine.SceneManagement;
++
++/// <summary>
++/// 로비 UI와 네트워크 계층 사이의 연결 지점이다.
++/// UI는 이 Controller에 입력을 전달하고, 네트워크 계층은 Receive 메서드로 서버 결과를 전달한다.
++/// </summary>
++public class LobbyController : MonoBehaviour
++{
++    [SerializeField] private UIManager uiManager;
++    [SerializeField] private string gameSceneName = "LSU_Game_UI";
++
++    private LobbyPanel lobbyPanel;
++    private RoomPanel roomPanel;
++    private string localPlayerId;
++
++    // 네트워크 계약:
++    // CreateRoomRequested -> ApiClient에서 POST /players 후 POST /rooms 호출.
++    // JoinRoomRequested   -> POST /players 후 WebSocketClient.Connect(roomCode, guestToken), JOIN_ROOM 전송.
++    // ReadyRequested      -> WebSocket으로 READY 전송.
++    // LeaveRoomRequested  -> WebSocket으로 LEAVE_ROOM 전송 후 연결 해제.
++    // ApiClient/WebSocketClient가 머지되면 해당 구현을 이 이벤트에 연결하거나 아래 요청 메서드 내부로 옮긴다.
++    public event Action<string> CreateRoomRequested;
++    public event Action<string, string> JoinRoomRequested;
++    public event Action<bool> ReadyRequested;
++    public event Action LeaveRoomRequested;
++
++    private void Start()
++    {
++        if (uiManager == null) uiManager = FindFirstObjectByType<UIManager>();
++        if (uiManager == null)
++        {
++            Debug.LogError("[Lobby] UIManager가 없습니다.", this);
++            enabled = false;
++            return;
++        }
++
++        lobbyPanel = uiManager.Open<LobbyPanel>();
++        roomPanel = uiManager.Get<RoomPanel>();
++        if (lobbyPanel == null || roomPanel == null)
++        {
++            Debug.LogError("[Lobby] LobbyPanel과 RoomPanel을 UIManager 프리팹 목록에 등록해 주세요.", this);
++            enabled = false;
++            return;
++        }
++
++        lobbyPanel.CreateRoomRequested += OnCreateRoomRequested;
++        lobbyPanel.JoinRoomRequested += OnJoinRoomRequested;
++        roomPanel.ReadyRequested += OnReadyRequested;
++        roomPanel.LeaveRequested += OnLeaveRequested;
++    }
++
++    private void OnDestroy()
++    {
++        if (lobbyPanel != null)
++        {
++            lobbyPanel.CreateRoomRequested -= OnCreateRoomRequested;
++            lobbyPanel.JoinRoomRequested -= OnJoinRoomRequested;
++        }
++        if (roomPanel != null)
++        {
++            roomPanel.ReadyRequested -= OnReadyRequested;
++            roomPanel.LeaveRequested -= OnLeaveRequested;
++        }
++    }
++
++    private void OnCreateRoomRequested(string nickname)
++    {
++        lobbyPanel.SetBusy(true);
++        lobbyPanel.ShowStatus("방을 생성하는 중입니다.");
++        CreateRoomRequested?.Invoke(nickname);
++    }
++
++    private void OnJoinRoomRequested(string nickname, string roomCode)
++    {
++        lobbyPanel.SetBusy(true);
++        lobbyPanel.ShowStatus("방에 참가하는 중입니다.");
++        JoinRoomRequested?.Invoke(nickname, roomCode);
++    }
++
++    private void OnReadyRequested(bool ready)
++    {
++        roomPanel.SetInteraction(false);
++        roomPanel.ShowStatus("서버 응답을 기다리는 중입니다.");
++        ReadyRequested?.Invoke(ready);
++    }
++
++    private void OnLeaveRequested()
++    {
++        roomPanel.SetInteraction(false);
++        LeaveRoomRequested?.Invoke();
++    }
++
++    // PlayerIdentity/ApiClient 계약: POST /players 응답의 playerId를 전달한다.
++    public void SetLocalPlayer(string playerId)
++    {
++        localPlayerId = playerId;
++    }
++
++    // WebSocketClient 계약: ROOM_STATE payload를 역직렬화한 뒤 호출한다.
++    public void ReceiveRoomState(RoomStateMessage room)
++    {
++        uiManager.Close<LobbyPanel>();
++        uiManager.Open<RoomPanel>();
++        roomPanel.ShowRoom(room, localPlayerId);
++        roomPanel.SetInteraction(true);
++        roomPanel.ShowStatus("다른 플레이어를 기다리는 중입니다.");
++    }
++
++    // WebSocketClient 계약: GAME_START payload를 역직렬화한 뒤 호출한다.
++    // GameInstaller가 메시지를 보관하고 다음 씬의 GameFlowController 시작 전에 GameSetup을 적용한다.
++    public void ReceiveGameStart(GameStartMessage message)
++    {
++        if (message == null)
++        {
++            ReceiveError("GAME_START 내용이 비어 있습니다.");
++            return;
++        }
++
++        GameInstaller.PrepareOnlineGame(message);
++        SceneManager.LoadScene(gameSceneName);
++    }
++
++    // REST 실패, WebSocket ERROR, 연결 실패를 같은 경로로 표시한다.
++    public void ReceiveError(string message)
++    {
++        lobbyPanel?.SetBusy(false);
++        lobbyPanel?.ShowStatus(message);
++        roomPanel?.SetInteraction(true);
++        roomPanel?.ShowStatus(message);
++    }
++
++    // LEAVE_ROOM 처리 또는 연결 해제가 완료되면 네트워크 계층에서 호출한다.
++    public void ReturnToLobby()
++    {
++        uiManager.Close<RoomPanel>();
++        uiManager.Open<LobbyPanel>();
++        lobbyPanel.SetBusy(false);
++        lobbyPanel.ShowStatus(string.Empty);
++    }
++}
+diff --git a/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs b/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
+new file mode 100644
+index 0000000..dfacd4f
+--- /dev/null
++++ b/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
+@@ -0,0 +1,261 @@
++using System;
++using UnityEngine;
++using UnityEngine.SceneManagement;
++
++/// <summary>
++/// 로비 UI 요청을 REST/WebSocket 호출로 바꾸고 서버의 로비 메시지를 화면에 전달한다.
++/// 네트워크 구현체의 세부 규칙은 이 클래스에만 모아 서버 계약 변경 범위를 제한한다.
++/// </summary>
++public class LobbyNetworkCoordinator : MonoBehaviour
++{
++    [SerializeField] private LobbyController lobbyController;
++    [SerializeField] private WebSocketClient webSocketClient;
++    [SerializeField] private string apiBaseUrl = "http://localhost:8080";
++    [SerializeField] private string webSocketUrl = "ws://localhost:8080/ws";
++    [SerializeField] private string playerPrefsKeyPrefix = "";
++
++    private static LobbyNetworkCoordinator instance;
++
++    private ApiClient apiClient;
++    private PlayerIdentity playerIdentity;
++    private string pendingRoomCode;
++    private string pendingNickname;
++    private bool leaveRequested;
++
++    private void Awake()
++    {
++        if (instance != null && instance != this)
++        {
++            Destroy(gameObject);
++            return;
++        }
++
++        instance = this;
++        DontDestroyOnLoad(gameObject);
++
++        if (webSocketClient == null) webSocketClient = GetComponent<WebSocketClient>();
++        if (webSocketClient == null)
++        {
++            Debug.LogError("[LobbyNetwork] WebSocketClient가 없습니다.", this);
++            enabled = false;
++            return;
++        }
++
++        apiClient = new ApiClient(apiBaseUrl);
++        playerIdentity = new PlayerIdentity(playerPrefsKeyPrefix);
++        webSocketClient.Url = webSocketUrl;
++
++        webSocketClient.Connected += OnConnected;
++        webSocketClient.Disconnected += OnDisconnected;
++        webSocketClient.Error += OnSocketError;
++        webSocketClient.MessageReceived += OnMessageReceived;
++        SceneManager.sceneLoaded += OnSceneLoaded;
++    }
++
++    private void Start()
++    {
++        BindLobbyController();
++    }
++
++    private void OnDestroy()
++    {
++        if (instance != this) return;
++
++        UnbindLobbyController();
++        if (webSocketClient != null)
++        {
++            webSocketClient.Connected -= OnConnected;
++            webSocketClient.Disconnected -= OnDisconnected;
++            webSocketClient.Error -= OnSocketError;
++            webSocketClient.MessageReceived -= OnMessageReceived;
++        }
++        SceneManager.sceneLoaded -= OnSceneLoaded;
++        instance = null;
++    }
++
++    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
++    {
++        BindLobbyController();
++    }
++
++    private void BindLobbyController()
++    {
++        LobbyController next = FindFirstObjectByType<LobbyController>();
++        if (next == lobbyController) return;
++
++        UnbindLobbyController();
++        lobbyController = next;
++        if (lobbyController == null) return;
++
++        lobbyController.CreateRoomRequested += OnCreateRoomRequested;
++        lobbyController.JoinRoomRequested += OnJoinRoomRequested;
++        lobbyController.ReadyRequested += OnReadyRequested;
++        lobbyController.LeaveRoomRequested += OnLeaveRoomRequested;
++
++        if (playerIdentity != null && playerIdentity.HasToken)
++            lobbyController.SetLocalPlayer(playerIdentity.PlayerId);
++    }
++
++    private void UnbindLobbyController()
++    {
++        if (lobbyController == null) return;
++        lobbyController.CreateRoomRequested -= OnCreateRoomRequested;
++        lobbyController.JoinRoomRequested -= OnJoinRoomRequested;
++        lobbyController.ReadyRequested -= OnReadyRequested;
++        lobbyController.LeaveRoomRequested -= OnLeaveRoomRequested;
++        lobbyController = null;
++    }
++
++    private async void OnCreateRoomRequested(string nickname)
++    {
++        try
++        {
++            await EnsurePlayer(nickname);
++
++            // 서버 계약 확인 필요:
++            // 현재는 설계표의 REST 방식인 POST /rooms를 사용한다.
++            // 서버가 CREATE_ROOM WebSocket 방식으로 확정되면 이 호출만 메시지 전송으로 교체한다.
++            CreateRoomRestResponse response = await apiClient.Post<CreateRoomRequest, CreateRoomRestResponse>(
++                "/rooms", new CreateRoomRequest { nickname = nickname });
++
++            if (response == null || string.IsNullOrWhiteSpace(response.roomCode))
++                throw new InvalidOperationException("방 생성 응답에 roomCode가 없습니다.");
++
++            ConnectAndJoin(response.roomCode, nickname);
++        }
++        catch (Exception exception)
++        {
++            lobbyController?.ReceiveError(ToUserMessage(exception));
++        }
++    }
++
++    private async void OnJoinRoomRequested(string nickname, string roomCode)
++    {
++        try
++        {
++            await EnsurePlayer(nickname);
++            ConnectAndJoin(roomCode, nickname);
++        }
++        catch (Exception exception)
++        {
++            lobbyController?.ReceiveError(ToUserMessage(exception));
++        }
++    }
++
++    private async System.Threading.Tasks.Task EnsurePlayer(string nickname)
++    {
++        await playerIdentity.EnsureGuestAsync(apiClient, nickname);
++        lobbyController?.SetLocalPlayer(playerIdentity.PlayerId);
++    }
++
++    private void ConnectAndJoin(string roomCode, string nickname)
++    {
++        pendingRoomCode = roomCode?.Trim();
++        pendingNickname = nickname?.Trim();
++        leaveRequested = false;
++
++        // 서버 계약 확인 필요:
++        // 현재는 공통 /ws 주소에 토큰으로 연결한 뒤 JOIN_ROOM payload로 roomCode를 보낸다.
++        // 서버가 /ws/rooms/{roomCode} 형식을 사용하면 여기서 WebSocketClient.Url을 조합한다.
++        if (webSocketClient.IsConnected)
++            SendJoinRoom();
++        else
++            webSocketClient.Connect(playerIdentity.Token);
++    }
++
++    private void OnConnected()
++    {
++        SendJoinRoom();
++    }
++
++    private void SendJoinRoom()
++    {
++        if (string.IsNullOrEmpty(pendingRoomCode)) return;
++
++        bool sent = webSocketClient.Send(MessageType.JOIN_ROOM, new JoinRoomRequest
++        {
++            roomCode = pendingRoomCode,
++            nickname = pendingNickname,
++        });
++
++        if (!sent) lobbyController?.ReceiveError("방 참가 요청을 보내지 못했습니다.");
++    }
++
++    private void OnReadyRequested(bool ready)
++    {
++        if (!webSocketClient.IsConnected ||
++            !webSocketClient.Send(MessageType.READY, new ReadyRequest { ready = ready }))
++        {
++            lobbyController?.ReceiveError("서버에 연결되어 있지 않습니다.");
++        }
++    }
++
++    private void OnLeaveRoomRequested()
++    {
++        leaveRequested = true;
++        if (webSocketClient.IsConnected) webSocketClient.Send(MessageType.LEAVE_ROOM);
++        webSocketClient.Close();
++    }
++
++    private void OnMessageReceived(WsEnvelope envelope)
++    {
++        try
++        {
++            switch (envelope.type)
++            {
++                case MessageType.ROOM_STATE:
++                    lobbyController?.ReceiveRoomState(
++                        MessageSerializer.ReadPayload<RoomStateMessage>(envelope));
++                    break;
++
++                case MessageType.GAME_START:
++                    lobbyController?.ReceiveGameStart(
++                        MessageSerializer.ReadPayload<GameStartMessage>(envelope));
++                    break;
++
++                case MessageType.ERROR:
++                    ErrorMessage error = MessageSerializer.ReadPayload<ErrorMessage>(envelope);
++                    lobbyController?.ReceiveError(error?.message ?? "서버 요청이 거절됐습니다.");
++                    break;
++            }
++        }
++        catch (Exception exception)
++        {
++            lobbyController?.ReceiveError($"서버 메시지를 처리하지 못했습니다: {exception.Message}");
++        }
++    }
++
++    private void OnSocketError(string message)
++    {
++        lobbyController?.ReceiveError($"서버 연결 오류: {message}");
++    }
++
++    private void OnDisconnected(bool byUser)
++    {
++        pendingRoomCode = null;
++        pendingNickname = null;
++
++        if (leaveRequested || byUser)
++        {
++            leaveRequested = false;
++            lobbyController?.ReturnToLobby();
++            return;
++        }
++
++        lobbyController?.ReceiveError("서버 연결이 끊어졌습니다.");
++    }
++
++    private static string ToUserMessage(Exception exception)
++    {
++        return exception is ApiException apiException
++            ? $"서버 요청에 실패했습니다. ({apiException.StatusCode})"
++            : exception.Message;
++    }
++}
++
++// 서버 계약 확인 필요:
++// POST /rooms 응답이 중첩 객체이거나 필드명이 다르면 이 DTO만 서버 명세와 맞춘다.
++public class CreateRoomRestResponse
++{
++    public string roomCode;
++}

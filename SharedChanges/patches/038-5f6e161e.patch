@@ -1,0 +1,18 @@
+From commit: 5f6e161ee9f986bb9d1191efdb57d5474191590b
+Contributor: Potato-Gamja (Gamja)
+Subject: [fix] 타이틀 로고 및 UI 수정
+Original: https://github.com/Potato-Gamja/AugmentedYutNori/commit/5f6e161ee9f986bb9d1191efdb57d5474191590b
+
+diff --git a/Assets/Scripts/Presentation/UI/AugmentSelectPanel.cs b/Assets/Scripts/Presentation/UI/AugmentSelectPanel.cs
+index 14f29e6..eacbb5c 100644
+--- a/Assets/Scripts/Presentation/UI/AugmentSelectPanel.cs
++++ b/Assets/Scripts/Presentation/UI/AugmentSelectPanel.cs
+@@ -46,7 +46,7 @@ public class AugmentSelectPanel : UIBase
+         if (titleText != null)
+         {
+             string[] teamNames = { "빨강", "파랑", "초록", "노랑" };
+-            titleText.text = online ? "증강을 고르세요" : $"{teamNames[selectionTeam]} 팀, 증강을 고르세요";
++            titleText.text = online ? "직업을 고르세요" : $"{teamNames[selectionTeam]} 팀, 직업을 고르세요";
+             titleText.color = AugmentCardView.TeamColor(selectionTeam, true);
+         }
+         if (modalBorder != null) modalBorder.color = AugmentCardView.TeamColor(selectionTeam);

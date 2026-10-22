@@ -1,0 +1,54 @@
+From commit: aac5fc2a0d9062a24b8aaa2ecdfddae5cb444354
+Contributor: Potato-Gamja (Gamja)
+Subject: feat: 도감에 증강 업적 아이콘 탭 추가
+Original: https://github.com/Potato-Gamja/AugmentedYutNori/commit/aac5fc2a0d9062a24b8aaa2ecdfddae5cb444354
+
+diff --git a/Assets/Scripts/Flow/LobbyController.cs b/Assets/Scripts/Flow/LobbyController.cs
+index 2986637..5790de4 100644
+--- a/Assets/Scripts/Flow/LobbyController.cs
++++ b/Assets/Scripts/Flow/LobbyController.cs
+@@ -48,6 +48,7 @@ public class LobbyController : MonoBehaviour
+         lobbyPanel.CreateRoomRequested += OnCreateRoomRequested;
+         lobbyPanel.JoinRoomRequested += OnJoinRoomRequested;
+         lobbyPanel.SettingsRequested += OnSettingsRequested;
++        lobbyPanel.CollectionRequested += OnCollectionRequested;
+         roomPanel.ReadyRequested += OnReadyRequested;
+         roomPanel.LeaveRequested += OnLeaveRequested;
+     }
+@@ -59,6 +60,7 @@ public class LobbyController : MonoBehaviour
+             lobbyPanel.CreateRoomRequested -= OnCreateRoomRequested;
+             lobbyPanel.JoinRoomRequested -= OnJoinRoomRequested;
+             lobbyPanel.SettingsRequested -= OnSettingsRequested;
++            lobbyPanel.CollectionRequested -= OnCollectionRequested;
+         }
+         if (roomPanel != null)
+         {
+@@ -73,6 +75,11 @@ public class LobbyController : MonoBehaviour
+         uiManager?.Open<SettingsPanel>();
+     }
+ 
++    private void OnCollectionRequested()
++    {
++        uiManager?.Open<CollectionPanel>();
++    }
++
+     private void OnCreateRoomRequested(string nickname)
+     {
+         lobbyPanel.SetBusy(true);
+diff --git a/Assets/Scripts/Presentation/UI/AugmentCardView.cs b/Assets/Scripts/Presentation/UI/AugmentCardView.cs
+index fa089e4..a0bd265 100644
+--- a/Assets/Scripts/Presentation/UI/AugmentCardView.cs
++++ b/Assets/Scripts/Presentation/UI/AugmentCardView.cs
+@@ -16,6 +16,11 @@ public class AugmentCardView : MonoBehaviour
+         augmentDescription.text = definition.description;
+ 
+         selectButton = GetComponent<Button>();
++        if (onCardSelected == null)
++        {
++            if (selectButton != null) selectButton.interactable = false;
++            return;
++        }
+         selectButton.onClick.AddListener(() => onCardSelected(definition.id));
+     }
+ }
+\ No newline at end of file

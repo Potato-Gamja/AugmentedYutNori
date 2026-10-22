@@ -1,0 +1,212 @@
+From commit: 159519b3901de0f277588f65c5216d56cf8e5597
+Contributor: Potato-Gamja (Gamja)
+Subject: [feat] 코드 복사, 로그아웃 기능
+Original: https://github.com/Potato-Gamja/AugmentedYutNori/commit/159519b3901de0f277588f65c5216d56cf8e5597
+
+diff --git a/Assets/Scripts/Flow/LobbyController.cs b/Assets/Scripts/Flow/LobbyController.cs
+index 40924e4..cf6500d 100644
+--- a/Assets/Scripts/Flow/LobbyController.cs
++++ b/Assets/Scripts/Flow/LobbyController.cs
+@@ -92,7 +92,7 @@ public class LobbyController : MonoBehaviour
+             mainMenuPanel.SettingsRequested -= OnSettingsRequested;
+         }
+         if (profilePanel != null)
+-            profilePanel.NicknameChangeRequested -= OnNicknameChangeRequested;
++            profilePanel.LogoutRequested -= OnLogoutRequested;
+     }
+ 
+     private void OnSettingsRequested()
+@@ -127,13 +127,14 @@ public class LobbyController : MonoBehaviour
+         profilePanel = uiManager?.Open<ProfilePanel>();
+         if (profilePanel == null) return;
+ 
+-        profilePanel.NicknameChangeRequested -= OnNicknameChangeRequested;
+-        profilePanel.NicknameChangeRequested += OnNicknameChangeRequested;
++        profilePanel.LogoutRequested -= OnLogoutRequested;
++        profilePanel.LogoutRequested += OnLogoutRequested;
++        profilePanel.SetLogoutBusy(false);
+ 
+         LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
+         profilePanel.ShowProfile(coordinator?.LocalPlayerId, coordinator?.LocalNickname);
+     }
+-    private async void OnNicknameChangeRequested(string nickname)
++    private async void OnLogoutRequested()
+     {
+         if (profilePanel == null) return;
+ 
+@@ -144,24 +145,19 @@ public class LobbyController : MonoBehaviour
+             return;
+         }
+ 
+-        profilePanel.SetNicknameBusy(true);
+-        profilePanel.ShowStatus("닉네임을 변경하는 중입니다.");
++        profilePanel.SetLogoutBusy(true);
++        profilePanel.ShowStatus("로그아웃 중입니다.");
+         try
+         {
+-            string updatedNickname = await coordinator.ChangeNicknameAsync(nickname);
+-            profilePanel.ApplyNickname(updatedNickname);
+-            profilePanel.ShowStatus("닉네임이 변경되었습니다.");
+-            lobbyPanel?.SetNickname(updatedNickname);
++            await coordinator.LogoutAsync();
+         }
+         catch (Exception exception)
+         {
+-            profilePanel.ShowStatus(exception is ApiException apiException
+-                ? $"닉네임 변경에 실패했습니다. ({apiException.StatusCode})"
+-                : exception.Message);
++            if (profilePanel != null) profilePanel.ShowStatus($"로그아웃하지 못했습니다: {exception.Message}");
+         }
+         finally
+         {
+-            profilePanel.SetNicknameBusy(false);
++            if (profilePanel != null) profilePanel.SetLogoutBusy(false);
+         }
+     }
+     private void OnAchievementRequested() => mainMenuPanel.ShowStatus("업적 기능은 준비 중입니다.");
+diff --git a/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs b/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
+index c926bcc..56d0b8c 100644
+--- a/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
++++ b/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
+@@ -42,6 +42,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+     private bool rewardAppliedThisGame;
+     private Task silentLoginTask = Task.CompletedTask;
+     private bool waitingForGameSession;
++    private bool logoutRequested;
+     private readonly List<WsEnvelope> pendingGameMessages = new();
+     private readonly Dictionary<string, int> playerTeams = new();
+     private readonly List<PlayerDisplayInfo> playerProfiles = new();
+@@ -292,6 +293,34 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+         return playerIdentity.HasToken && (allowGuestLogin || playerIdentity.IsGoogleLogin);
+     }
+ 
++    public async Task LogoutAsync()
++    {
++        if (logoutRequested) return;
++        logoutRequested = true;
++        try
++        {
++            // 진행 중인 자동 로그인이 로그아웃 후 토큰을 다시 저장하지 않도록 완료를 기다린다.
++            await silentLoginTask;
++            if (webSocketClient.IsConnected) webSocketClient.Send(MessageType.LEAVE_ROOM);
++            await webSocketClient.CloseAndWait();
++            playerIdentity.Clear();
++            apiClient.Token = null;
++            pendingRoomCode = null;
++            pendingNickname = null;
++            playerTeams.Clear();
++            playerProfiles.Clear();
++            pendingGameMessages.Clear();
++            waitingForGameSession = false;
++            SceneManager.LoadScene(loginSceneName);
++            Destroy(gameObject);
++        }
++        catch
++        {
++            logoutRequested = false;
++            throw;
++        }
++    }
++
+     private void OnUnauthorized()
+     {
+         playerIdentity.Clear();
+@@ -454,6 +483,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+     {
+         pendingRoomCode = null;
+         pendingNickname = null;
++        if (logoutRequested) return;
+ 
+         if (leaveRequested || byUser)
+         {
+diff --git a/Assets/Scripts/Network/Auth/DesktopGoogleSignIn.cs b/Assets/Scripts/Network/Auth/DesktopGoogleSignIn.cs
+index 6939bb0..f594ccc 100644
+--- a/Assets/Scripts/Network/Auth/DesktopGoogleSignIn.cs
++++ b/Assets/Scripts/Network/Auth/DesktopGoogleSignIn.cs
+@@ -123,9 +123,9 @@ public class DesktopGoogleSignIn : IGoogleSignIn
+   body {{ font-family: sans-serif; background: #304c7a; color: #3a2418; margin: 0; }}
+   .card {{ background: #fff8ec; max-width: 420px; margin: 120px auto; padding: 40px; text-align: center; border-radius: 12px; }}
+   button {{ font-size: 18px; padding: 14px 28px; border: 0; border-radius: 8px; cursor: pointer; }}
+-  #login {{ background: #d75f50; color: #fff; width: 100%; }}
+-  #cancel {{ background: transparent; color: #7a6a60; margin-top: 12px; font-size: 14px; }}
+-  #status {{ min-height: 24px; margin-top: 16px; }}
++  button#login {{ background: #d75f50; color: #fff; width: 100%; }}
++  button#cancel {{ background: transparent; color: #7a6a60; margin-top: 12px; font-size: 14px; }}
++  div#status {{ min-height: 24px; margin-top: 16px; }}
+ </style></head>
+ <body><div class=""card"">
+   <h2>증강 윷놀이</h2>
+diff --git a/Assets/Scripts/Presentation/UI/ProfilePanel.cs b/Assets/Scripts/Presentation/UI/ProfilePanel.cs
+index 54f25cd..7bca8db 100644
+--- a/Assets/Scripts/Presentation/UI/ProfilePanel.cs
++++ b/Assets/Scripts/Presentation/UI/ProfilePanel.cs
+@@ -12,29 +12,26 @@ public sealed class ProfilePanel : UIBase
+     [SerializeField] private TMP_Text nicknameText;
+     [SerializeField] private TMP_Text playerIdText;
+     [SerializeField] private TMP_Text statusText;
+-    [SerializeField] private TMP_InputField nicknameInput;
+-    [SerializeField] private Button saveNicknameButton;
++    [SerializeField] private Button logoutButton;
+ 
+-    public event Action<string> NicknameChangeRequested;
++    public event Action LogoutRequested;
+ 
+     public override void Init()
+     {
+         closeButton?.onClick.AddListener(Close);
+-        saveNicknameButton?.onClick.AddListener(OnSaveNicknameClicked);
++        logoutButton?.onClick.AddListener(OnLogoutClicked);
+     }
+ 
+     private void OnDestroy()
+     {
+         closeButton?.onClick.RemoveListener(Close);
+-        saveNicknameButton?.onClick.RemoveListener(OnSaveNicknameClicked);
++        logoutButton?.onClick.RemoveListener(OnLogoutClicked);
+     }
+ 
+     public void ShowProfile(string playerId, string nickname, Sprite icon = null)
+     {
+         if (nicknameText != null)
+             nicknameText.text = string.IsNullOrWhiteSpace(nickname) ? "닉네임 미설정" : nickname;
+-        if (nicknameInput != null)
+-            nicknameInput.SetTextWithoutNotify(nickname ?? string.Empty);
+         if (playerIdText != null)
+             playerIdText.text = string.IsNullOrWhiteSpace(playerId) ? "플레이어 ID 없음" : $"플레이어 ID  {playerId}";
+         if (profileIcon != null && icon != null) profileIcon.sprite = icon;
+@@ -43,10 +40,9 @@ public sealed class ProfilePanel : UIBase
+             statusText.text = icon == null ? "프로필 아이콘은 서버 연동 후 표시됩니다." : string.Empty;
+     }
+ 
+-    public void SetNicknameBusy(bool busy)
++    public void SetLogoutBusy(bool busy)
+     {
+-        if (nicknameInput != null) nicknameInput.interactable = !busy;
+-        if (saveNicknameButton != null) saveNicknameButton.interactable = !busy;
++        if (logoutButton != null) logoutButton.interactable = !busy;
+     }
+ 
+     public void ShowStatus(string message)
+@@ -54,21 +50,5 @@ public sealed class ProfilePanel : UIBase
+         if (statusText != null) statusText.text = message ?? string.Empty;
+     }
+ 
+-    public void ApplyNickname(string nickname)
+-    {
+-        if (nicknameText != null) nicknameText.text = nickname;
+-        if (nicknameInput != null) nicknameInput.SetTextWithoutNotify(nickname ?? string.Empty);
+-    }
+-
+-    private void OnSaveNicknameClicked()
+-    {
+-        string nickname = nicknameInput != null ? nicknameInput.text.Trim() : string.Empty;
+-        if (nickname.Length < 2 || nickname.Length > 20)
+-        {
+-            ShowStatus("닉네임은 2~20자로 입력해 주세요.");
+-            return;
+-        }
+-
+-        NicknameChangeRequested?.Invoke(nickname);
+-    }
++    private void OnLogoutClicked() => LogoutRequested?.Invoke();
+ }

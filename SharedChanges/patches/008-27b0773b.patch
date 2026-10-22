@@ -1,0 +1,259 @@
+From commit: 27b0773b9d91f197e6ee387448b1f16751306cc7
+Contributor: Potato-Gamja (Gamja)
+Subject: [Feat] 멀티플레이 연동을 위한 게임 View 및 Flow 준비
+Original: https://github.com/Potato-Gamja/AugmentedYutNori/commit/27b0773b9d91f197e6ee387448b1f16751306cc7
+
+diff --git a/Assets/Scripts/Flow/GameFlowController.cs b/Assets/Scripts/Flow/GameFlowController.cs
+index 526ce0a..fadb9ad 100644
+--- a/Assets/Scripts/Flow/GameFlowController.cs
++++ b/Assets/Scripts/Flow/GameFlowController.cs
+@@ -16,6 +16,7 @@ public class GameFlowController : MonoBehaviour
+     [SerializeField] private List<PieceView> pieceViews = new();
+     [SerializeField] private PathView pathView;
+     [SerializeField] private UIManager uiManager;
++    [SerializeField] private TextAsset augmentsJson;
+     [SerializeField] private bool skipAugmentSelection = true;
+     [SerializeField] private bool allowSkipShortcut;
+ 
+@@ -30,8 +31,10 @@ public class GameFlowController : MonoBehaviour
+     private GameFlowHudPresenter hudPresenter;
+     private GameFlowSelectionController selectionController;
+     private Camera mainCamera;
++    private AugmentCatalog augmentCatalog;
+     private GameFlowState currentState;
+     private bool isMoving;
++    private int teamCount = 2;
+     private int augmentSelectionTeam;
+     private int? pendingTurnTeam;
+     private int? pendingWinnerTeam;
+@@ -50,6 +53,12 @@ public class GameFlowController : MonoBehaviour
+             enabled = false;
+             return;
+         }
++        if (augmentsJson == null)
++        {
++            Debug.LogError($"[GameFlow] AugmentsJson이 준비되지 않았습니다.", this);
++            enabled = false;
++            return;
++        }
+ 
+         OpenHud();
+         CreateCoreState();
+@@ -97,27 +106,49 @@ public class GameFlowController : MonoBehaviour
+ 
+     private void CreateCoreState()
+     {
++        teamCount = GetConfiguredTeamCount();
+         boardView.Graph.AllowSkipShortcut = allowSkipShortcut;
+         boardState = new BoardState(boardView.Graph);
+         gameState = new GameState(boardState);
+-        turnManager = new TurnManager(gameState, 2);
++        turnManager = new TurnManager(gameState, teamCount);
+         gameEvents = new GameEvents();
+         gameRules = new GameRules(
+             gameState,
+             turnManager,
+             gameEvents,
+             new YutThrower(new SystemRandomProvider()),
+-            new StandardGetResult());
++            new StandardGetResult(),
++            CreateAugmentPool());
++    }
++    
++    // json에 저장되어 있는 모든 증강 가져오기
++    private AugmentPool CreateAugmentPool()
++    {
++        AugmentDefinitionFile file =  JsonUtility.FromJson<AugmentDefinitionFile>(augmentsJson.text);
++        augmentCatalog = new AugmentCatalog(file, AugmentFactories.Create());
++        AugmentPool pool = new AugmentPool();
++        augmentCatalog.RegisterTo(pool);
++        return pool;
+     }
+ 
+     private void BindPieces()
+     {
+         pieceViews.Sort((a, b) =>
+-            a.Team != b.Team ? a.Team.CompareTo(b.Team) : string.CompareOrdinal(a.name, b.name));
++        {
++            if (a.Team != b.Team) return a.Team.CompareTo(b.Team);
++            if (a.SlotIndex >= 0 && b.SlotIndex >= 0 && a.SlotIndex != b.SlotIndex)
++                return a.SlotIndex.CompareTo(b.SlotIndex);
++            return string.CompareOrdinal(a.name, b.name);
++        });
++
++        bool useConfiguredIds = TryValidateConfiguredPieceIds();
+ 
+         for (int i = 0; i < pieceViews.Count; i++)
+         {
+-            Piece piece = boardState.AddPiece(i, pieceViews[i].Team);
++            int pieceId = useConfiguredIds && pieceViews[i].TryGetConfiguredPieceId(out int configuredId)
++                ? configuredId
++                : i;
++            Piece piece = boardState.AddPiece(pieceId, pieceViews[i].Team);
+             views.Add(piece, pieceViews[i]);
+             pieceViews[i].Bind(piece);
+             pieceViews[i].SetSortingOrder(10);
+@@ -173,6 +204,7 @@ public class GameFlowController : MonoBehaviour
+     public void OnThrowButtonClicked()
+     {
+         if (currentState != GameFlowState.Throw || gameRules == null) return;
++        // 규격 확인 필요: IGameSession이 준비되면 gameRules 직접 호출 대신 RequestThrow를 호출하고 응답까지 HUD 입력을 잠근다.
+         try
+         {
+             gameRules.ThrowYut();
+@@ -186,6 +218,7 @@ public class GameFlowController : MonoBehaviour
+     public void OnRethrowButtonClicked()
+     {
+         if (currentState != GameFlowState.Move || gameRules == null) return;
++        // 규격 확인 필요: IGameSession.RequestRethrow의 성공/실패 응답 형식에 맞춰 교체한다.
+         if (!gameRules.TryRethrow(out _)) return;
+         hudPresenter.RefreshStoredResults();
+         hudPresenter.RefreshPlayerPanels();
+@@ -194,11 +227,12 @@ public class GameFlowController : MonoBehaviour
+     public void OnAugmentSelected(string augmentId)
+     {
+         if (currentState != GameFlowState.AugmentSelect || gameRules == null) return;
++        // 규격 확인 필요: 서버가 준 AUGMENT_CHOICES 중 하나인지 IGameSession에서 검증한 뒤 결과 이벤트로 갱신한다.
+         gameRules.SelectAugment(augmentSelectionTeam, augmentId);
+ 
+-        if (augmentSelectionTeam == 0)
++        augmentSelectionTeam++;
++        if (augmentSelectionTeam < teamCount)
+         {
+-            augmentSelectionTeam = 1;
+             ChangeState(GameFlowState.AugmentSelect);
+             return;
+         }
+@@ -335,6 +369,8 @@ public class GameFlowController : MonoBehaviour
+         selectionController.Clear();
+         if (entersBoard) movingView.SetWorldVisible(true);
+ 
++        // 규격 확인 필요: IGameSession.RequestMove(pieceId, resultIndex, destinationNodeId)로 교체하고
++        // MOVE_APPLIED를 받은 뒤에만 실제 이동 애니메이션을 재생한다.
+         if (gameRules.MovePiece(movingView.Piece.Id, option.ResultIndex, option.DestinationNodeId)) return;
+ 
+         if (entersBoard) movingView.SetWorldVisible(false);
+@@ -436,4 +472,30 @@ public class GameFlowController : MonoBehaviour
+             }
+         }
+     }
++
++    private int GetConfiguredTeamCount()
++    {
++        int highestTeam = -1;
++        foreach (PieceView view in pieceViews)
++            if (view != null && view.Team > highestTeam) highestTeam = view.Team;
++
++        // 규격 확인 필요: GameSetup.teamCount가 준비되면 씬의 말 목록 대신 그 값을 사용한다.
++        return Math.Max(2, highestTeam + 1);
++    }
++
++    private bool TryValidateConfiguredPieceIds()
++    {
++        var ids = new HashSet<int>();
++        foreach (PieceView view in pieceViews)
++        {
++            if (view == null || !view.TryGetConfiguredPieceId(out int id) || !ids.Add(id))
++            {
++                Debug.LogWarning(
++                    "[GameFlow] PieceView의 Team/SlotIndex가 모두 고유하게 설정되지 않아 기존 목록 순서 ID를 사용합니다. " +
++                    "멀티플레이 연결 전 각 팀의 SlotIndex를 0부터 지정해 주세요.", this);
++                return false;
++            }
++        }
++        return true;
++    }
+ }
+diff --git a/Assets/Scripts/Presentation/UI/GameHudPanel.cs b/Assets/Scripts/Presentation/UI/GameHudPanel.cs
+index 4a99256..658fc0b 100644
+--- a/Assets/Scripts/Presentation/UI/GameHudPanel.cs
++++ b/Assets/Scripts/Presentation/UI/GameHudPanel.cs
+@@ -35,6 +35,11 @@ public class GameHudPanel : UIBase
+     private StoredResultView storedResultView;
+     private YutResultRevealView resultRevealView;
+     private int currentVisualTeam;
++    private bool throwRequested;
++    private bool rethrowRequested;
++    private bool isLocalTurn = true;
++    private bool isCommandPending;
++    private bool isConnected = true;
+ 
+     public event Action ThrowClicked;
+     public event Action RethrowClicked;
+@@ -79,8 +84,15 @@ public class GameHudPanel : UIBase
+         }
+     }
+ 
+-    private void RaiseThrowClicked() => ThrowClicked?.Invoke();
+-    private void RaiseRethrowClicked() => RethrowClicked?.Invoke();
++    private void RaiseThrowClicked()
++    {
++        if (CanSendCommand()) ThrowClicked?.Invoke();
++    }
++
++    private void RaiseRethrowClicked()
++    {
++        if (CanSendCommand()) RethrowClicked?.Invoke();
++    }
+ 
+     public void SetTurn(string value) => SetTurn(value, currentVisualTeam);
+ 
+@@ -93,8 +105,36 @@ public class GameHudPanel : UIBase
+ 
+     public void SetResults(string value) => storedResultView?.SetResults(value);
+     public void SetInstruction(string value) => turnView?.SetInstruction(value);
+-    public void SetThrowInteractable(bool value) => turnView?.SetThrowInteractable(value);
+-    public void SetRethrowVisible(bool value) => turnView?.SetRethrowVisible(value);
++    public void SetThrowInteractable(bool value)
++    {
++        throwRequested = value;
++        RefreshActionAvailability();
++    }
++
++    public void SetRethrowVisible(bool value)
++    {
++        rethrowRequested = value;
++        RefreshActionAvailability();
++    }
++
++    /// <summary>
++    /// 로컬 플레이어의 차례와 서버 응답 대기 상태에 맞춰 액션 입력을 잠근다.
++    /// </summary>
++    public void SetInteractionState(bool localTurn, bool commandPending)
++    {
++        isLocalTurn = localTurn;
++        isCommandPending = commandPending;
++        RefreshActionAvailability();
++    }
++
++    /// <summary>
++    /// 연결이 끊긴 동안 중복 요청이 나가지 않도록 모든 액션 입력을 잠근다.
++    /// </summary>
++    public void SetConnectionAvailable(bool connected)
++    {
++        isConnected = connected;
++        RefreshActionAvailability();
++    }
+     public void SetTimerRunning(bool value) => turnView?.SetTimerRunning(value);
+ 
+     public void SetPlayerState(
+@@ -134,6 +174,19 @@ public class GameHudPanel : UIBase
+ 
+     public static Color32 GetTeamColor(int team) => TurnHudView.GetTeamColor(team);
+ 
++    private bool CanSendCommand() => isConnected && isLocalTurn && !isCommandPending;
++
++    private void RefreshActionAvailability()
++    {
++        bool canSend = CanSendCommand();
++        turnView?.SetThrowInteractable(throwRequested && canSend);
++        turnView?.SetRethrowVisible(rethrowRequested);
++        if (rethrowButton != null) rethrowButton.interactable = rethrowRequested && canSend;
++
++        // 규격 확인 필요: IGameSession.IsCommandPending과 로컬 플레이어 판정값을
++        // GameFlowController에서 SetInteractionState에 전달한다.
++    }
++
+     private T GetOrAdd<T>() where T : Component
+     {
+         T component = GetComponent<T>();

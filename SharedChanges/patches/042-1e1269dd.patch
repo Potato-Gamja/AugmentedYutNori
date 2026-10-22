@@ -1,0 +1,55 @@
+From commit: 1e1269ddfbf62d304927f1d3e9dea3d0a560d450
+Contributor: Potato-Gamja (Gamja)
+Subject: [fix] Unity, 브라우저 안내 문구 겹치는 현상 수정
+Original: https://github.com/Potato-Gamja/AugmentedYutNori/commit/1e1269ddfbf62d304927f1d3e9dea3d0a560d450
+
+diff --git a/Assets/Scripts/Presentation/UI/NicknamePanel.cs b/Assets/Scripts/Presentation/UI/NicknamePanel.cs
+index e2ae351..0f3f5dc 100644
+--- a/Assets/Scripts/Presentation/UI/NicknamePanel.cs
++++ b/Assets/Scripts/Presentation/UI/NicknamePanel.cs
+@@ -111,6 +111,17 @@ public class NicknamePanel : UIBase
+ 
+         Submitted?.Invoke(nickname);
+     }
++    private bool placeholderWasActive;
++
++    // TMP는 빈 문자열로 갱신할 때 placeholder.enabled를 다시 켜므로 오브젝트를 숨긴다.
++    private void SetBrowserPlaceholderHidden(bool hidden)
++    {
++        if (nicknameInput == null || nicknameInput.placeholder == null) return;
++        var placeholder = nicknameInput.placeholder.gameObject;
++        if (hidden) placeholderWasActive = placeholder.activeSelf;
++        placeholder.SetActive(hidden ? false : placeholderWasActive);
++    }
++
+ #if UNITY_WEBGL && !UNITY_EDITOR
+     [DllImport("__Internal")] private static extern void Yut_NicknameOpen(string receiver, string value, string placeholder, int limit);
+     [DllImport("__Internal")] private static extern void Yut_NicknameRect(float x, float y, float width, float height, float fontSize);
+@@ -123,7 +134,6 @@ public class NicknamePanel : UIBase
+     private bool browserOwnsKeyboard;
+     private bool previousKeyboardCapture;
+     private bool previousTextEnabled;
+-    private bool previousPlaceholderEnabled;
+     private readonly Vector3[] browserCorners = new Vector3[4];
+ 
+     private void OpenBrowserInput()
+@@ -131,9 +141,8 @@ public class NicknamePanel : UIBase
+         if (nicknameInput == null || browserInputOpen) return;
+         browserInputOpen = true;
+         previousTextEnabled = nicknameInput.textComponent.enabled;
+-        previousPlaceholderEnabled = nicknameInput.placeholder != null && nicknameInput.placeholder.enabled;
+         nicknameInput.textComponent.enabled = false;
+-        if (nicknameInput.placeholder != null) nicknameInput.placeholder.enabled = false;
++        SetBrowserPlaceholderHidden(true);
+         var placeholder = nicknameInput.placeholder as TMP_Text;
+         Yut_NicknameOpen(gameObject.name, nicknameInput.text, placeholder != null ? placeholder.text : "", MaxLength);
+         Canvas.ForceUpdateCanvases();
+@@ -200,7 +209,7 @@ public class NicknamePanel : UIBase
+         browserInputOpen = false;
+         browserComposing = false;
+         nicknameInput.textComponent.enabled = previousTextEnabled;
+-        if (nicknameInput.placeholder != null) nicknameInput.placeholder.enabled = previousPlaceholderEnabled;
++        SetBrowserPlaceholderHidden(false);
+     }
+ #endif
+ 

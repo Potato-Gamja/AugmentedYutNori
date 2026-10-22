@@ -1,0 +1,925 @@
+From commit: c3e0455797fb18720ef85a39d58ed56835cf43b3
+Contributor: Potato-Gamja (Gamja)
+Subject: [fix] 멀티플레이 재동기화와 인게임 프로필·타이머 UI 수정
+Original: https://github.com/Potato-Gamja/AugmentedYutNori/commit/c3e0455797fb18720ef85a39d58ed56835cf43b3
+
+diff --git a/Assets/Scripts/Flow/GameFlowController.cs b/Assets/Scripts/Flow/GameFlowController.cs
+index 0c1b445..c7a7e29 100644
+--- a/Assets/Scripts/Flow/GameFlowController.cs
++++ b/Assets/Scripts/Flow/GameFlowController.cs
+@@ -140,7 +140,14 @@ public class GameFlowController : MonoBehaviour
+     public void ConfigurePlayerProfiles(IReadOnlyList<PlayerDisplayInfo> profiles)
+     {
+         if (gameState != null) throw new InvalidOperationException("게임이 시작된 뒤에는 플레이어 표시 정보를 바꿀 수 없습니다.");
+-        playerProfiles = profiles ?? Array.Empty<PlayerDisplayInfo>();
++        // GameInstaller가 전달 후 임시 목록을 비워도 표시 정보는 유지한다.
++        playerProfiles = profiles?.Select(profile => profile == null ? null : new PlayerDisplayInfo
++        {
++            playerId = profile.playerId,
++            nickname = profile.nickname,
++            team = profile.team,
++            iconId = profile.iconId,
++        }).ToArray() ?? Array.Empty<PlayerDisplayInfo>();
+     }
+ 
+     private bool ValidateSetup()
+@@ -279,6 +286,54 @@ public class GameFlowController : MonoBehaviour
+         }
+     }
+ 
++    private void OnSnapshotApplied(GameSnapshotMessage snapshot)
++    {
++        isMoving = false;
++        pendingTurnTeam = null;
++        pendingWinnerTeam = null;
++        foreach (PieceView view in pieceViews)
++        {
++            view.StopAllCoroutines();
++            if (view.Piece != null && view.Piece.IsOnBoard) view.gameObject.SetActive(true);
++            if (view.Piece != null && !view.Piece.IsOnBoard) view.ReturnHome();
++        }
++        for (int team = 0; team < teamCount; team++)
++            if (!boardState.Pieces.Any(piece => piece.Team == team))
++                hud?.SetPlayerConnectionState(team, PlayerStatusView.ConnectionState.Removed);
++        OnBoardLayoutReloaded();
++        hudPresenter.RefreshStoredResults();
++        lastStateHash = StateHasher.HashHex(gameState, turnManager);
++
++        if (snapshot.phase == "ENDED")
++        {
++            OnGameEnded(snapshot.winnerTeam ?? -1);
++        }
++        else if (snapshot.phase == "AUGMENT_SELECT")
++        {
++            augmentSelectionTeam = setup.localTeam;
++            localAugmentConfirmed = snapshot.offeredAugments == null || snapshot.offeredAugments.Count == 0;
++            currentAugmentChoices = snapshot.offeredAugments ?? new List<string>();
++            ChangeState(GameFlowState.AugmentSelect);
++            if (!localAugmentConfirmed) OnAugmentChoices(setup.localTeam, currentAugmentChoices);
++            else
++            {
++                uiManager?.Close<AugmentSelectPanel>();
++                hud?.SetInstruction("선택 완료! 다른 플레이어의 선택을 기다리는 중입니다.");
++            }
++        }
++        else
++        {
++            uiManager?.Close<AugmentSelectPanel>();
++            bool canThrow = gameState.RemainingThrows > 0 || gameState.StoredResults.Count == 0;
++            ChangeState(canThrow ? GameFlowState.Throw : GameFlowState.Move);
++        }
++        if (!string.IsNullOrEmpty(snapshot.timerType) && snapshot.phase != "ENDED")
++        {
++            hud?.SetTimerRemaining(snapshot.timerRemainingSec);
++            hud?.SetTimerRunning(true);
++        }
++    }
++
+     private void SubscribeEvents()
+     {
+         gameSession.Thrown += OnThrown;
+@@ -298,6 +353,7 @@ public class GameFlowController : MonoBehaviour
+             remote.PlayerRemoved += OnRemotePlayerRemoved;
+             remote.AutomatedMoveApplied += OnAutomatedMoveApplied;
+             remote.ConnectionAvailabilityChanged += OnConnectionAvailabilityChanged;
++            remote.SnapshotApplied += OnSnapshotApplied;
+         }
+     }
+ 
+@@ -327,6 +383,7 @@ public class GameFlowController : MonoBehaviour
+                 remote.PlayerRemoved -= OnRemotePlayerRemoved;
+                 remote.AutomatedMoveApplied -= OnAutomatedMoveApplied;
+                 remote.ConnectionAvailabilityChanged -= OnConnectionAvailabilityChanged;
++                remote.SnapshotApplied -= OnSnapshotApplied;
+             }
+             gameSession.Thrown -= OnThrown;
+             gameSession.Moved -= OnMoved;
+@@ -541,7 +598,9 @@ public class GameFlowController : MonoBehaviour
+             return;
+         }
+ 
+-        hud?.SetTimerRunning(currentState == GameFlowState.Throw || currentState == GameFlowState.Move);
++        hud?.SetTimerRunning(currentState == GameFlowState.Throw || currentState == GameFlowState.Move ||
++            (currentState == GameFlowState.AugmentSelect && gameSession is RemoteGameSession remote &&
++             remote.AugmentSelectionTimeLimitSec > 0));
+         hud?.SetInstruction("서버에 다시 연결되었습니다.");
+         RefreshSessionInteraction();
+     }
+@@ -554,6 +613,11 @@ public class GameFlowController : MonoBehaviour
+         augmentSelectionTeam = team;
+         if (currentState != GameFlowState.AugmentSelect) ChangeState(GameFlowState.AugmentSelect);
+         OpenAugmentSelection(ids);
++        if (gameSession is RemoteGameSession remote && remote.AugmentSelectionTimeLimitSec > 0)
++        {
++            hud?.SetTimerRemaining(remote.AugmentSelectionTimeLimitSec);
++            hud?.SetTimerRunning(true);
++        }
+     }
+ 
+     private void OnRequestRejected(string reason)
+@@ -573,6 +637,7 @@ public class GameFlowController : MonoBehaviour
+ 
+     private void OnTurnChanged(int team)
+     {
++        hud?.ResetTimer();
+         hudPresenter.RefreshStoredResults();
+         hudPresenter.RefreshPlayerPanels();
+         if (isMoving)
+@@ -580,7 +645,8 @@ public class GameFlowController : MonoBehaviour
+             pendingTurnTeam = team;
+             return;
+         }
+-        ChangeState(GameFlowState.Throw);
++        bool canThrow = gameState.RemainingThrows > 0 || gameState.StoredResults.Count == 0;
++        ChangeState(canThrow ? GameFlowState.Throw : GameFlowState.Move);
+     }
+ 
+     private void OnGameEnded(int winnerTeam)
+@@ -649,7 +715,7 @@ public class GameFlowController : MonoBehaviour
+                 resultPopup = uiManager?.Open<ResultPopup>()?.SetWinner(
+                     PlayerName(winner),
+                     GameHudPanel.GetTeamColor(winner),
+-                    hud?.ResolveProfileIcon(playerProfiles.FirstOrDefault(profile => profile.team == winner)?.iconId, winner));
++                    hud?.ResolveProfileIcon(playerProfiles.FirstOrDefault(profile => profile != null && profile.team == winner)?.iconId, winner));
+                 if (resultPopup != null)
+                 {
+                     resultPopup.MainMenuClicked -= OnExitGameRequested;
+@@ -658,7 +724,8 @@ public class GameFlowController : MonoBehaviour
+                     resultPopup.ReturnToRoomClicked += OnReturnToRoomRequested;
+                 }
+                 if (resultPopup != null && gameSession is RemoteGameSession remoteSession)
+-                    resultPopup.SetRankings(remoteSession.Rankings, playerProfiles);
++                    resultPopup.SetRankings(remoteSession.Rankings, playerProfiles,
++                        (iconId, team) => hud?.ResolveProfileIcon(iconId, team), setup.localTeam);
+                 break;
+ 
+             case GameFlowState.AugmentSelect:
+@@ -696,7 +763,8 @@ public class GameFlowController : MonoBehaviour
+         hud?.SetTurn($"{PlayerName(augmentSelectionTeam)} 증강 선택", augmentSelectionTeam);
+         hud?.SetThrowInteractable(false);
+         hud?.SetRethrowVisible(false);
+-        hud?.SetTimerRunning(false);
++        // 시간 초과 선택은 서버가 처리하고 클라이언트는 전달받은 시간만 표시한다.
++        hud?.SetTimerRunning(gameSession is RemoteGameSession remote && remote.AugmentSelectionTimeLimitSec > 0);
+         hud?.SetInteractionState(setup.CanControl(augmentSelectionTeam), gameSession?.IsCommandPending ?? false);
+         hud?.SetInstruction("증강 선택지를 기다리는 중입니다.");
+     }
+@@ -812,7 +880,8 @@ public class GameFlowController : MonoBehaviour
+         if (pendingTurnTeam.HasValue)
+         {
+             pendingTurnTeam = null;
+-            ChangeState(GameFlowState.Throw);
++            bool canThrow = gameState.RemainingThrows > 0 || gameState.StoredResults.Count == 0;
++            ChangeState(canThrow ? GameFlowState.Throw : GameFlowState.Move);
+             return;
+         }
+         if (gameState.RemainingThrows > 0)
+diff --git a/Assets/Scripts/Flow/LobbyController.cs b/Assets/Scripts/Flow/LobbyController.cs
+index 3b670a9..6584de2 100644
+--- a/Assets/Scripts/Flow/LobbyController.cs
++++ b/Assets/Scripts/Flow/LobbyController.cs
+@@ -160,7 +160,7 @@ public class LobbyController : MonoBehaviour
+             if (profilePanel != null) profilePanel.SetLogoutBusy(false);
+         }
+     }
+-    private void OnAchievementRequested() => mainMenuPanel.ShowStatus("업적 기능은 준비 중입니다.");
++    private void OnAchievementRequested() => uiManager?.Open<AchievementPanel>();
+ 
+     private void OnCreateRoomRequested(string nickname)
+     {
+diff --git a/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs b/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
+index 61bcbb7..73c0be6 100644
+--- a/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
++++ b/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
+@@ -35,6 +35,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+     private AuthApi authApi;
+     private GachaApi gachaApi;
+     private IconApi iconApi;
++    private AchievementApi achievementApi;
+     private PlayerIdentity playerIdentity;
+     private string pendingRoomCode;
+     private string pendingNickname;
+@@ -79,6 +80,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+         authApi = new AuthApi(apiClient);
+         gachaApi = new GachaApi(apiClient);
+         iconApi = new IconApi(apiClient);
++        achievementApi = new AchievementApi(apiClient);
+         playerIdentity = new PlayerIdentity(playerPrefsKeyPrefix);
+         apiClient.Token = playerIdentity.Token;
+         apiClient.Unauthorized += OnUnauthorized;
+@@ -213,6 +215,21 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+         return await iconApi.GetOwnedAsync();
+     }
+ 
++    public async Task<AchievementListResponse> GetAchievementsAsync()
++    {
++        await EnsurePlayer(LocalNickname);
++        return await achievementApi.GetAsync();
++    }
++
++    // 업적 보상 받기. 받은 뒤 보유 골드를 저장한다
++    public async Task<ClaimAchievementResponse> ClaimAchievementAsync(string achievementId)
++    {
++        await EnsurePlayer(LocalNickname);
++        ClaimAchievementResponse response = await achievementApi.ClaimAsync(achievementId);
++        playerIdentity.ApplyGold(response.gold);
++        return response;
++    }
++
+     public async Task<PlayerProfileResponse> GetProfileAsync()
+     {
+         await EnsurePlayer(LocalNickname);
+@@ -460,11 +477,20 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+         }
+     }
+ 
+-    private void OnLeaveRoomRequested()
++    private async void OnLeaveRoomRequested()
+     {
++        if (leaveRequested) return;
+         leaveRequested = true;
+         if (webSocketClient.IsConnected) webSocketClient.Send(MessageType.LEAVE_ROOM);
+-        webSocketClient.Close();
++        // 이전 방 소켓이 닫힌 뒤 새 방 입장을 허용한다.
++        await webSocketClient.CloseAndWait();
++        // 이미 끊긴 소켓은 Disconnected를 발생시키지 않을 수 있다.
++        if (leaveRequested)
++        {
++            ClearRoomSessionState();
++            leaveRequested = false;
++            lobbyController?.ReturnToLobby();
++        }
+     }
+ 
+     public void ReturnToWaitingRoom()
+@@ -499,13 +525,8 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+             webSocketClient.Send(MessageType.LEAVE_ROOM);
+         await webSocketClient.CloseAndWait();
+ 
+-        playerTeams.Clear();
+-        playerProfiles.Clear();
+-        pendingRoomCode = null;
+-        pendingNickname = null;
++        ClearRoomSessionState();
+         leaveRequested = false;
+-        returnToRoomRequested = false;
+-        lastRoomState = null;
+         SceneManager.LoadScene(lobbySceneName);
+     }
+ 
+@@ -520,6 +541,8 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+             switch (envelope.type)
+             {
+                 case MessageType.ROOM_STATE:
++                    // LEAVE_ROOM 방송은 나간 본인에게도 올 수 있다. 대기실을 다시 열지 않는다.
++                    if (leaveRequested) break;
+                     RoomStateMessage room = MessageSerializer.ReadPayload<RoomStateMessage>(envelope);
+                     lastRoomState = room;
+                     if (gameEnded && room?.status == "WAITING") gameEnded = false;
+@@ -601,6 +624,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+ 
+         if (leaveRequested || byUser)
+         {
++            ClearRoomSessionState();
+             leaveRequested = false;
+             lobbyController?.ReturnToLobby();
+             return;
+@@ -609,6 +633,21 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+         lobbyController?.ReceiveError("서버 연결이 끊어졌습니다.");
+     }
+ 
++    private void ClearRoomSessionState()
++    {
++        pendingRoomCode = null;
++        pendingNickname = null;
++        lastRoomState = null;
++        gameEnded = false;
++        returnToRoomRequested = false;
++        waitingForGameSession = false;
++        rewardAppliedThisGame = false;
++        pendingGameMessages.Clear();
++        playerTeams.Clear();
++        playerProfiles.Clear();
++        roomVisibilityRequestVersion++;
++    }
++
+     private void CachePlayerTeams(RoomStateMessage room)
+     {
+         playerTeams.Clear();
+diff --git a/Assets/Scripts/Network/Protocol/Messages/SystemMessages.cs b/Assets/Scripts/Network/Protocol/Messages/SystemMessages.cs
+index 33c41fe..d36621f 100644
+--- a/Assets/Scripts/Network/Protocol/Messages/SystemMessages.cs
++++ b/Assets/Scripts/Network/Protocol/Messages/SystemMessages.cs
+@@ -2,6 +2,7 @@
+ // Ping/Pong은 UnityEngine.Ping과 이름이 겹치지 않도록 Message를 붙인다
+ 
+ // C→S PING
++using System;
+ using System.Collections.Generic;
+ 
+ public class PingMessage
+@@ -54,9 +55,20 @@ public class GameSnapshotMessage
+     public int remainingThrows;
+     public int turnNumber;
+     public List<YutResult> storedResults = new List<YutResult>();
++    public List<PieceSnapshot> pieces = new List<PieceSnapshot>();
+     public Dictionary<int, List<string>> ownedAugments = new Dictionary<int, List<string>>();
+     public List<string> offeredAugments = new List<string>();   // 증강 선택 중일 때 내 후보
+     public int? winnerTeam;
+     public string timerType;        // "TURN", "AUGMENT_SELECT", 없으면 null
+     public int timerRemainingSec;
+ }
++
++[Serializable]
++public class PieceSnapshot
++{
++    public int pieceId;
++    public int team;
++    public string state;          // "WAITING" / "ON_BOARD" / "FINISHED"
++    public int nodeId;
++    public int? cameFromNodeId;   // 대기 말은 null
++}
+diff --git a/Assets/Scripts/Network/RemoteGameSession.cs b/Assets/Scripts/Network/RemoteGameSession.cs
+index bd537a3..80bf69e 100644
+--- a/Assets/Scripts/Network/RemoteGameSession.cs
++++ b/Assets/Scripts/Network/RemoteGameSession.cs
+@@ -11,7 +11,7 @@ using System.Collections.Generic;
+ /// - THROW_RESULT/MOVE_APPLIED/AUGMENT_SELECTED에는 행동한 team을 반드시 포함한다.
+ /// - MOVE는 말 id·칸 수·도착 칸만 보낸다. 내 이동도 먼저 적용하지 않고, 서버의 MOVE_APPLIED를 받은 뒤 모든 기기가 같은 순서로 적용한다.
+ /// - MOVE_APPLIED의 movedPieceIds/capturedPieceIds/isFinished와 Core 적용 결과가 다르면 서버와 판이 어긋난 것으로 알린다.
+-/// - GAME_SNAPSHOT 전체 상태 복원은 별도의 클라이언트 적용 작업이 필요하다.
++/// - GAME_SNAPSHOT으로 말·증강·턴·저장 결과와 메시지 순서를 복원한다.
+ /// </summary>
+ public sealed class RemoteGameSession : IGameSession, IDisposable
+ {
+@@ -30,9 +30,15 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
+     private readonly Queue<WsEnvelope> pendingMessages;
+     private bool receivingLiveMessages;
+ 
+-    public bool IsCommandPending => commandPending;
++    public bool IsCommandPending => commandPending || awaitingSnapshot;
++    private bool syncRequested;   // SYNC_REQUEST를 보냈고 아직 스냅샷을 못 받음 (중복 요청 방지)
++    private bool awaitingSnapshot;
++    private bool hasTurnNumber;
++    private int lastTurnNumber;   // 마지막으로 적용한 서버 턴 번호 (같은 턴 재전송 구분용)
+ 
+     // 마지막 GAME_ENDED의 순위·보상 목록 (결과 화면용). 게임이 끝나기 전엔 빈 배열
++    internal int AugmentSelectionTimeLimitSec { get; private set; }
++
+     public IReadOnlyList<RankingEntry> Rankings { get; private set; } = Array.Empty<RankingEntry>();
+ 
+     public event Action<YutThrowOutcome> Thrown;
+@@ -47,6 +53,8 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
+     public event Action<string, int> PlayerRemoved;
+     public event Action<int> AutomatedMoveApplied;
+     public event Action<bool> ConnectionAvailabilityChanged;
++    public event Action<GameSnapshotMessage> SnapshotApplied;
++
+ 
+     public RemoteGameSession(
+         WebSocketClient socket,
+@@ -142,8 +150,25 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
+             pendingMessages.Enqueue(envelope);
+             return;
+         }
+-        if (envelope == null || !AcceptSequence(envelope)) return;
++        if (envelope == null) return;
+ 
++        // 스냅샷은 seq 기준을 새로 잡으므로 순서 검사 전에 처리
++        if (envelope.type == MessageType.GAME_SNAPSHOT)
++        {
++            try
++            {
++                ApplySnapshot(MessageSerializer.ReadPayload<GameSnapshotMessage>(envelope));
++            }
++            catch (Exception exception)
++            {
++                syncRequested = false;
++                awaitingSnapshot = false;
++                Reject($"게임 상태 복원에 실패했습니다: {exception.Message}");
++            }
++            return;
++        }
++        if (awaitingSnapshot && envelope.seq != 0) return;
++        if (!AcceptSequence(envelope)) return;
+         try
+         {
+             switch (envelope.type)
+@@ -178,6 +203,8 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
+                 case MessageType.ERROR:
+                     ErrorMessage error = MessageSerializer.ReadPayload<ErrorMessage>(envelope);
+                     commandPending = false;
++                    // 재연결 후 SYNC_REQUEST가 거절되면(게임 없음 등) 대기를 풀어 멈추지 않게 한다
++                    if (awaitingSnapshot) { awaitingSnapshot = false; syncRequested = false; }
+                     Reject(error?.message ?? error?.code ?? "서버가 요청을 거절했습니다.");
+                     break;
+             }
+@@ -186,6 +213,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
+         {
+             commandPending = false;
+             Reject($"서버 메시지를 적용하지 못했습니다: {exception.Message}");
++            RequestSync();   // 적용에 실패하면 서버 상태로 다시 맞춘다
+         }
+     }
+ 
+@@ -240,8 +268,11 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
+ 
+         // 연출은 Core 결과로 하지만, 서버가 계산한 결과(잡힌 말·같이 움직인 말·완주)와 같은지 확인한다
+         string mismatch = FindResultMismatch(message, result);
+-        if (mismatch != null) Reject($"이동 결과가 서버와 다릅니다 ({mismatch}). 상태를 다시 동기화해 주세요.");
+-
++        if (mismatch != null)
++        {
++            Reject($"이동 결과가 서버와 다릅니다 ({mismatch}). 상태를 다시 동기화해 주세요.");
++            RequestSync();
++        }
+         ReportStateHash(sequence, message.stateHash);
+     }
+ 
+@@ -273,10 +304,24 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
+         return string.Join(",", ids);
+     }
+ 
++    // TURN_CHANGED
++    //  - 새 턴(턴 번호가 바뀜): 턴 초기화 (윷 결과·이번 턴 표시 지움)
++    //  - 같은 턴 재전송(시간 초과 자동 처리 후, 재접속 복귀): 남은 던지기만 맞추고 윷 결과는 유지
+     private void ApplyTurn(TurnChangedMessage message)
+     {
+         if (message == null) throw new InvalidOperationException("TURN_CHANGED 내용이 없습니다.");
++
++        bool sameTurn = hasTurnNumber
++                        && message.turnNumber == lastTurnNumber
++                        && message.team == turnManager.CurrentTeam;
++
++        if (sameTurn)
++            gameState.RemainingThrows = message.remainingThrows;
++        else
+             turnManager.ApplyServerTurn(message.team, message.remainingThrows);
++
++        hasTurnNumber = true;
++        lastTurnNumber = message.turnNumber;
+         commandPending = false;
+         TurnChanged?.Invoke(message.team);
+     }
+@@ -284,6 +329,8 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
+     private void ApplyAugmentChoices(AugmentChoicesMessage message)
+     {
+         if (message == null) throw new InvalidOperationException("AUGMENT_CHOICES 내용이 없습니다.");
++        if (message.team == setup.localTeam)
++            AugmentSelectionTimeLimitSec = Math.Max(0, message.timeLimitSec);
+         rules.SetAugmentChoices(message.team, message.augmentIds);
+         AugmentChoices?.Invoke(message.team, message.augmentIds);
+     }
+@@ -382,6 +429,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
+         if (envelope.seq != lastSequence + 1)
+         {
+             Reject($"서버 메시지 순서가 끊겼습니다. Last={lastSequence}, Received={envelope.seq}");
++            RequestSync();
+             return false;
+         }
+ 
+@@ -420,7 +468,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
+ 
+     private bool CanSendCommand(bool requireCurrentTurn = true)
+     {
+-        if (commandPending)
++        if (IsCommandPending)
+         {
+             Reject("이전 요청의 서버 응답을 기다리고 있습니다.");
+             return false;
+@@ -446,6 +494,14 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
+ 
+     private void OnConnected()
+     {
++        // 게임 중 재연결이면 스냅샷을 받을 때까지 seq 메시지를 무시한다
++        // 서버가 재접속 시 자동으로 보내지만, 혹시 못 받는 경우를 대비해 직접도 요청한다 (중복 스냅샷은 무해)
++        if (hasReceivedSequence)
++        {
++            awaitingSnapshot = true;
++            syncRequested = false;
++            RequestSync();
++        }
+         ConnectionAvailabilityChanged?.Invoke(true);
+     }
+ 
+@@ -457,4 +513,108 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
+     }
+ 
+     private void Reject(string message) => RequestRejected?.Invoke(message);
++
++    // 서버 상태로 통째로 덮어쓴다: 말 위치 → 증강 → 턴·윷 결과 → 승자 → seq 기준
++    private void ApplySnapshot(GameSnapshotMessage snapshot)
++    {
++        if (snapshot == null) throw new InvalidOperationException("GAME_SNAPSHOT 내용이 없습니다.");
++
++        RestorePieces(snapshot.pieces);
++        RestoreAugments(snapshot.ownedAugments);
++
++        bool ended = snapshot.phase == "ENDED";
++        if (!ended) turnManager.ApplyServerTurn(snapshot.currentTeam, snapshot.remainingThrows);
++
++        // ApplyServerTurn 뒤에 넣어야 턴 적용이 결과 목록을 건드려도 서버 값이 남는다
++        gameState.StoredResults.Clear();
++        if (snapshot.storedResults != null) gameState.StoredResults.AddRange(snapshot.storedResults);
++        gameState.WinnerTeam = snapshot.winnerTeam;
++
++        // 증강 선택 중이면 내 후보를 다시 등록 (선택 요청이 후보 검사를 통과하도록)
++        if (snapshot.phase == "AUGMENT_SELECT" && snapshot.offeredAugments != null && snapshot.offeredAugments.Count > 0)
++            rules.SetAugmentChoices(snapshot.myTeam, snapshot.offeredAugments);
++
++        hasReceivedSequence = true;
++        lastSequence = snapshot.lastSeq;
++        hasTurnNumber = true;
++        lastTurnNumber = snapshot.turnNumber;
++        commandPending = false;
++        syncRequested = false;
++        awaitingSnapshot = false;
++
++        SnapshotApplied?.Invoke(snapshot);
++    }
++
++    // 서버 말 상태로 맞추고, 서버 판에 없는 팀(나간 팀)은 판에서 지운다
++    private void RestorePieces(List<PieceSnapshot> pieces)
++    {
++        if (pieces == null) throw new InvalidOperationException("스냅샷의 말 목록이 없습니다.");
++
++        var validatedIds = new HashSet<int>();
++        foreach (PieceSnapshot p in pieces)
++        {
++            Piece piece = p == null ? null : gameState.Board.GetPiece(p.pieceId);
++            if (piece == null || piece.Team != p.team || !validatedIds.Add(p.pieceId))
++                throw new InvalidOperationException("스냅샷의 말 번호 또는 팀 정보가 올바르지 않습니다.");
++            PieceState state = ParsePieceState(p.state);
++            if ((state == PieceState.OnBoard && gameState.Board.Graph.GetNode(p.nodeId) == null) ||
++                (p.cameFromNodeId.HasValue && gameState.Board.Graph.GetNode(p.cameFromNodeId.Value) == null))
++                throw new InvalidOperationException($"말 {p.pieceId}의 복원 칸이 판에 없습니다.");
++        }
++
++        var listed = new HashSet<int>();
++        foreach (PieceSnapshot p in pieces)
++        {
++            if (!gameState.Board.RestorePiece(p.pieceId, ParsePieceState(p.state), p.nodeId, p.cameFromNodeId))
++                throw new InvalidOperationException($"말 {p.pieceId}을(를) 복원할 수 없습니다 (칸 {p.nodeId}).");
++            listed.Add(p.pieceId);
++        }
++
++        var removedTeams = new HashSet<int>();
++        foreach (Piece piece in new List<Piece>(gameState.Board.Pieces))
++            if (!listed.Contains(piece.Id)) removedTeams.Add(piece.Team);
++        foreach (int team in removedTeams)
++            gameState.Board.RemoveTeam(team);
++    }
++
++    // 서버가 가진 증강 중 로컬에 없는 것만 추가한다 (서버 확정 증강 적용과 같은 경로)
++    private void RestoreAugments(Dictionary<int, List<string>> owned)
++    {
++        if (owned == null) return;
++        foreach (KeyValuePair<int, List<string>> pair in owned)
++        {
++            var have = new HashSet<string>();
++            foreach (IAugment augment in gameState.Board.GetAugments(pair.Key)) have.Add(augment.Id);
++
++            foreach (string id in pair.Value)
++            {
++                if (have.Contains(id)) continue;
++                rules.ApplyConfirmedAugment(pair.Key, id);
++                have.Add(id);
++            }
++        }
++    }
++
++    private static PieceState ParsePieceState(string state)
++    {
++        switch (state)
++        {
++            case "WAITING": return PieceState.Waiting;
++            case "ON_BOARD": return PieceState.OnBoard;
++            case "FINISHED": return PieceState.Finished;
++            default: throw new InvalidOperationException($"알 수 없는 말 상태: {state}");
++        }
++    }
++
++    // 서버에 현재 상태 스냅샷을 요청한다 (순서 끊김·이동 결과 불일치·적용 실패 때 자동 호출, 버튼에서 수동 호출 가능)
++    public void RequestSync()
++    {
++        if (syncRequested || !socket.IsConnected) return;
++        if (socket.Send(MessageType.SYNC_REQUEST))
++        {
++            syncRequested = true;
++            awaitingSnapshot = true;
++            commandPending = false;
++        }
++    }
+ }
+diff --git a/Assets/Scripts/Presentation/UI/CollectionPanel.cs b/Assets/Scripts/Presentation/UI/CollectionPanel.cs
+index 02caf71..15abc74 100644
+--- a/Assets/Scripts/Presentation/UI/CollectionPanel.cs
++++ b/Assets/Scripts/Presentation/UI/CollectionPanel.cs
+@@ -1,70 +1,32 @@
+-using System;
+-using System.Collections.Generic;
+-using TMPro;
+ using UnityEngine;
+ using UnityEngine.UI;
+ 
++/// <summary>등록된 증강의 아이콘, 이름과 설명을 보여 주는 화면.</summary>
+ public class CollectionPanel : UIBase
+ {
+-    private enum CollectionTab
+-    {
+-        Augments,
+-        Achievements,
+-        Icons,
+-    }
+-
+     [SerializeField] private Button closeButton;
+ 
+-    [Header("탭")]
+-    [SerializeField] private Button augmentTabButton;
+-    [SerializeField] private Button achievementTabButton;
+-    [SerializeField] private Button iconTabButton;
+-    [SerializeField] private GameObject augmentPage;
+-    [SerializeField] private GameObject achievementPage;
+-    [SerializeField] private GameObject iconPage;
+-
+-    [Header("증강 도감")]
++    [Header("증강 목록")]
+     [SerializeField] private TextAsset augmentsJson;
+     [SerializeField] private AugmentCardView augmentCardViewPrefab;
+     [SerializeField] private Transform augmentCardContainer;
+ 
+-    [Header("아이콘 도감")]
+-    [SerializeField] private TextAsset profileIconsJson;
+-    [SerializeField] private IconCollectionItemView iconItemPrefab;
+-    [SerializeField] private Transform iconItemContainer;
+-    [SerializeField] private TMP_Text iconsStatusText;
+-
+-    private static readonly Color SelectedTabColor = new Color(0.12f, 0.58f, 0.36f, 1f);
+-    private static readonly Color NormalTabColor = new Color(0.88f, 0.82f, 0.68f, 1f);
+-
+-    private readonly Dictionary<string, IconCollectionItemView> iconItems = new();
+-
+-    private CollectionTab currentTab;
+-
+     public override void Init()
+     {
+         closeButton?.onClick.AddListener(Close);
+-        augmentTabButton?.onClick.AddListener(OpenAugments);
+-        achievementTabButton?.onClick.AddListener(OpenAchievements);
+-        iconTabButton?.onClick.AddListener(OpenIcons);
+         BuildAugmentList();
+-        BuildIconList();
+-        SetTab(CollectionTab.Augments);
+     }
+ 
+     private void OnDestroy()
+     {
+         closeButton?.onClick.RemoveListener(Close);
+-        augmentTabButton?.onClick.RemoveListener(OpenAugments);
+-        achievementTabButton?.onClick.RemoveListener(OpenAchievements);
+-        iconTabButton?.onClick.RemoveListener(OpenIcons);
+     }
+ 
+     private void BuildAugmentList()
+     {
+         if (augmentsJson == null || augmentCardViewPrefab == null || augmentCardContainer == null)
+         {
+-            Debug.LogWarning("[Collection] 증강 도감 데이터 또는 UI 참조가 없습니다.", this);
++            Debug.LogWarning("[Collection] 증강 데이터 또는 UI 참조가 없습니다.", this);
+             return;
+         }
+ 
+@@ -77,94 +39,4 @@ public class CollectionPanel : UIBase
+             card.Init(definition);
+         }
+     }
+-
+-    private void BuildIconList()
+-    {
+-        if (profileIconsJson == null || iconItemPrefab == null || iconItemContainer == null)
+-        {
+-            Debug.LogWarning("[Collection] 아이콘 도감 데이터 또는 UI 참조가 없습니다.", this);
+-            return;
+-        }
+-
+-        ProfileIconCatalog catalog = new ProfileIconCatalog(
+-            JsonUtility.FromJson<ProfileIconDefinitionFile>(profileIconsJson.text));
+-
+-        foreach (ProfileIconDefinition definition in catalog.Definitions)
+-        {
+-            IconCollectionItemView item = Instantiate(iconItemPrefab, iconItemContainer);
+-            item.Init(definition);
+-            iconItems[definition.id] = item;
+-        }
+-    }
+-
+-    private void OpenAugments() => SetTab(CollectionTab.Augments);
+-    private void OpenAchievements() => SetTab(CollectionTab.Achievements);
+-    private void OpenIcons()
+-    {
+-        SetTab(CollectionTab.Icons);
+-        RefreshOwnedIcons();
+-    }
+-
+-    protected override void OnOpen()
+-    {
+-        if (currentTab == CollectionTab.Icons) RefreshOwnedIcons();
+-    }
+-
+-    private void SetTab(CollectionTab tab)
+-    {
+-        currentTab = tab;
+-
+-        if (augmentPage != null) augmentPage.SetActive(tab == CollectionTab.Augments);
+-        if (achievementPage != null) achievementPage.SetActive(tab == CollectionTab.Achievements);
+-        if (iconPage != null) iconPage.SetActive(tab == CollectionTab.Icons);
+-
+-        SetTabSelected(augmentTabButton, tab == CollectionTab.Augments);
+-        SetTabSelected(achievementTabButton, tab == CollectionTab.Achievements);
+-        SetTabSelected(iconTabButton, tab == CollectionTab.Icons);
+-    }
+-
+-    private static void SetTabSelected(Button button, bool selected)
+-    {
+-        if (button?.targetGraphic is Image image)
+-            image.color = selected ? SelectedTabColor : NormalTabColor;
+-
+-        TMP_Text label = button != null ? button.GetComponentInChildren<TMP_Text>() : null;
+-        if (label != null) label.color = selected ? Color.white : new Color(0.23f, 0.15f, 0.1f, 1f);
+-    }
+-
+-    private async void RefreshOwnedIcons()
+-    {
+-        ShowIconsStatus(string.Empty);
+-        LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
+-        if (coordinator == null)
+-        {
+-            ShowIconsStatus("로비에서 열어야 보유 아이콘을 볼 수 있습니다.");
+-            return;
+-        }
+-        try
+-        {
+-            OwnedIconsResponse response = await coordinator.GetOwnedIconsAsync();
+-            if (this == null || !IsOpen) return;
+-
+-            foreach (var item in iconItems.Values) item.SetOwned(false);
+-            foreach (string id in response.iconIds)
+-            {
+-                if (iconItems.TryGetValue(id, out var item))
+-                    item.SetOwned(true);
+-            }
+-        }
+-        catch(Exception e)
+-        {
+-            Debug.LogWarning($"[Collection] 보유 아이콘 조회 실패: {e.Message}", this);
+-            if (this != null)
+-                ShowIconsStatus("보유 아이콘을 불러오지 못했습니다.");
+-        }
+-    }
+-
+-    private void ShowIconsStatus(string message)
+-    {
+-        if (iconsStatusText == null) return;
+-        iconsStatusText.text = message;
+-        iconsStatusText.gameObject.SetActive(!string.IsNullOrEmpty(message));
+-    }
+ }
+diff --git a/Assets/Scripts/Presentation/UI/GameHudPanel.cs b/Assets/Scripts/Presentation/UI/GameHudPanel.cs
+index 88017f7..e49c9b3 100644
+--- a/Assets/Scripts/Presentation/UI/GameHudPanel.cs
++++ b/Assets/Scripts/Presentation/UI/GameHudPanel.cs
+@@ -161,6 +161,8 @@ public class GameHudPanel : UIBase
+         RefreshActionAvailability();
+     }
+     public void SetTimerRunning(bool value) => turnView?.SetTimerRunning(value);
++    public void SetTimerRemaining(float seconds) => turnView?.SetTimerRemaining(seconds);
++    public void ResetTimer() => turnView?.ResetTimer();
+ 
+     public void ConfigurePlayers(int teamCount, int piecesPerTeam)
+     {
+diff --git a/Assets/Scripts/Presentation/UI/PlayerStatusView.cs b/Assets/Scripts/Presentation/UI/PlayerStatusView.cs
+index 7c5cb80..dfdecc4 100644
+--- a/Assets/Scripts/Presentation/UI/PlayerStatusView.cs
++++ b/Assets/Scripts/Presentation/UI/PlayerStatusView.cs
+@@ -523,7 +523,7 @@ public sealed class PlayerStatusView : MonoBehaviour
+         if (headerLabel != null && team < activeTeamCount)
+             headerLabel.text = DisplayName(team);
+ 
+-        Image icon = panel.Find("ProfileIcon")?.GetComponent<Image>();
++        Image icon = (panel.Find("Header/ProfileIcon") ?? panel.Find("ProfileIcon"))?.GetComponent<Image>();
+         if (icon == null) return;
+         icon.sprite = PlayerProfileIconResolver.Resolve(profileIcons, profile?.iconId, team);
+         icon.enabled = team < activeTeamCount && icon.sprite != null;
+diff --git a/Assets/Scripts/Presentation/UI/ResultPopup.cs b/Assets/Scripts/Presentation/UI/ResultPopup.cs
+index 1902527..6858718 100644
+--- a/Assets/Scripts/Presentation/UI/ResultPopup.cs
++++ b/Assets/Scripts/Presentation/UI/ResultPopup.cs
+@@ -20,6 +20,12 @@ public class ResultPopup : UIBase
+     [SerializeField] private Button returnToRoomButton;
+     [SerializeField] private Image winnerProfileIcon;
+ 
++    [Header("순위 목록 (행 프리팹이 있으면 행으로, 없으면 rankingsText로 표시)")]
++    [SerializeField] private Transform rankRowContainer;       // VerticalLayoutGroup이 붙은 부모
++    [SerializeField] private ResultRankRowView rankRowPrefab;
++
++    private readonly List<ResultRankRowView> rankRows = new();
++
+     public event Action MainMenuClicked;
+     public event Action ReturnToRoomClicked;
+ 
+@@ -33,6 +39,7 @@ public class ResultPopup : UIBase
+     {
+         mainMenuButton?.onClick.RemoveListener(HandleMainMenu);
+         returnToRoomButton?.onClick.RemoveListener(HandleReturnToRoom);
++        ClearRankRows();
+     }
+ 
+     protected override void OnOpen()
+@@ -55,31 +62,75 @@ public class ResultPopup : UIBase
+         return this;
+     }
+ 
++    // 순위 목록 표시 (등수 → 팀 순)
++    //  iconResolver: (iconId, team) → 프로필 아이콘 스프라이트 (HUD의 ResolveProfileIcon 사용)
++    //  localTeam: 내 팀 (내 줄 강조용, -1이면 강조 안 함)
++    // 나간 플레이어: 보상 0 (서버 규칙상 1~4등은 모두 골드를 받으므로 0이면 나간 것)
+     public ResultPopup SetRankings(
+         IReadOnlyList<RankingEntry> rankings,
+-        IReadOnlyList<PlayerDisplayInfo> profiles)
++        IReadOnlyList<PlayerDisplayInfo> profiles,
++        Func<string, int, Sprite> iconResolver = null,
++        int localTeam = -1)
+     {
+-        if (rankingsText == null) return this;
+-        if (rankings == null || rankings.Count == 0)
++        ClearRankRows();
++        if (rankingsText != null) rankingsText.text = string.Empty;
++        if (rankings == null || rankings.Count == 0) return this;
++
++        var ordered = rankings.OrderBy(value => value.rank).ThenBy(value => value.team).ToList();
++
++        // 행 프리팹이 없으면 기존처럼 텍스트로
++        if (rankRowPrefab == null || rankRowContainer == null)
+         {
+-            rankingsText.text = string.Empty;
++            SetRankingsText(ordered, profiles);
+             return this;
+         }
+ 
++        foreach (RankingEntry entry in ordered)
++        {
++            PlayerDisplayInfo profile = FindProfile(profiles, entry);
++            string name = DisplayName(profile, entry);
++            Sprite icon = iconResolver?.Invoke(profile?.iconId, entry.team);
++            bool left = entry.rewardGold <= 0;
++
++            ResultRankRowView row = Instantiate(rankRowPrefab, rankRowContainer);
++            row.Init();
++            row.Bind(entry.rank, name, entry.rewardGold, icon,
++                    GameHudPanel.GetTeamColor(entry.team), entry.team == localTeam, left)
++               .Open();
++            rankRows.Add(row);
++        }
++        return this;
++    }
++
++    private void SetRankingsText(List<RankingEntry> ordered, IReadOnlyList<PlayerDisplayInfo> profiles)
++    {
++        if (rankingsText == null) return;
+         var builder = new StringBuilder();
+-        foreach (RankingEntry entry in rankings.OrderBy(value => value.rank).ThenBy(value => value.team))
++        foreach (RankingEntry entry in ordered)
+         {
+-            PlayerDisplayInfo profile = profiles?.FirstOrDefault(value =>
+-                value != null && (value.playerId == entry.playerId || value.team == entry.team));
+-            string name = !string.IsNullOrWhiteSpace(profile?.nickname)
+-                ? profile.nickname
+-                : $"팀 {entry.team + 1}";
++            string name = DisplayName(FindProfile(profiles, entry), entry);
+             if (builder.Length > 0) builder.AppendLine();
+             builder.Append($"{entry.rank}위  {name}  +{entry.rewardGold} 골드");
+         }
+-
+         rankingsText.text = builder.ToString();
+-        return this;
++    }
++
++    private static PlayerDisplayInfo FindProfile(IReadOnlyList<PlayerDisplayInfo> profiles, RankingEntry entry) =>
++        profiles?.FirstOrDefault(value =>
++            value != null && (value.playerId == entry.playerId || value.team == entry.team));
++
++    private static string DisplayName(PlayerDisplayInfo profile, RankingEntry entry) =>
++        !string.IsNullOrWhiteSpace(profile?.nickname) ? profile.nickname : $"팀 {entry.team + 1}";
++
++    private void ClearRankRows()
++    {
++        foreach (ResultRankRowView row in rankRows)
++        {
++            if (row == null) continue;
++            row.Close();
++            Destroy(row.gameObject);
++        }
++        rankRows.Clear();
+     }
+ 
+     private void HandleMainMenu()

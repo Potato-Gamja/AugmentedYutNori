@@ -1,0 +1,680 @@
+From commit: ca07b9ff773ecafb5c5b6397bbca5633217ec9cc
+Contributor: Potato-Gamja (Gamja)
+Subject: feat: 메인 메뉴와 아웃게임 프로필 UI 추가
+Original: https://github.com/Potato-Gamja/AugmentedYutNori/commit/ca07b9ff773ecafb5c5b6397bbca5633217ec9cc
+
+diff --git a/Assets/Scripts/Flow/GameFlowController.cs b/Assets/Scripts/Flow/GameFlowController.cs
+index b88a071..dd73e8d 100644
+--- a/Assets/Scripts/Flow/GameFlowController.cs
++++ b/Assets/Scripts/Flow/GameFlowController.cs
+@@ -4,6 +4,7 @@ using System.Linq;
+ using UnityEngine;
+ using UnityEngine.EventSystems;
+ using UnityEngine.InputSystem;
++using UnityEngine.SceneManagement;
+ 
+ public enum GameFlowState { GameStart, AugmentSelect, Throw, Move, EndTurn, Finish }
+ 
+@@ -20,6 +21,7 @@ public class GameFlowController : MonoBehaviour
+     [SerializeField] private TextAsset augmentsJson;
+     [SerializeField] private bool skipAugmentSelection = true;
+     [SerializeField] private GameSetup setup = new GameSetup();
++    [SerializeField] private string mainMenuSceneName = "Lobby";
+ 
+     private readonly Dictionary<Piece, PieceView> views = new();
+ 
+@@ -34,6 +36,7 @@ public class GameFlowController : MonoBehaviour
+     private GameHudPanel hud;
+     private GameFlowHudPresenter hudPresenter;
+     private GameFlowSelectionController selectionController;
++    private SettingsPanel settingsPanel;
+     private Camera mainCamera;
+     private AugmentCatalog augmentCatalog;
+     private GameFlowState currentState;
+@@ -84,7 +87,7 @@ public class GameFlowController : MonoBehaviour
+         BindPieces();
+         lastStateHash = StateHasher.HashHex(gameState, turnManager);
+ 
+-        hudPresenter = new GameFlowHudPresenter(hud, boardState, gameState, pieceViews);
++        hudPresenter = new GameFlowHudPresenter(hud, boardState, gameState, augmentCatalog, pieceViews);
+         selectionController = new GameFlowSelectionController(
+             boardView,
+             boardState,
+@@ -97,6 +100,7 @@ public class GameFlowController : MonoBehaviour
+             hudPresenter);
+ 
+         SubscribeEvents();
++        BindSettingsPanel();
+         RefreshPieceLayout();
+         hudPresenter.RefreshPlayerPanels();
+         ChangeState(GameFlowState.GameStart);
+@@ -286,6 +290,7 @@ public class GameFlowController : MonoBehaviour
+             hud.WaitingPieceClicked -= OnWaitingPieceClicked;
+             hud.SettingsClicked -= OnSettingsClicked;
+         }
++        if (settingsPanel != null) settingsPanel.ExitGameRequested -= OnExitGameRequested;
+ 
+         if (gameSession != null)
+         {
+@@ -385,8 +390,29 @@ public class GameFlowController : MonoBehaviour
+ 
+     private void OnSettingsClicked()
+     {
+-        // UI 조립 담당 확인: SettingsPanel 프리팹을 각 씬 UIManager의 prefabs 목록에 등록해야 한다.
+-        uiManager?.Open<SettingsPanel>();
++        settingsPanel = uiManager?.Open<SettingsPanel>();
++        settingsPanel?.SetExitGameVisible(true);
++    }
++
++    private void BindSettingsPanel()
++    {
++        settingsPanel = uiManager?.Get<SettingsPanel>();
++        if (settingsPanel == null) return;
++        settingsPanel.SetExitGameVisible(true);
++        settingsPanel.ExitGameRequested += OnExitGameRequested;
++    }
++
++    private void OnExitGameRequested()
++    {
++        settingsPanel?.Close();
++        LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
++        if (coordinator != null)
++        {
++            coordinator.LeaveGameToMainMenu();
++            return;
++        }
++
++        SceneManager.LoadScene(mainMenuSceneName);
+     }
+ 
+     // 로비/GAME_START 담당 연결 지점:
+@@ -418,9 +444,6 @@ public class GameFlowController : MonoBehaviour
+         foreach (PieceView view in pieceViews)
+             if (view != null && view.Team == team) view.SetWorldVisible(false);
+ 
+-        // Core/Turn 담당 연결 지점:
+-        // BoardState.RemoveTeam(team)과 TurnManager의 제거 팀 건너뛰기가 적용된 뒤
+-        // 서버 TURN_CHANGED를 받아 다음 차례를 확정한다. 클라이언트가 임의로 턴을 계산하지 않는다.
+         hud?.SetInstruction($"플레이어 {team + 1}이 게임에서 나갔습니다.");
+     }
+ 
+diff --git a/Assets/Scripts/Flow/GameFlowHudPresenter.cs b/Assets/Scripts/Flow/GameFlowHudPresenter.cs
+index 2e8d07c..5206a9a 100644
+--- a/Assets/Scripts/Flow/GameFlowHudPresenter.cs
++++ b/Assets/Scripts/Flow/GameFlowHudPresenter.cs
+@@ -10,17 +10,20 @@ public sealed class GameFlowHudPresenter
+     private readonly GameHudPanel hud;
+     private readonly BoardState boardState;
+     private readonly GameState gameState;
++    private readonly AugmentCatalog augmentCatalog;
+     private readonly IReadOnlyList<PieceView> pieceViews;
+ 
+     public GameFlowHudPresenter(
+         GameHudPanel hud,
+         BoardState boardState,
+         GameState gameState,
++        AugmentCatalog augmentCatalog,
+         IReadOnlyList<PieceView> pieceViews)
+     {
+         this.hud = hud;
+         this.boardState = boardState;
+         this.gameState = gameState;
++        this.augmentCatalog = augmentCatalog;
+         this.pieceViews = pieceViews;
+     }
+ 
+@@ -53,11 +56,11 @@ public sealed class GameFlowHudPresenter
+                 else if (piece.IsFinished) finished++;
+             }
+ 
+-            var augmentIds = new List<string>();
++            var augmentNames = new List<string>();
+             foreach (IAugment augment in boardState.GetAugments(team))
+-                augmentIds.Add(augment.Id);
++                augmentNames.Add(augmentCatalog.Find(augment.Id).name);
+ 
+-            hud.SetPlayerState(team, waiting, onBoard, finished, augmentIds, waitingSlots);
++            hud.SetPlayerState(team, waiting, onBoard, finished, augmentNames, waitingSlots);
+         }
+     }
+ 
+diff --git a/Assets/Scripts/Flow/LobbyController.cs b/Assets/Scripts/Flow/LobbyController.cs
+index 5790de4..1a26a48 100644
+--- a/Assets/Scripts/Flow/LobbyController.cs
++++ b/Assets/Scripts/Flow/LobbyController.cs
+@@ -12,17 +12,20 @@ public class LobbyController : MonoBehaviour
+     [SerializeField] private string gameSceneName = "LSU_Game_UI";
+ 
+     private LobbyPanel lobbyPanel;
++    private MainMenuPanel mainMenuPanel;
+     private RoomPanel roomPanel;
+     private string localPlayerId;
+ 
+     // 네트워크 계약:
+     // CreateRoomRequested -> ApiClient에서 POST /players 후 POST /rooms 호출.
+     // JoinRoomRequested   -> POST /players 후 WebSocketClient.Connect(roomCode, guestToken), JOIN_ROOM 전송.
++    // QuickJoinRequested  -> 서버 빠른 참가 API가 참가할 roomCode를 반환하면 기존 JOIN_ROOM 흐름으로 연결.
+     // ReadyRequested      -> WebSocket으로 READY 전송.
+     // LeaveRoomRequested  -> WebSocket으로 LEAVE_ROOM 전송 후 연결 해제.
+     // ApiClient/WebSocketClient가 머지되면 해당 구현을 이 이벤트에 연결하거나 아래 요청 메서드 내부로 옮긴다.
+     public event Action<string> CreateRoomRequested;
+     public event Action<string, string> JoinRoomRequested;
++    public event Action<string> QuickJoinRequested;
+     public event Action<bool> ReadyRequested;
+     public event Action LeaveRoomRequested;
+ 
+@@ -36,21 +39,30 @@ public class LobbyController : MonoBehaviour
+             return;
+         }
+ 
+-        lobbyPanel = uiManager.Open<LobbyPanel>();
++        mainMenuPanel = uiManager.Open<MainMenuPanel>();
++        lobbyPanel = uiManager.Get<LobbyPanel>();
+         roomPanel = uiManager.Get<RoomPanel>();
+-        if (lobbyPanel == null || roomPanel == null)
++        if (mainMenuPanel == null || lobbyPanel == null || roomPanel == null)
+         {
+-            Debug.LogError("[Lobby] LobbyPanel과 RoomPanel을 UIManager 프리팹 목록에 등록해 주세요.", this);
++            Debug.LogError("[Lobby] MainMenuPanel, LobbyPanel, RoomPanel을 UIManager 프리팹 목록에 등록해 주세요.", this);
+             enabled = false;
+             return;
+         }
+ 
+         lobbyPanel.CreateRoomRequested += OnCreateRoomRequested;
+         lobbyPanel.JoinRoomRequested += OnJoinRoomRequested;
++        lobbyPanel.QuickJoinRequested += OnQuickJoinRequested;
++        lobbyPanel.MainMenuRequested += OnMainMenuRequested;
+         lobbyPanel.SettingsRequested += OnSettingsRequested;
+         lobbyPanel.CollectionRequested += OnCollectionRequested;
+         roomPanel.ReadyRequested += OnReadyRequested;
+         roomPanel.LeaveRequested += OnLeaveRequested;
++        mainMenuPanel.PlayRequested += OnPlayRequested;
++        mainMenuPanel.GachaRequested += OnGachaRequested;
++        mainMenuPanel.CollectionRequested += OnCollectionRequested;
++        mainMenuPanel.ProfileRequested += OnProfileRequested;
++        mainMenuPanel.AchievementRequested += OnAchievementRequested;
++        mainMenuPanel.SettingsRequested += OnSettingsRequested;
+     }
+ 
+     private void OnDestroy()
+@@ -59,6 +71,8 @@ public class LobbyController : MonoBehaviour
+         {
+             lobbyPanel.CreateRoomRequested -= OnCreateRoomRequested;
+             lobbyPanel.JoinRoomRequested -= OnJoinRoomRequested;
++            lobbyPanel.QuickJoinRequested -= OnQuickJoinRequested;
++            lobbyPanel.MainMenuRequested -= OnMainMenuRequested;
+             lobbyPanel.SettingsRequested -= OnSettingsRequested;
+             lobbyPanel.CollectionRequested -= OnCollectionRequested;
+         }
+@@ -67,12 +81,21 @@ public class LobbyController : MonoBehaviour
+             roomPanel.ReadyRequested -= OnReadyRequested;
+             roomPanel.LeaveRequested -= OnLeaveRequested;
+         }
++        if (mainMenuPanel != null)
++        {
++            mainMenuPanel.PlayRequested -= OnPlayRequested;
++            mainMenuPanel.GachaRequested -= OnGachaRequested;
++            mainMenuPanel.CollectionRequested -= OnCollectionRequested;
++            mainMenuPanel.ProfileRequested -= OnProfileRequested;
++            mainMenuPanel.AchievementRequested -= OnAchievementRequested;
++            mainMenuPanel.SettingsRequested -= OnSettingsRequested;
++        }
+     }
+ 
+     private void OnSettingsRequested()
+     {
+-        // UI 조립 담당 확인: SettingsPanel 프리팹을 로비 UIManager에 등록하고 settingsButton을 연결한다.
+-        uiManager?.Open<SettingsPanel>();
++        SettingsPanel panel = uiManager?.Open<SettingsPanel>();
++        panel?.SetExitGameVisible(false);
+     }
+ 
+     private void OnCollectionRequested()
+@@ -80,6 +103,30 @@ public class LobbyController : MonoBehaviour
+         uiManager?.Open<CollectionPanel>();
+     }
+ 
++    private void OnPlayRequested()
++    {
++        uiManager.Close<MainMenuPanel>();
++        uiManager.Open<LobbyPanel>();
++        lobbyPanel.ShowStatus(string.Empty);
++    }
++
++    private void OnMainMenuRequested()
++    {
++        uiManager.Close<LobbyPanel>();
++        uiManager.Open<MainMenuPanel>();
++    }
++
++    private void OnGachaRequested() => mainMenuPanel.ShowStatus("뽑기 기능은 준비 중입니다.");
++    private void OnProfileRequested()
++    {
++        ProfilePanel panel = uiManager?.Open<ProfilePanel>();
++        if (panel == null) return;
++
++        LobbyNetworkCoordinator coordinator = FindFirstObjectByType<LobbyNetworkCoordinator>();
++        panel.ShowProfile(coordinator?.LocalPlayerId, coordinator?.LocalNickname);
++    }
++    private void OnAchievementRequested() => mainMenuPanel.ShowStatus("업적 기능은 준비 중입니다.");
++
+     private void OnCreateRoomRequested(string nickname)
+     {
+         lobbyPanel.SetBusy(true);
+@@ -94,6 +141,20 @@ public class LobbyController : MonoBehaviour
+         JoinRoomRequested?.Invoke(nickname, roomCode);
+     }
+ 
++    private void OnQuickJoinRequested(string nickname)
++    {
++        // 서버 담당 연결 지점: 참가 가능한 방 조회/생성 후 roomCode를 받아 기존 참가 흐름으로 이어 준다.
++        if (QuickJoinRequested == null)
++        {
++            lobbyPanel.ShowStatus("빠른 참가 서버 기능을 준비 중입니다.");
++            return;
++        }
++
++        lobbyPanel.SetBusy(true);
++        lobbyPanel.ShowStatus("참가 가능한 방을 찾는 중입니다.");
++        QuickJoinRequested.Invoke(nickname);
++    }
++
+     private void OnReadyRequested(bool ready)
+     {
+         roomPanel.SetInteraction(false);
+diff --git a/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs b/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
+index 3bddf99..d51515a 100644
+--- a/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
++++ b/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
+@@ -17,6 +17,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+ 
+     [Header("로그인")]
+     [SerializeField] private string loginSceneName = "PJWScene_Login";
++    [SerializeField] private string lobbySceneName = "Lobby";
+     // 서버 로그인 연동 전·에디터 테스트에서는 게스트 생성을 유지한다.
+     // 끄면 토큰이 없는 사용자를 로그인 씬으로 보낸다.
+     [SerializeField] private bool allowGuestLogin = true;
+@@ -31,6 +32,9 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+     private bool leaveRequested;
+     private readonly Dictionary<string, int> playerTeams = new();
+ 
++    public string LocalPlayerId => playerIdentity?.PlayerId ?? string.Empty;
++    public string LocalNickname => playerIdentity?.Nickname ?? string.Empty;
++
+     private void Awake()
+     {
+         if (instance != null && instance != this)
+@@ -265,6 +269,22 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+         webSocketClient.Close();
+     }
+ 
++    public async void LeaveGameToMainMenu()
++    {
++        if (leaveRequested) return;
++
++        leaveRequested = true;
++        // 명시적인 LEAVE_ROOM을 보내지 않는다. 서버는 일반 연결 끊김으로 받아
++        // 재접속 유예시간을 시작하고, 만료된 뒤 기존 탈주 처리를 수행한다.
++        await webSocketClient.CloseAndWait();
++
++        playerTeams.Clear();
++        pendingRoomCode = null;
++        pendingNickname = null;
++        leaveRequested = false;
++        SceneManager.LoadScene(lobbySceneName);
++    }
++
+     private void OnMessageReceived(WsEnvelope envelope)
+     {
+         try
+diff --git a/Assets/Scripts/Network/Protocol/MessageType.cs b/Assets/Scripts/Network/Protocol/MessageType.cs
+index c5843ba..afaa2c8 100644
+--- a/Assets/Scripts/Network/Protocol/MessageType.cs
++++ b/Assets/Scripts/Network/Protocol/MessageType.cs
+@@ -32,5 +32,7 @@ public enum MessageType
+     PONG,               // S→C 연결 확인 응답
+     ERROR,              // S→C 요청 거부·오류
+     PLAYER_DISCONNECTED,// S→C 다른 플레이어 연결 끊김 (재접속 대기)
+-    PLAYER_RECONNECTED  // S→C 끊겼던 플레이어 재접속
++    PLAYER_RECONNECTED, // S→C 끊겼던 플레이어 재접속
++    GAME_SNAPSHOT,
++    SYNC_REQUEST
+ }
+diff --git a/Assets/Scripts/Network/RemoteGameSession.cs b/Assets/Scripts/Network/RemoteGameSession.cs
+index 361aa3e..c35b6cd 100644
+--- a/Assets/Scripts/Network/RemoteGameSession.cs
++++ b/Assets/Scripts/Network/RemoteGameSession.cs
+@@ -181,9 +181,6 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
+                 case MessageType.PLAYER_RECONNECTED:
+                     ApplyPlayerReconnected(MessageSerializer.ReadPayload<PlayerReconnectedMessage>(envelope));
+                     break;
+-                // 서버/프로토콜 담당 연결 지점:
+-                // MessageType.PLAYER_REMOVED와 PlayerRemovedMessage(playerId, team, reason)가 추가되면
+-                // 여기서 PlayerRemoved?.Invoke(message.playerId, message.team)를 호출한다.
+                 case MessageType.ERROR:
+                     ErrorMessage error = MessageSerializer.ReadPayload<ErrorMessage>(envelope);
+                     commandPending = false;
+diff --git a/Assets/Scripts/Network/WebSocketClient.cs b/Assets/Scripts/Network/WebSocketClient.cs
+index 38e0eb5..ae03121 100644
+--- a/Assets/Scripts/Network/WebSocketClient.cs
++++ b/Assets/Scripts/Network/WebSocketClient.cs
+@@ -1,5 +1,6 @@
+ using System;
+ using System.Text;
++using System.Threading.Tasks;
+ using NativeWebSocket;
+ using UnityEngine;
+ 
+@@ -81,6 +82,12 @@ public class WebSocketClient : MonoBehaviour
+         return SendRaw(MessageSerializer.Serialize(type));
+     }
+ 
++    public async Task CloseAndWait()
++    {
++        closingByUser = true;
++        await CloseSocket();
++    }
++
+     private bool SendRaw(string json)
+     {
+         if (!IsConnected)
+diff --git a/Assets/Scripts/Presentation/Piece/PieceView.cs b/Assets/Scripts/Presentation/Piece/PieceView.cs
+index 3e4ee3c..64818fb 100644
+--- a/Assets/Scripts/Presentation/Piece/PieceView.cs
++++ b/Assets/Scripts/Presentation/Piece/PieceView.cs
+@@ -239,7 +239,7 @@ public bool Contains(Vector3 worldPosition)
+         text.characterSize = stackTextSize;
+         text.anchor = TextAnchor.MiddleCenter;
+         text.alignment = TextAlignment.Center;
+-        text.fontStyle = FontStyle.Bold;
++        text.fontStyle = FontStyle.Normal;
+         text.color = stackTextColor;
+ 
+         var textRenderer = go.GetComponent<MeshRenderer>();
+diff --git a/Assets/Scripts/Presentation/UI/CollectionPanel.cs b/Assets/Scripts/Presentation/UI/CollectionPanel.cs
+index b14a597..d9068f8 100644
+--- a/Assets/Scripts/Presentation/UI/CollectionPanel.cs
++++ b/Assets/Scripts/Presentation/UI/CollectionPanel.cs
+@@ -13,25 +13,28 @@ public class CollectionPanel : UIBase
+ 
+     [SerializeField] private Button closeButton;
+ 
++    [Header("탭")]
++    [SerializeField] private Button augmentTabButton;
++    [SerializeField] private Button achievementTabButton;
++    [SerializeField] private Button iconTabButton;
++    [SerializeField] private GameObject augmentPage;
++    [SerializeField] private GameObject achievementPage;
++    [SerializeField] private GameObject iconPage;
++
+     [Header("증강 도감")]
+     [SerializeField] private TextAsset augmentsJson;
+     [SerializeField] private AugmentCardView augmentCardViewPrefab;
+     [SerializeField] private Transform augmentCardContainer;
+ 
+-    private Button augmentTabButton;
+-    private Button achievementTabButton;
+-    private Button iconTabButton;
+-    private GameObject augmentPage;
+-    private GameObject achievementPage;
+-    private GameObject iconPage;
+-
+     private static readonly Color SelectedTabColor = new Color(0.12f, 0.58f, 0.36f, 1f);
+     private static readonly Color NormalTabColor = new Color(0.88f, 0.82f, 0.68f, 1f);
+ 
+     public override void Init()
+     {
+         closeButton?.onClick.AddListener(Close);
+-        BuildTabNavigation();
++        augmentTabButton?.onClick.AddListener(OpenAugments);
++        achievementTabButton?.onClick.AddListener(OpenAchievements);
++        iconTabButton?.onClick.AddListener(OpenIcons);
+         BuildAugmentList();
+         SetTab(CollectionTab.Augments);
+     }
+@@ -62,135 +65,6 @@ public class CollectionPanel : UIBase
+         }
+     }
+ 
+-    private void BuildTabNavigation()
+-    {
+-        ScrollRect augmentScroll = augmentCardContainer != null
+-            ? augmentCardContainer.GetComponentInParent<ScrollRect>()
+-            : null;
+-        augmentPage = augmentScroll != null ? augmentScroll.gameObject : augmentCardContainer?.gameObject;
+-
+-        RectTransform tabBar = CreateRect("CollectionTabs", transform);
+-        tabBar.anchorMin = new Vector2(0.5f, 1f);
+-        tabBar.anchorMax = new Vector2(0.5f, 1f);
+-        tabBar.pivot = new Vector2(0.5f, 1f);
+-        tabBar.anchoredPosition = new Vector2(0f, -36f);
+-        tabBar.sizeDelta = new Vector2(660f, 64f);
+-
+-        augmentTabButton = CreateTabButton(tabBar, "AugmentTab", "증강", -220f);
+-        achievementTabButton = CreateTabButton(tabBar, "AchievementTab", "업적", 0f);
+-        iconTabButton = CreateTabButton(tabBar, "IconTab", "아이콘", 220f);
+-
+-        augmentTabButton.onClick.AddListener(OpenAugments);
+-        achievementTabButton.onClick.AddListener(OpenAchievements);
+-        iconTabButton.onClick.AddListener(OpenIcons);
+-
+-        RectTransform augmentPageRect = augmentPage != null ? augmentPage.GetComponent<RectTransform>() : null;
+-        Image augmentPageBackground = augmentPage != null ? augmentPage.GetComponent<Image>() : null;
+-        achievementPage = CreatePlaceholderPage(
+-            "AchievementPage", "업적 목록은 준비 중입니다.", augmentPageRect, augmentPageBackground);
+-        iconPage = CreatePlaceholderPage(
+-            "IconPage", "아이콘 목록은 준비 중입니다.", augmentPageRect, augmentPageBackground);
+-    }
+-
+-    private GameObject CreatePlaceholderPage(
+-        string objectName,
+-        string message,
+-        RectTransform referenceRect,
+-        Image referenceBackground)
+-    {
+-        // 기준 페이지와 부모가 다르면 같은 RectTransform 값도 화면에서 다른 크기와 위치가 된다.
+-        // 업적·아이콘 페이지를 증강 페이지와 같은 계층에 생성해 판넬 외형과 여백을 맞춘다.
+-        Transform pageParent = referenceRect != null && referenceRect.parent != null
+-            ? referenceRect.parent
+-            : transform;
+-        RectTransform page = CreateRect(objectName, pageParent);
+-        if (referenceRect != null)
+-        {
+-            // 증강 페이지를 기준으로 삼아 세 탭의 판넬 크기를 항상 동일하게 유지한다.
+-            page.anchorMin = referenceRect.anchorMin;
+-            page.anchorMax = referenceRect.anchorMax;
+-            page.pivot = referenceRect.pivot;
+-            page.anchoredPosition = referenceRect.anchoredPosition;
+-            page.sizeDelta = referenceRect.sizeDelta;
+-        }
+-        else
+-        {
+-            page.anchorMin = Vector2.zero;
+-            page.anchorMax = Vector2.one;
+-            page.offsetMin = new Vector2(50f, 50f);
+-            page.offsetMax = new Vector2(-50f, -150f);
+-        }
+-
+-        Image background = page.gameObject.AddComponent<Image>();
+-        if (referenceBackground != null)
+-        {
+-            // 배경 스프라이트·색상·Image 타입도 증강 페이지와 같게 맞춘다.
+-            background.sprite = referenceBackground.sprite;
+-            background.color = referenceBackground.color;
+-            background.material = referenceBackground.material;
+-            background.type = referenceBackground.type;
+-            background.preserveAspect = referenceBackground.preserveAspect;
+-        }
+-        else
+-        {
+-            background.color = new Color(1f, 0.98f, 0.92f, 0.96f);
+-        }
+-
+-        RectTransform labelRect = CreateRect("Message", page);
+-        labelRect.anchorMin = Vector2.zero;
+-        labelRect.anchorMax = Vector2.one;
+-        labelRect.offsetMin = Vector2.zero;
+-        labelRect.offsetMax = Vector2.zero;
+-
+-        TMP_Text label = labelRect.gameObject.AddComponent<TextMeshProUGUI>();
+-        label.text = message;
+-        label.fontSize = 36f;
+-        label.color = new Color(0.23f, 0.15f, 0.1f, 1f);
+-        label.alignment = TextAlignmentOptions.Center;
+-        label.raycastTarget = false;
+-        return page.gameObject;
+-    }
+-
+-    private static Button CreateTabButton(RectTransform parent, string objectName, string labelText, float x)
+-    {
+-        RectTransform buttonRect = CreateRect(objectName, parent);
+-        buttonRect.anchorMin = new Vector2(0.5f, 0.5f);
+-        buttonRect.anchorMax = new Vector2(0.5f, 0.5f);
+-        buttonRect.pivot = new Vector2(0.5f, 0.5f);
+-        buttonRect.anchoredPosition = new Vector2(x, 0f);
+-        buttonRect.sizeDelta = new Vector2(200f, 56f);
+-
+-        Image image = buttonRect.gameObject.AddComponent<Image>();
+-        image.color = NormalTabColor;
+-
+-        Button button = buttonRect.gameObject.AddComponent<Button>();
+-        button.targetGraphic = image;
+-
+-        RectTransform labelRect = CreateRect("Label", buttonRect);
+-        labelRect.anchorMin = Vector2.zero;
+-        labelRect.anchorMax = Vector2.one;
+-        labelRect.offsetMin = Vector2.zero;
+-        labelRect.offsetMax = Vector2.zero;
+-
+-        TMP_Text label = labelRect.gameObject.AddComponent<TextMeshProUGUI>();
+-        label.text = labelText;
+-        label.fontSize = 28f;
+-        label.fontStyle = FontStyles.Normal;
+-        label.color = new Color(0.23f, 0.15f, 0.1f, 1f);
+-        label.alignment = TextAlignmentOptions.Center;
+-        label.raycastTarget = false;
+-        return button;
+-    }
+-
+-    private static RectTransform CreateRect(string objectName, Transform parent)
+-    {
+-        GameObject child = new GameObject(objectName, typeof(RectTransform));
+-        child.layer = parent.gameObject.layer;
+-        RectTransform rect = child.GetComponent<RectTransform>();
+-        rect.SetParent(parent, false);
+-        return rect;
+-    }
+-
+     private void OpenAugments() => SetTab(CollectionTab.Augments);
+     private void OpenAchievements() => SetTab(CollectionTab.Achievements);
+     private void OpenIcons() => SetTab(CollectionTab.Icons);
+diff --git a/Assets/Scripts/Presentation/UI/GameHudPanel.cs b/Assets/Scripts/Presentation/UI/GameHudPanel.cs
+index 073b62a..9bf9efa 100644
+--- a/Assets/Scripts/Presentation/UI/GameHudPanel.cs
++++ b/Assets/Scripts/Presentation/UI/GameHudPanel.cs
+@@ -165,10 +165,10 @@ public class GameHudPanel : UIBase
+         int waiting,
+         int onBoard,
+         int finished,
+-        IReadOnlyList<string> augmentIds,
++        IReadOnlyList<string> augmentNames,
+         IReadOnlyCollection<int> waitingSlots = null)
+     {
+-        playerView?.SetState(team, waiting, onBoard, finished, augmentIds, waitingSlots);
++        playerView?.SetState(team, waiting, onBoard, finished, augmentNames, waitingSlots);
+     }
+ 
+     public void SetSelectedWaitingPiece(int team, int slotIndex)
+diff --git a/Assets/Scripts/Presentation/UI/PlayerStatusView.cs b/Assets/Scripts/Presentation/UI/PlayerStatusView.cs
+index f840ecc..c00ae30 100644
+--- a/Assets/Scripts/Presentation/UI/PlayerStatusView.cs
++++ b/Assets/Scripts/Presentation/UI/PlayerStatusView.cs
+@@ -88,7 +88,7 @@ public sealed class PlayerStatusView : MonoBehaviour
+         int waiting,
+         int onBoard,
+         int finished,
+-        IReadOnlyList<string> augmentIds,
++        IReadOnlyList<string> augmentNames,
+         IReadOnlyCollection<int> waitingSlots = null)
+     {
+         Transform panel = FindPanel(team);
+@@ -122,7 +122,7 @@ public sealed class PlayerStatusView : MonoBehaviour
+             Transform slot = panel.Find($"AugmentSlot_{i}");
+             if (slot == null) continue;
+             TMP_Text label = GetOrCreateAugmentLabel(slot);
+-            label.text = augmentIds != null && i < augmentIds.Count ? ShortAugmentName(augmentIds[i]) : "";
++            label.text = augmentNames != null && i < augmentNames.Count ? augmentNames[i] : string.Empty;
+         }
+     }
+ 
+@@ -237,7 +237,7 @@ public sealed class PlayerStatusView : MonoBehaviour
+         TMP_Text label = labelObject.GetComponent<TMP_Text>();
+         label.alignment = TextAlignmentOptions.Right;
+         label.fontSize = 18f;
+-        label.fontStyle = FontStyles.Bold;
++        label.fontStyle = FontStyles.Normal;
+         label.raycastTarget = false;
+         return label;
+     }
+@@ -384,19 +384,4 @@ public sealed class PlayerStatusView : MonoBehaviour
+             _ => "노랑"
+         };
+     }
+-
+-    private static string ShortAugmentName(string id)
+-    {
+-        if (string.IsNullOrEmpty(id)) return "";
+-        return id switch
+-        {
+-            "BackDoSwitch" => "빽도 전환",
+-            "QuickStart" => "빠른 출발",
+-            "WeakBoost" => "잔걸음 강화",
+-            "Shield" => "방패",
+-            "SturdyCarry" => "튼튼한 업기",
+-            "Rethrow" => "다시 굴리기",
+-            _ => id
+-        };
+-    }
+ }
+diff --git a/Assets/Scripts/Presentation/UI/ProfilePanel.cs b/Assets/Scripts/Presentation/UI/ProfilePanel.cs
+new file mode 100644
+index 0000000..4256ab4
+--- /dev/null
++++ b/Assets/Scripts/Presentation/UI/ProfilePanel.cs
+@@ -0,0 +1,36 @@
++using TMPro;
++using UnityEngine;
++using UnityEngine.UI;
++
++/// <summary>저장된 계정 프로필을 표시한다. 서버 프로필 API가 추가되면 ShowProfile 입력만 교체한다.</summary>
++public sealed class ProfilePanel : UIBase
++{
++    [SerializeField] private Button closeButton;
++    [SerializeField] private Image profileIcon;
++    [SerializeField] private TMP_Text iconPlaceholder;
++    [SerializeField] private TMP_Text nicknameText;
++    [SerializeField] private TMP_Text playerIdText;
++    [SerializeField] private TMP_Text statusText;
++
++    public override void Init()
++    {
++        closeButton?.onClick.AddListener(Close);
++    }
++
++    private void OnDestroy()
++    {
++        closeButton?.onClick.RemoveListener(Close);
++    }
++
++    public void ShowProfile(string playerId, string nickname, Sprite icon = null)
++    {
++        if (nicknameText != null)
++            nicknameText.text = string.IsNullOrWhiteSpace(nickname) ? "닉네임 미설정" : nickname;
++        if (playerIdText != null)
++            playerIdText.text = string.IsNullOrWhiteSpace(playerId) ? "플레이어 ID 없음" : $"플레이어 ID  {playerId}";
++        if (profileIcon != null && icon != null) profileIcon.sprite = icon;
++        if (iconPlaceholder != null) iconPlaceholder.gameObject.SetActive(icon == null);
++        if (statusText != null)
++            statusText.text = icon == null ? "프로필 아이콘은 서버 연동 후 표시됩니다." : string.Empty;
++    }
++}

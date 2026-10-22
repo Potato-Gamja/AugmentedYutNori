@@ -1,0 +1,741 @@
+From commit: 7b6c7a32b90c60b796c29bd6862aacc7c2699e8f
+Contributor: Potato-Gamja (Gamja)
+Subject: [feat] 게임 HUD 개편 및 저장 결과 선택 UI 추가
+Original: https://github.com/Potato-Gamja/AugmentedYutNori/commit/7b6c7a32b90c60b796c29bd6862aacc7c2699e8f
+
+diff --git a/Assets/Scripts/Flow/GameFlowController.cs b/Assets/Scripts/Flow/GameFlowController.cs
+index 9aca35d..1ddad48 100644
+--- a/Assets/Scripts/Flow/GameFlowController.cs
++++ b/Assets/Scripts/Flow/GameFlowController.cs
+@@ -83,7 +83,7 @@ public class GameFlowController : MonoBehaviour
+         BindPieces();
+         lastStateHash = StateHasher.HashHex(gameState, turnManager);
+ 
+-        hudPresenter = new GameFlowHudPresenter(hud, boardState, gameState);
++        hudPresenter = new GameFlowHudPresenter(hud, boardState, gameState, pieceViews);
+         selectionController = new GameFlowSelectionController(
+             boardView,
+             boardState,
+@@ -340,7 +340,7 @@ public class GameFlowController : MonoBehaviour
+         if (gameState.RemainingThrows > 0)
+         {
+             ChangeState(GameFlowState.Throw);
+-            hud?.SetInstruction($"{GameFlowHudPresenter.ResultLabel(outcome.Result)}! Throw again.");
++            hud?.SetInstruction($"{GameFlowHudPresenter.ResultLabel(outcome.Result)}! 한 번 더 던지세요.");
+         }
+         else if (gameRules.HasAnyStoredMove())
+         {
+@@ -360,7 +360,7 @@ public class GameFlowController : MonoBehaviour
+         }
+         else
+         {
+-            hud?.SetInstruction("Waiting for augment choices.");
++            hud?.SetInstruction("증강 선택지를 기다리는 중입니다.");
+         }
+     }
+ 
+@@ -421,20 +421,20 @@ public class GameFlowController : MonoBehaviour
+                 break;
+ 
+             case GameFlowState.Throw:
+-                PrepareInteractiveState();
++                PrepareInteractiveState(false);
+                 hud?.SetInteractionState(setup.CanControl(CurrentTeam), false);
+-                hud?.SetTurn($"Team {CurrentTeam + 1} Turn", CurrentTeam);
+-                hud?.SetInstruction(gameState.StoredResults.Count > 0 ? "Bonus throw." : "Throw Yut.");
++                hud?.SetTurn($"플레이어 {CurrentTeam + 1} 차례", CurrentTeam);
++                hud?.SetInstruction(gameState.StoredResults.Count > 0 ? "추가 윷을 던지세요." : "윷을 던지세요.");
+                 hud?.SetThrowInteractable(gameState.RemainingThrows > 0);
+                 hud?.SetRethrowVisible(false);
+                 hud?.SetTimerRunning(true);
+                 break;
+ 
+             case GameFlowState.Move:
+-                PrepareInteractiveState();
++                PrepareInteractiveState(true);
+                 hud?.SetInteractionState(setup.CanControl(CurrentTeam), false);
+-                hud?.SetTurn($"Team {CurrentTeam + 1} Turn", CurrentTeam);
+-                hud?.SetInstruction("Select a piece.");
++                hud?.SetTurn($"플레이어 {CurrentTeam + 1} 차례", CurrentTeam);
++                hud?.SetInstruction("이동할 말을 선택하세요.");
+                 hud?.SetThrowInteractable(false);
+                 hud?.SetRethrowVisible(hudPresenter.CanUseRethrow(CurrentTeam));
+                 hud?.SetTimerRunning(true);
+@@ -446,12 +446,12 @@ public class GameFlowController : MonoBehaviour
+                 hudPresenter.RefreshPlayerPanels();
+                 hud?.SetInteractionState(false, false);
+                 int winner = pendingWinnerTeam ?? gameState.WinnerTeam ?? CurrentTeam;
+-                hud?.SetInstruction($"Team {winner + 1} wins!");
++                hud?.SetInstruction($"플레이어 {winner + 1} 승리!");
+                 hud?.SetThrowInteractable(false);
+                 hud?.SetRethrowVisible(false);
+                 hud?.SetTimerRunning(false);
+                 uiManager?.Open<ResultPopup>()?.SetWinner(
+-                    $"Team {winner + 1}",
++                    $"플레이어 {winner + 1}",
+                     GameHudPanel.GetTeamColor(winner));
+                 break;
+ 
+@@ -461,10 +461,10 @@ public class GameFlowController : MonoBehaviour
+         }
+     }
+ 
+-    private void PrepareInteractiveState()
++    private void PrepareInteractiveState(bool allowPieceSelection)
+     {
+         selectionController.Clear();
+-        selectionController.RefreshTurnHighlights();
++        selectionController.RefreshTurnHighlights(allowPieceSelection);
+         hudPresenter.RefreshPlayerPanels();
+     }
+ 
+@@ -487,12 +487,12 @@ public class GameFlowController : MonoBehaviour
+     private void PrepareAugmentSelection()
+     {
+         selectionController.Clear();
+-        hud?.SetTurn($"Team {augmentSelectionTeam + 1} Augment", augmentSelectionTeam);
++        hud?.SetTurn($"플레이어 {augmentSelectionTeam + 1} 증강 선택", augmentSelectionTeam);
+         hud?.SetThrowInteractable(false);
+         hud?.SetRethrowVisible(false);
+         hud?.SetTimerRunning(false);
+         hud?.SetInteractionState(setup.CanControl(augmentSelectionTeam), gameSession?.IsCommandPending ?? false);
+-        hud?.SetInstruction("Waiting for augment choices.");
++        hud?.SetInstruction("증강 선택지를 기다리는 중입니다.");
+     }
+ 
+     private void OpenAugmentSelection(IReadOnlyList<string> ids)
+@@ -508,7 +508,7 @@ public class GameFlowController : MonoBehaviour
+         if (!setup.CanControl(augmentSelectionTeam))
+         {
+             uiManager?.Close<AugmentSelectPanel>();
+-            hud?.SetInstruction("Waiting for augment selection.");
++            hud?.SetInstruction("다른 플레이어의 증강 선택을 기다리는 중입니다.");
+             return;
+         }
+ 
+@@ -517,7 +517,7 @@ public class GameFlowController : MonoBehaviour
+             selection.Add(augmentCatalog.Find(id));
+         panel.Setup(selection, OnAugmentSelected);
+         uiManager.Open<AugmentSelectPanel>();
+-        hud?.SetInstruction("Select an augment.");
++        hud?.SetInstruction("증강을 선택하세요.");
+     }
+ 
+     private void OnWaitingPieceClicked(int team, int slotIndex)
+@@ -610,7 +610,7 @@ public class GameFlowController : MonoBehaviour
+         Debug.LogError("[GameFlow] 서버 이동을 현재 상태에서 재현할 수 없습니다. 전체 상태 동기화가 필요합니다.", this);
+         selectionController?.Clear();
+         hud?.SetInteractionState(false, false);
+-        hud?.SetInstruction("State sync required.");
++        hud?.SetInstruction("게임 상태를 다시 동기화해야 합니다.");
+     }
+ 
+     private void OnBoardLayoutReloaded()
+@@ -618,8 +618,8 @@ public class GameFlowController : MonoBehaviour
+         selectionController.Clear();
+         RefreshPieceLayout();
+         hudPresenter.RefreshPlayerPanels();
+-        selectionController.RefreshTurnHighlights(currentState != GameFlowState.Finish);
+-        if (currentState == GameFlowState.Move) hud?.SetInstruction("Select a piece.");
++        selectionController.RefreshTurnHighlights(currentState == GameFlowState.Move);
++        if (currentState == GameFlowState.Move) hud?.SetInstruction("이동할 말을 선택하세요.");
+     }
+ 
+     private void RefreshPieceLayout()
+diff --git a/Assets/Scripts/Flow/GameFlowHudPresenter.cs b/Assets/Scripts/Flow/GameFlowHudPresenter.cs
+index 4e8f9fb..2e8d07c 100644
+--- a/Assets/Scripts/Flow/GameFlowHudPresenter.cs
++++ b/Assets/Scripts/Flow/GameFlowHudPresenter.cs
+@@ -10,12 +10,18 @@ public sealed class GameFlowHudPresenter
+     private readonly GameHudPanel hud;
+     private readonly BoardState boardState;
+     private readonly GameState gameState;
++    private readonly IReadOnlyList<PieceView> pieceViews;
+ 
+-    public GameFlowHudPresenter(GameHudPanel hud, BoardState boardState, GameState gameState)
++    public GameFlowHudPresenter(
++        GameHudPanel hud,
++        BoardState boardState,
++        GameState gameState,
++        IReadOnlyList<PieceView> pieceViews)
+     {
+         this.hud = hud;
+         this.boardState = boardState;
+         this.gameState = gameState;
++        this.pieceViews = pieceViews;
+     }
+ 
+     public void RefreshPlayerPanels()
+@@ -32,11 +38,17 @@ public sealed class GameFlowHudPresenter
+             int waiting = 0;
+             int onBoard = 0;
+             int finished = 0;
++            var waitingSlots = new List<int>();
+ 
+             foreach (Piece piece in boardState.Pieces)
+             {
+                 if (piece.Team != team) continue;
+-                if (piece.IsWaiting) waiting++;
++                if (piece.IsWaiting)
++                {
++                    waiting++;
++                    PieceView view = FindView(piece);
++                    if (view != null) waitingSlots.Add(view.SlotIndex);
++                }
+                 else if (piece.IsOnBoard) onBoard++;
+                 else if (piece.IsFinished) finished++;
+             }
+@@ -45,8 +57,16 @@ public sealed class GameFlowHudPresenter
+             foreach (IAugment augment in boardState.GetAugments(team))
+                 augmentIds.Add(augment.Id);
+ 
+-            hud.SetPlayerState(team, waiting, onBoard, finished, augmentIds);
++            hud.SetPlayerState(team, waiting, onBoard, finished, augmentIds, waitingSlots);
++        }
+     }
++
++    private PieceView FindView(Piece piece)
++    {
++        if (pieceViews == null) return null;
++        foreach (PieceView view in pieceViews)
++            if (view != null && view.Piece == piece) return view;
++        return null;
+     }
+ 
+     public void RefreshStoredResults(Piece contextPiece = null)
+@@ -54,7 +74,7 @@ public sealed class GameFlowHudPresenter
+         if (hud == null || gameState == null) return;
+         if (gameState.StoredResults.Count == 0)
+         {
+-            hud.SetResults("Stored Results: -");
++            hud.SetResults("저장 결과: -");
+             return;
+         }
+ 
+@@ -70,7 +90,7 @@ public sealed class GameFlowHudPresenter
+             results.Add($"{ResultLabel(result)} {baseCount}{bonusText}");
+         }
+ 
+-        hud.SetResults($"Stored: {string.Join("  ", results)}");
++        hud.SetResults($"저장: {string.Join("  ", results)}");
+     }
+ 
+     public bool CanUseRethrow(int team)
+diff --git a/Assets/Scripts/Network/PlayerIdentity.cs b/Assets/Scripts/Network/PlayerIdentity.cs
+index 855f729..d792cf3 100644
+--- a/Assets/Scripts/Network/PlayerIdentity.cs
++++ b/Assets/Scripts/Network/PlayerIdentity.cs
+@@ -31,10 +31,10 @@ public class PlayerIdentity
+             GuestLoginResponse response = await api.Post<GuestLoginRequest, GuestLoginResponse>(
+                 "/players", new GuestLoginRequest { nickname = nickname });
+ 
+-            if (response == null || string.IsNullOrEmpty(response.token))
+-                throw new ApiException("POST", "/players", 200, "응답에 token이 없습니다.", null);
++            if (response == null || string.IsNullOrEmpty(response.guestToken))
++                throw new ApiException("POST", "/players", 200, "응답에 guestToken이 없습니다.", null);
+ 
+-            Save(response.playerId, response.token, string.IsNullOrEmpty(response.nickname) ? nickname : response.nickname);
++            Save(response.playerId, response.guestToken, string.IsNullOrEmpty(response.nickname) ? nickname : response.nickname);
+         }
+ 
+         api.Token = Token;
+@@ -73,6 +73,6 @@ public class GuestLoginRequest
+ public class GuestLoginResponse
+ {
+     public string playerId;
+-    public string token;
+     public string nickname;
++    public string guestToken;
+ }
+diff --git a/Assets/Scripts/Network/WebSocketClient.cs b/Assets/Scripts/Network/WebSocketClient.cs
+index 3718b66..38e0eb5 100644
+--- a/Assets/Scripts/Network/WebSocketClient.cs
++++ b/Assets/Scripts/Network/WebSocketClient.cs
+@@ -30,8 +30,9 @@ public class WebSocketClient : MonoBehaviour
+ 
+     public string Url { get => url; set => url = value; }
+ 
+-    // token이 있으면 ?token=... 으로 붙인다 (WebGL은 헤더를 못 붙이므로 주소로 전달)
+-    public async void Connect(string token = null)
++    // guestToken이 있으면 쿼리로 붙인다 (WebGL은 헤더를 못 붙이므로 주소로 전달).
++    // 서버 GuestTokenHandshakeInterceptor도 같은 guestToken 이름으로 읽는다.
++    public async void Connect(string guestToken = null)
+     {
+         if (socket != null)
+         {
+@@ -39,9 +40,9 @@ public class WebSocketClient : MonoBehaviour
+             await CloseSocket();
+         }
+ 
+-        string target = string.IsNullOrEmpty(token)
++        string target = string.IsNullOrEmpty(guestToken)
+             ? url
+-            : $"{url}{(url.Contains("?") ? "&" : "?")}token={Uri.EscapeDataString(token)}";
++            : $"{url}{(url.Contains("?") ? "&" : "?")}guestToken={Uri.EscapeDataString(guestToken)}";
+ 
+         closingByUser = false;
+         LatencyMs = -1;
+diff --git a/Assets/Scripts/Presentation/Board/NodeView.cs b/Assets/Scripts/Presentation/Board/NodeView.cs
+index 0750d80..db6e705 100644
+--- a/Assets/Scripts/Presentation/Board/NodeView.cs
++++ b/Assets/Scripts/Presentation/Board/NodeView.cs
+@@ -34,8 +34,12 @@ public class NodeView : MonoBehaviour
+     [SerializeField] private Sprite captureBadgeSprite;
+     [SerializeField] private Sprite carryRedBadgeSprite;
+     [SerializeField] private Sprite carryBlueBadgeSprite;
++    [SerializeField] private Sprite carryGreenBadgeSprite;
++    [SerializeField] private Sprite carryYellowBadgeSprite;
+     [SerializeField] private Sprite finishBadgeSprite;
+     [SerializeField] private Sprite destinationHighlightSprite;
++    [SerializeField] private List<Sprite> teamDestinationHighlightSprites = new();
++    [SerializeField] private List<Sprite> teamResultBadgeSprites = new();
+ 
+     
+     private SpriteRenderer destinationBadge;
+@@ -82,6 +86,25 @@ private SpriteRenderer outline;
+         outline.enabled = true;
+     }
+ 
++    public void SetHighlight(Color color, int team)
++    {
++        SetHighlight(color);
++        if (outline == null || teamDestinationHighlightSprites == null ||
++            team < 0 || team >= teamDestinationHighlightSprites.Count ||
++            teamDestinationHighlightSprites[team] == null) return;
++
++        outline.sprite = teamDestinationHighlightSprites[team];
++        outline.transform.localScale = Vector3.one;
++        outline.color = Color.white;
++    }
++
++    public Sprite GetResultBadgeSprite(int team)
++    {
++        return teamResultBadgeSprites != null && team >= 0 && team < teamResultBadgeSprites.Count
++            ? teamResultBadgeSprites[team]
++            : null;
++    }
++
+ public void ClearHighlight()
+     {
+         if (outline != null) outline.enabled = false;
+@@ -133,7 +156,13 @@ private SpriteRenderer CreateOutline()
+         destinationBadge.sprite = badgeType == DestinationBadgeType.Capture
+             ? captureBadgeSprite
+             : badgeType == DestinationBadgeType.Carry
+-                ? (movingTeam == 0 ? carryRedBadgeSprite : carryBlueBadgeSprite)
++                ? movingTeam switch
++                {
++                    0 => carryRedBadgeSprite,
++                    1 => carryBlueBadgeSprite,
++                    2 => carryGreenBadgeSprite,
++                    _ => carryYellowBadgeSprite
++                }
+                 : finishBadgeSprite;
+         destinationBadge.enabled = destinationBadge.sprite != null;
+     }
+diff --git a/Assets/Scripts/Presentation/Piece/PieceView.cs b/Assets/Scripts/Presentation/Piece/PieceView.cs
+index 38df158..3e4ee3c 100644
+--- a/Assets/Scripts/Presentation/Piece/PieceView.cs
++++ b/Assets/Scripts/Presentation/Piece/PieceView.cs
+@@ -21,17 +21,20 @@ public class PieceView : MonoBehaviour
+     [SerializeField] private Sprite selectedRingSprite;
+     [SerializeField] private Sprite selectedFloorSprite;
+     [SerializeField] private Sprite selectedFloorShadowSprite;
++    [SerializeField] private Sprite stackBadgeSprite;
+     [SerializeField] private Color stackTextColor = Color.white;
+     [SerializeField] private float stackTextSize = 0.08f;
+ 
+     private Vector3 homePosition;
+     private Color normalColor;
+     private TextMesh stackText;
++    private SpriteRenderer stackBadge;
+     private SpriteRenderer highlightOutline;
+     private SpriteRenderer availableGlow;
+     private SpriteRenderer selectedRing;
+     private SpriteRenderer selectedFloor;
+     private SpriteRenderer selectedFloorShadow;
++    private Vector3 baseScale;
+     private bool isSelected;
+     
+     private bool worldVisible = true;
+@@ -59,6 +62,7 @@ private bool isTurnHighlighted;
+ 
+ private void Awake()
+     {
++        baseScale = transform.localScale;
+         if (spriteRenderer == null) spriteRenderer = GetComponentInChildren<SpriteRenderer>();
+         if (bodySprite != null) spriteRenderer.sprite = bodySprite;
+         homePosition = transform.position;
+@@ -72,6 +76,15 @@ private void Awake()
+         }
+         else highlightOutline = FindOrCreateHighlightOutline();
+         stackText = transform.Find("StackCount")?.GetComponent<TextMesh>() ?? CreateStackText();
++        stackBadge = FindOrCreateEffectRenderer("StackBadge", stackBadgeSprite, 2);
++        if (stackBadge != null)
++        {
++            stackBadge.transform.SetParent(transform, false);
++            stackBadge.transform.localPosition = new Vector3(0.28f, 0.28f, 0f);
++            stackBadge.transform.localScale = Vector3.one * 0.9f;
++        }
++        stackText.transform.localPosition = new Vector3(0.28f, 0.28f, 0f);
++        stackText.color = GetStackTextColor(team);
+         SetStackCount(1);
+         RefreshHighlight();
+     }
+@@ -96,6 +109,7 @@ private void Awake()
+         name = $"Piece_Team{configuredTeam + 1}_{configuredSlot}";
+         normalColor = teamColor;
+         if (spriteRenderer != null) spriteRenderer.color = teamColor;
++        if (stackText != null) stackText.color = GetStackTextColor(team);
+         RefreshHighlight();
+     }
+ 
+@@ -110,7 +124,9 @@ public void ReturnHome()
+ public void SetSelected(bool selected)
+     {
+         isSelected = selected;
+-        transform.localScale = selected ? Vector3.one * 1.15f : Vector3.one;
++        transform.localScale = selected
++            ? new Vector3(baseScale.x * 1.15f, baseScale.y * 1.15f, baseScale.z)
++            : baseScale;
+         RefreshHighlight();
+     }
+ 
+@@ -149,7 +165,9 @@ private void RefreshHighlight()
+     // 업힌 말 수. 2개 이상일 때만 숫자 표시
+     public void SetStackCount(int count)
+     {
+-        stackText.text = count >= 2 ? count.ToString() : "";
++        bool stacked = count >= 2;
++        stackText.text = stacked ? count.ToString() : "";
++        if (stackBadge != null) stackBadge.enabled = worldVisible && stacked;
+     }
+ 
+     // 업힌 말끼리 같은 자리에 겹치므로, 맨 위에 그려질 말을 정한다
+@@ -161,16 +179,25 @@ public void SetSortingOrder(int order)
+         if (availableGlow != null) availableGlow.sortingOrder = order - 1;
+         if (selectedRing != null) selectedRing.sortingOrder = order + 1;
+         if (highlightOutline != null) highlightOutline.sortingOrder = order - 1;
+-        stackText.GetComponent<MeshRenderer>().sortingOrder = order + 2;
++        if (stackBadge != null) stackBadge.sortingOrder = order + 2;
++        stackText.GetComponent<MeshRenderer>().sortingOrder = order + 3;
+     }
+ 
+ public bool Contains(Vector3 worldPosition)
+     {
+         if (!gameObject.activeInHierarchy || !worldVisible) return false;
+ 
+-        Vector3 center = transform.position;
++        Vector3 center = spriteRenderer.bounds.center;
+         center.z = worldPosition.z;
+-        return Vector3.Distance(center, worldPosition) <= spriteRenderer.bounds.extents.x;
++        float radius = Mathf.Max(spriteRenderer.bounds.extents.x, spriteRenderer.bounds.extents.y);
++        return Vector3.Distance(center, worldPosition) <= radius;
++    }
++
++    // 같은 칸에서 여러 팀 말의 클릭 영역이 겹칠 때 실제 보이는 말과 가장 가까운 대상을 고르는 데 사용한다.
++    public float DistanceTo(Vector3 worldPosition)
++    {
++        Vector3 center = spriteRenderer.bounds.center;
++        return Vector2.Distance(center, worldPosition);
+     }
+ 
+     // points: 지나갈 칸들의 월드 좌표. hideAtEnd: 골인하면 도착 후 사라짐
+@@ -222,6 +249,17 @@ public bool Contains(Vector3 worldPosition)
+         return text;
+     }
+ 
++    private static Color GetStackTextColor(int teamIndex)
++    {
++        return teamIndex switch
++        {
++            0 => new Color32(170, 45, 45, 255),
++            1 => new Color32(35, 88, 165, 255),
++            2 => new Color32(32, 127, 83, 255),
++            _ => new Color32(117, 75, 18, 255)
++        };
++    }
++
+     private SpriteRenderer CreateHighlightOutline()
+     {
+         // 원본 말 색을 바꾸지 않고 테두리만 빛나게 보이도록
+@@ -273,6 +311,7 @@ public bool Contains(Vector3 worldPosition)
+     {
+         worldVisible = visible;
+         if (stackText != null) stackText.gameObject.SetActive(visible);
++        if (stackBadge != null) stackBadge.enabled = visible && !string.IsNullOrEmpty(stackText.text);
+         RefreshHighlight();
+     }
+ }
+diff --git a/Assets/Scripts/Presentation/UI/GameHudPanel.cs b/Assets/Scripts/Presentation/UI/GameHudPanel.cs
+index 5fe110a..e7a2980 100644
+--- a/Assets/Scripts/Presentation/UI/GameHudPanel.cs
++++ b/Assets/Scripts/Presentation/UI/GameHudPanel.cs
+@@ -26,9 +26,15 @@ public class GameHudPanel : UIBase
+     [SerializeField] private Sprite chipBack;
+     [SerializeField] private Sprite resultRevealBackground;
+     [SerializeField] private Sprite resultRevealGlow;
++    [SerializeField] private Sprite yutStickFlat;
++    [SerializeField] private Sprite yutStickRound;
++    [SerializeField] private Sprite yutStickBackdo;
+     [SerializeField] private Image timerFill;
+     [SerializeField] private TMP_Text timerText;
+     [SerializeField] private float visualTurnSeconds = 30f;
++    [Header("Team Piece Art")]
++    [SerializeField] private List<Sprite> teamPieceSprites = new();
++    [SerializeField] private List<Sprite> teamPieceGlowSprites = new();
+ 
+     private TurnHudView turnView;
+     private PlayerStatusView playerView;
+@@ -70,7 +76,13 @@ public class GameHudPanel : UIBase
+             chipConsumeRed,
+             chipConsumeBlue,
+             chipBack);
+-        resultRevealView.Configure(resultText, resultRevealBackground, resultRevealGlow);
++        resultRevealView.Configure(
++            resultText,
++            resultRevealBackground,
++            resultRevealGlow,
++            yutStickFlat,
++            yutStickRound,
++            yutStickBackdo);
+ 
+         if (throwButton != null)
+         {
+@@ -139,7 +151,7 @@ public class GameHudPanel : UIBase
+ 
+     public void ConfigurePlayers(int teamCount, int piecesPerTeam)
+     {
+-        playerView?.Configure(teamCount, piecesPerTeam);
++        playerView?.Configure(teamCount, piecesPerTeam, teamPieceSprites, teamPieceGlowSprites);
+     }
+ 
+     public void SetPlayerState(
+@@ -147,9 +159,10 @@ public class GameHudPanel : UIBase
+         int waiting,
+         int onBoard,
+         int finished,
+-        IReadOnlyList<string> augmentIds)
++        IReadOnlyList<string> augmentIds,
++        IReadOnlyCollection<int> waitingSlots = null)
+     {
+-        playerView?.SetState(team, waiting, onBoard, finished, augmentIds);
++        playerView?.SetState(team, waiting, onBoard, finished, augmentIds, waitingSlots);
+     }
+ 
+     public void SetSelectedWaitingPiece(int team, int slotIndex)
+@@ -157,6 +170,11 @@ public class GameHudPanel : UIBase
+         playerView?.SetSelectedWaitingPiece(team, slotIndex);
+     }
+ 
++    public void SetWaitingPieceAvailable(int team, int slotIndex, bool available)
++    {
++        playerView?.SetWaitingPieceAvailable(team, slotIndex, available);
++    }
++
+     public void MarkResultPending(int resultIndex, int team)
+     {
+         storedResultView?.MarkPending(resultIndex, team);
+diff --git a/Assets/Scripts/Presentation/UI/PlayerStatusView.cs b/Assets/Scripts/Presentation/UI/PlayerStatusView.cs
+index 4325f92..419f562 100644
+--- a/Assets/Scripts/Presentation/UI/PlayerStatusView.cs
++++ b/Assets/Scripts/Presentation/UI/PlayerStatusView.cs
+@@ -15,12 +15,21 @@ public sealed class PlayerStatusView : MonoBehaviour
+     private const int AugmentSlotCount = 3;
+     private int activeTeamCount = 2;
+     private int pieceSlotCount = MaxPieceSlotCount;
++    private int currentActiveTeam;
+     private Action<int, int> waitingPieceClicked;
+-
+-    public void Configure(int teamCount, int piecesPerTeam)
++    private IReadOnlyList<Sprite> teamPieceSprites;
++    private IReadOnlyList<Sprite> teamPieceGlowSprites;
++
++    public void Configure(
++        int teamCount,
++        int piecesPerTeam,
++        IReadOnlyList<Sprite> pieceSprites,
++        IReadOnlyList<Sprite> pieceGlowSprites)
+     {
+         activeTeamCount = Mathf.Clamp(teamCount, 2, MaxTeamCount);
+         pieceSlotCount = Mathf.Clamp(piecesPerTeam, 1, MaxPieceSlotCount);
++        teamPieceSprites = pieceSprites;
++        teamPieceGlowSprites = pieceGlowSprites;
+         EnsureFourPlayerPanels();
+ 
+         for (int team = 0; team < MaxTeamCount; team++)
+@@ -59,22 +68,29 @@ public sealed class PlayerStatusView : MonoBehaviour
+         }
+     }
+ 
+-    public void SetState(int team, int waiting, int onBoard, int finished, IReadOnlyList<string> augmentIds)
++    public void SetState(
++        int team,
++        int waiting,
++        int onBoard,
++        int finished,
++        IReadOnlyList<string> augmentIds,
++        IReadOnlyCollection<int> waitingSlots = null)
+     {
+         Transform panel = FindPanel(team);
+         if (panel == null) return;
+ 
+         TMP_Text waitingLabel = panel.Find("WaitingLabel")?.GetComponent<TMP_Text>();
+-        if (waitingLabel != null) waitingLabel.text = $"WAITING {waiting}  /  BOARD {onBoard}";
++        if (waitingLabel != null) waitingLabel.gameObject.SetActive(false);
+ 
+         TMP_Text finishLabel = panel.Find("FinishLabel")?.GetComponent<TMP_Text>();
+-        if (finishLabel != null) finishLabel.text = $"FINISHED {finished}/{pieceSlotCount}";
++        if (finishLabel != null) finishLabel.text = $"완주 {finished}/{pieceSlotCount}";
+ 
+         for (int i = 0; i < MaxPieceSlotCount; i++)
+         {
+             Transform waitingSlot = panel.Find($"PieceSlot_{i}");
+             Transform piece = waitingSlot != null ? waitingSlot.Find("Piece") : null;
+-            if (piece != null) piece.gameObject.SetActive(i < pieceSlotCount && i < waiting);
++            bool isWaiting = waitingSlots != null ? ContainsSlot(waitingSlots, i) : i < waiting;
++            if (piece != null) piece.gameObject.SetActive(i < pieceSlotCount && isWaiting);
+ 
+             Image finishImage = panel.Find($"FinishSlot_{i}")?.GetComponent<Image>();
+             if (finishImage != null)
+@@ -115,6 +131,7 @@ public sealed class PlayerStatusView : MonoBehaviour
+ 
+     public void SetActiveTeam(int activeTeam)
+     {
++        currentActiveTeam = activeTeam;
+         for (int team = 0; team < MaxTeamCount; team++)
+         {
+             Transform panel = FindPanel(team);
+@@ -126,9 +143,42 @@ public sealed class PlayerStatusView : MonoBehaviour
+             Image header = panel.Find("Header")?.GetComponent<Image>();
+             if (header != null)
+                 header.color = team == activeTeam ? TurnHudView.GetTeamColor(team) : InactiveHeaderColor(team);
++
++            TMP_Text headerLabel = panel.Find("Header")?.GetComponentInChildren<TMP_Text>(true);
++            if (headerLabel != null)
++                headerLabel.color = team == activeTeam ? Color.white : TurnHudView.GetTeamColor(team);
+         }
+     }
+ 
++    public void SetWaitingPieceAvailable(int team, int slotIndex, bool available)
++    {
++        Transform slot = FindPanel(team)?.Find($"PieceSlot_{slotIndex}");
++        if (slot == null) return;
++
++        Transform glow = slot.Find("AvailableGlow");
++        if (glow == null)
++        {
++            var glowObject = new GameObject("AvailableGlow", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
++            glowObject.transform.SetParent(slot, false);
++            glowObject.transform.SetAsFirstSibling();
++            RectTransform rect = glowObject.GetComponent<RectTransform>();
++            rect.anchorMin = new Vector2(0.5f, 0.5f);
++            rect.anchorMax = new Vector2(0.5f, 0.5f);
++            rect.pivot = new Vector2(0.5f, 0.5f);
++            rect.anchoredPosition = Vector2.zero;
++            rect.sizeDelta = new Vector2(104f, 104f);
++            glow = glowObject.transform;
++        }
++
++        Image image = glow.GetComponent<Image>();
++        image.raycastTarget = false;
++        if (teamPieceGlowSprites != null && team >= 0 && team < teamPieceGlowSprites.Count)
++            image.sprite = teamPieceGlowSprites[team];
++        image.color = Color.white;
++        image.preserveAspect = true;
++        glow.gameObject.SetActive(available && image.sprite != null);
++    }
++
+     private Transform FindPanel(int team)
+     {
+         return team switch
+@@ -158,8 +208,9 @@ public sealed class PlayerStatusView : MonoBehaviour
+ 
+         PlacePanel(FindPanel(0), false, true);
+         PlacePanel(FindPanel(1), true, true);
+-        PlacePanel(FindPanel(2), false, false);
+-        PlacePanel(FindPanel(3), true, false);
++        // 4인 시안 기준: 4번은 좌하단, 현재 차례가 강조되는 3번은 우하단에 둔다.
++        PlacePanel(FindPanel(2), true, false);
++        PlacePanel(FindPanel(3), false, false);
+     }
+ 
+     private void ConfigureSeat(int team, bool occupied)
+@@ -168,17 +219,32 @@ public sealed class PlayerStatusView : MonoBehaviour
+         if (panel == null) return;
+         panel.gameObject.SetActive(true); // 2·3인에서도 남은 자리를 빈 좌석으로 표시한다.
+ 
++        TMP_Text waitingLabel = panel.Find("WaitingLabel")?.GetComponent<TMP_Text>();
++        if (waitingLabel != null) waitingLabel.gameObject.SetActive(false);
++
+         TMP_Text headerLabel = panel.Find("Header")?.GetComponentInChildren<TMP_Text>(true);
+         if (headerLabel != null)
+         {
+-            headerLabel.text = occupied ? $"PLAYER {team + 1}" : "EMPTY";
+-            headerLabel.color = occupied ? TurnHudView.GetTeamColor(team) : new Color32(150, 140, 125, 255);
++            headerLabel.text = occupied ? $"플레이어 {team + 1}  /  {TeamName(team)} 팀" : "빈 자리";
++            headerLabel.color = !occupied
++                ? new Color32(150, 140, 125, 255)
++                : team == currentActiveTeam ? Color.white : TurnHudView.GetTeamColor(team);
+         }
+ 
+         for (int slot = 0; slot < MaxPieceSlotCount; slot++)
+         {
+             Transform waitingSlot = panel.Find($"PieceSlot_{slot}");
+-            if (waitingSlot != null) waitingSlot.gameObject.SetActive(occupied && slot < pieceSlotCount);
++            if (waitingSlot != null)
++            {
++                waitingSlot.gameObject.SetActive(occupied && slot < pieceSlotCount);
++                Image pieceImage = waitingSlot.Find("Piece")?.GetComponent<Image>();
++                if (pieceImage != null && teamPieceSprites != null && team < teamPieceSprites.Count && teamPieceSprites[team] != null)
++                {
++                    pieceImage.sprite = teamPieceSprites[team];
++                    pieceImage.color = Color.white;
++                }
++                SetWaitingPieceAvailable(team, slot, false);
++            }
+             Transform finishSlot = panel.Find($"FinishSlot_{slot}");
+             if (finishSlot != null) finishSlot.gameObject.SetActive(occupied && slot < pieceSlotCount);
+         }
+@@ -225,17 +291,35 @@ public sealed class PlayerStatusView : MonoBehaviour
+         };
+     }
+ 
++    private static bool ContainsSlot(IReadOnlyCollection<int> slots, int target)
++    {
++        foreach (int slot in slots)
++            if (slot == target) return true;
++        return false;
++    }
++
++    private static string TeamName(int team)
++    {
++        return team switch
++        {
++            0 => "빨강",
++            1 => "파랑",
++            2 => "초록",
++            _ => "노랑"
++        };
++    }
++
+     private static string ShortAugmentName(string id)
+     {
+         if (string.IsNullOrEmpty(id)) return "";
+         return id switch
+         {
+-            "BackDoSwitch" => "BACK DO",
+-            "QuickStart" => "QUICK",
+-            "WeakBoost" => "BOOST",
+-            "Shield" => "SHIELD",
+-            "SturdyCarry" => "CARRY",
+-            "Rethrow" => "RETHROW",
++            "BackDoSwitch" => "빽도 전환",
++            "QuickStart" => "빠른 출발",
++            "WeakBoost" => "잔걸음 강화",
++            "Shield" => "방패",
++            "SturdyCarry" => "튼튼한 업기",
++            "Rethrow" => "다시 굴리기",
+             _ => id
+         };
+     }

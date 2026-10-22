@@ -1,0 +1,476 @@
+From commit: 4c786665da3e27df4b3637802be43235086787e6
+Contributor: Potato-Gamja (Gamja)
+Subject: [feat] 재접속 상태 표시 및 공통 사운드 설정 UI 추가
+Original: https://github.com/Potato-Gamja/AugmentedYutNori/commit/4c786665da3e27df4b3637802be43235086787e6
+
+diff --git a/Assets/Scripts/Flow/GameFlowController.cs b/Assets/Scripts/Flow/GameFlowController.cs
+index 1ddad48..b88a071 100644
+--- a/Assets/Scripts/Flow/GameFlowController.cs
++++ b/Assets/Scripts/Flow/GameFlowController.cs
+@@ -43,6 +43,7 @@ public class GameFlowController : MonoBehaviour
+     private int? pendingTurnTeam;
+     private int? pendingWinnerTeam;
+     private string lastStateHash;
++    private readonly Dictionary<string, int> playerTeams = new();
+ 
+     public GameFlowState CurrentState => currentState;
+     public int CurrentTeam => turnManager != null ? turnManager.CurrentTeam : 0;
+@@ -159,6 +160,7 @@ public class GameFlowController : MonoBehaviour
+         hud.ThrowClicked += OnThrowButtonClicked;
+         hud.RethrowClicked += OnRethrowButtonClicked;
+         hud.WaitingPieceClicked += OnWaitingPieceClicked;
++        hud.SettingsClicked += OnSettingsClicked;
+         hud.ConfigurePlayers(setup.teamCount, setup.piecesPerTeam);
+         hud.SetRethrowVisible(false);
+     }
+@@ -265,6 +267,14 @@ public class GameFlowController : MonoBehaviour
+         boardState.PiecesReturnedByBoardChange += OnPiecesReturnedByBoardChange;
+         boardState.DesyncDetected += OnDesyncDetected;
+         boardView.LayoutReloaded += OnBoardLayoutReloaded;
++        if (gameSession is RemoteGameSession remote)
++        {
++            remote.PlayerDisconnected += OnRemotePlayerDisconnected;
++            remote.PlayerReconnected += OnRemotePlayerReconnected;
++            remote.PlayerRemoved += OnRemotePlayerRemoved;
++            remote.AutomatedMoveApplied += OnAutomatedMoveApplied;
++            remote.ConnectionAvailabilityChanged += OnConnectionAvailabilityChanged;
++        }
+     }
+ 
+     private void OnDestroy()
+@@ -274,10 +284,19 @@ public class GameFlowController : MonoBehaviour
+             hud.ThrowClicked -= OnThrowButtonClicked;
+             hud.RethrowClicked -= OnRethrowButtonClicked;
+             hud.WaitingPieceClicked -= OnWaitingPieceClicked;
++            hud.SettingsClicked -= OnSettingsClicked;
+         }
+ 
+         if (gameSession != null)
+         {
++            if (gameSession is RemoteGameSession remote)
++            {
++                remote.PlayerDisconnected -= OnRemotePlayerDisconnected;
++                remote.PlayerReconnected -= OnRemotePlayerReconnected;
++            remote.PlayerRemoved -= OnRemotePlayerRemoved;
++            remote.AutomatedMoveApplied -= OnAutomatedMoveApplied;
++            remote.ConnectionAvailabilityChanged -= OnConnectionAvailabilityChanged;
++            }
+             gameSession.Thrown -= OnThrown;
+             gameSession.Moved -= OnMoved;
+             gameSession.TurnChanged -= OnTurnChanged;
+@@ -364,6 +383,68 @@ public class GameFlowController : MonoBehaviour
+         }
+     }
+ 
++    private void OnSettingsClicked()
++    {
++        // UI 조립 담당 확인: SettingsPanel 프리팹을 각 씬 UIManager의 prefabs 목록에 등록해야 한다.
++        uiManager?.Open<SettingsPanel>();
++    }
++
++    // 로비/GAME_START 담당 연결 지점:
++    // 서버가 playerId와 team 목록을 GAME_START에 포함하면 게임 시작 전에 이 메서드로 등록한다.
++    public void RegisterPlayerTeam(string playerId, int team)
++    {
++        if (string.IsNullOrEmpty(playerId) || team < 0 || team >= teamCount) return;
++        playerTeams[playerId] = team;
++    }
++
++    private void OnRemotePlayerDisconnected(string playerId, int graceSec)
++    {
++        if (playerTeams.TryGetValue(playerId, out int team))
++            hud?.SetPlayerConnectionState(team, PlayerStatusView.ConnectionState.Reconnecting, graceSec);
++        hud?.SetInstruction("연결이 끊긴 플레이어를 기다리는 중입니다.");
++    }
++
++    private void OnRemotePlayerReconnected(string playerId)
++    {
++        if (playerTeams.TryGetValue(playerId, out int team))
++            hud?.SetPlayerConnectionState(team, PlayerStatusView.ConnectionState.Connected);
++        hud?.SetInstruction("플레이어가 재접속했습니다.");
++    }
++
++    private void OnRemotePlayerRemoved(string playerId, int team)
++    {
++        hud?.SetPlayerConnectionState(team, PlayerStatusView.ConnectionState.Removed);
++        selectionController?.Clear();
++        foreach (PieceView view in pieceViews)
++            if (view != null && view.Team == team) view.SetWorldVisible(false);
++
++        // Core/Turn 담당 연결 지점:
++        // BoardState.RemoveTeam(team)과 TurnManager의 제거 팀 건너뛰기가 적용된 뒤
++        // 서버 TURN_CHANGED를 받아 다음 차례를 확정한다. 클라이언트가 임의로 턴을 계산하지 않는다.
++        hud?.SetInstruction($"플레이어 {team + 1}이 게임에서 나갔습니다.");
++    }
++
++    private void OnAutomatedMoveApplied(int team)
++    {
++        hud?.SetInstruction($"플레이어 {team + 1} 자동 진행 중");
++    }
++
++    private void OnConnectionAvailabilityChanged(bool connected)
++    {
++        hud?.SetConnectionAvailable(connected);
++        if (!connected)
++        {
++            selectionController?.Clear();
++            hud?.SetTimerRunning(false);
++            hud?.SetInstruction("서버 재접속을 기다리는 중입니다.");
++            return;
++        }
++
++        hud?.SetTimerRunning(currentState == GameFlowState.Throw || currentState == GameFlowState.Move);
++        hud?.SetInstruction("서버에 다시 연결되었습니다.");
++        RefreshSessionInteraction();
++    }
++
+     private void OnAugmentChoices(int team, IReadOnlyList<string> ids)
+     {
+         augmentSelectionTeam = team;
+diff --git a/Assets/Scripts/Flow/LobbyController.cs b/Assets/Scripts/Flow/LobbyController.cs
+index 22fdce5..2986637 100644
+--- a/Assets/Scripts/Flow/LobbyController.cs
++++ b/Assets/Scripts/Flow/LobbyController.cs
+@@ -47,6 +47,7 @@ public class LobbyController : MonoBehaviour
+ 
+         lobbyPanel.CreateRoomRequested += OnCreateRoomRequested;
+         lobbyPanel.JoinRoomRequested += OnJoinRoomRequested;
++        lobbyPanel.SettingsRequested += OnSettingsRequested;
+         roomPanel.ReadyRequested += OnReadyRequested;
+         roomPanel.LeaveRequested += OnLeaveRequested;
+     }
+@@ -57,6 +58,7 @@ public class LobbyController : MonoBehaviour
+         {
+             lobbyPanel.CreateRoomRequested -= OnCreateRoomRequested;
+             lobbyPanel.JoinRoomRequested -= OnJoinRoomRequested;
++            lobbyPanel.SettingsRequested -= OnSettingsRequested;
+         }
+         if (roomPanel != null)
+         {
+@@ -65,6 +67,12 @@ public class LobbyController : MonoBehaviour
+         }
+     }
+ 
++    private void OnSettingsRequested()
++    {
++        // UI 조립 담당 확인: SettingsPanel 프리팹을 로비 UIManager에 등록하고 settingsButton을 연결한다.
++        uiManager?.Open<SettingsPanel>();
++    }
++
+     private void OnCreateRoomRequested(string nickname)
+     {
+         lobbyPanel.SetBusy(true);
+diff --git a/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs b/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
+index f089da4..9e13393 100644
+--- a/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
++++ b/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
+@@ -1,4 +1,5 @@
+ using System;
++using System.Collections.Generic;
+ using UnityEngine;
+ using UnityEngine.SceneManagement;
+ 
+@@ -21,6 +22,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+     private string pendingRoomCode;
+     private string pendingNickname;
+     private bool leaveRequested;
++    private readonly Dictionary<string, int> playerTeams = new();
+ 
+     private void Awake()
+     {
+@@ -80,6 +82,7 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+     {
+         BindLobbyController();
++        RegisterGamePlayerTeams();
+     }
+ 
+     private void BindLobbyController()
+@@ -223,8 +226,9 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+             switch (envelope.type)
+             {
+                 case MessageType.ROOM_STATE:
+-                    lobbyController?.ReceiveRoomState(
+-                        MessageSerializer.ReadPayload<RoomStateMessage>(envelope));
++                    RoomStateMessage room = MessageSerializer.ReadPayload<RoomStateMessage>(envelope);
++                    CachePlayerTeams(room);
++                    lobbyController?.ReceiveRoomState(room);
+                     break;
+ 
+                 case MessageType.GAME_START:
+@@ -264,6 +268,32 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+         lobbyController?.ReceiveError("서버 연결이 끊어졌습니다.");
+     }
+ 
++    private void CachePlayerTeams(RoomStateMessage room)
++    {
++        playerTeams.Clear();
++        if (room?.players == null) return;
++
++        foreach (RoomPlayer player in room.players)
++        {
++            if (player == null || string.IsNullOrEmpty(player.playerId) || player.team < 0) continue;
++            playerTeams[player.playerId] = player.team;
++        }
++    }
++
++    private void RegisterGamePlayerTeams()
++    {
++        GameFlowController flow = FindFirstObjectByType<GameFlowController>();
++        if (flow == null) return;
++
++        foreach (KeyValuePair<string, int> playerTeam in playerTeams)
++            flow.RegisterPlayerTeam(playerTeam.Key, playerTeam.Value);
++
++        // 서버 담당 확인 사항:
++        // 재접속으로 바로 게임 씬에 진입하는 경우 ROOM_STATE를 다시 받지 못할 수 있다.
++        // 향후 GAME_START 또는 재접속 snapshot에도 playerId/team 목록을 포함하면
++        // 같은 RegisterPlayerTeam 경로로 등록해야 한다.
++    }
++
+     private static string ToUserMessage(Exception exception)
+     {
+         return exception is ApiException apiException
+diff --git a/Assets/Scripts/Network/RemoteGameSession.cs b/Assets/Scripts/Network/RemoteGameSession.cs
+index f4e6854..361aa3e 100644
+--- a/Assets/Scripts/Network/RemoteGameSession.cs
++++ b/Assets/Scripts/Network/RemoteGameSession.cs
+@@ -39,6 +39,11 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
+     public event Action<int, IAugment> AugmentSelected;
+     public event Action<int> GameEnded;
+     public event Action<string> RequestRejected;
++    public event Action<string, int> PlayerDisconnected;
++    public event Action<string> PlayerReconnected;
++    public event Action<string, int> PlayerRemoved;
++    public event Action<int> AutomatedMoveApplied;
++    public event Action<bool> ConnectionAvailabilityChanged;
+ 
+     public RemoteGameSession(
+         WebSocketClient socket,
+@@ -56,6 +61,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
+         this.setup = setup ?? throw new ArgumentNullException(nameof(setup));
+ 
+         socket.MessageReceived += OnMessageReceived;
++        socket.Connected += OnConnected;
+         socket.Error += OnSocketError;
+         socket.Disconnected += OnDisconnected;
+     }
+@@ -63,6 +69,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
+     public void Dispose()
+     {
+         socket.MessageReceived -= OnMessageReceived;
++        socket.Connected -= OnConnected;
+         socket.Error -= OnSocketError;
+         socket.Disconnected -= OnDisconnected;
+     }
+@@ -168,6 +175,15 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
+                 case MessageType.GAME_ENDED:
+                     ApplyGameEnded(MessageSerializer.ReadPayload<GameEndedMessage>(envelope));
+                     break;
++                case MessageType.PLAYER_DISCONNECTED:
++                    ApplyPlayerDisconnected(MessageSerializer.ReadPayload<PlayerDisconnectedMessage>(envelope));
++                    break;
++                case MessageType.PLAYER_RECONNECTED:
++                    ApplyPlayerReconnected(MessageSerializer.ReadPayload<PlayerReconnectedMessage>(envelope));
++                    break;
++                // 서버/프로토콜 담당 연결 지점:
++                // MessageType.PLAYER_REMOVED와 PlayerRemovedMessage(playerId, team, reason)가 추가되면
++                // 여기서 PlayerRemoved?.Invoke(message.playerId, message.team)를 호출한다.
+                 case MessageType.ERROR:
+                     ErrorMessage error = MessageSerializer.ReadPayload<ErrorMessage>(envelope);
+                     commandPending = false;
+@@ -240,6 +256,7 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
+             }
+         }
+ 
++        if (message.team != setup.localTeam) AutomatedMoveApplied?.Invoke(message.team);
+         Moved?.Invoke(result);
+         ReportStateHash(sequence, message.stateHash);
+     }
+@@ -276,6 +293,20 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
+         GameEnded?.Invoke(message.winnerTeam);
+     }
+ 
++    private void ApplyPlayerDisconnected(PlayerDisconnectedMessage message)
++    {
++        if (message == null || string.IsNullOrEmpty(message.playerId))
++            throw new InvalidOperationException("PLAYER_DISCONNECTED 내용이 없습니다.");
++        PlayerDisconnected?.Invoke(message.playerId, Math.Max(0, message.graceSec));
++    }
++
++    private void ApplyPlayerReconnected(PlayerReconnectedMessage message)
++    {
++        if (message == null || string.IsNullOrEmpty(message.playerId))
++            throw new InvalidOperationException("PLAYER_RECONNECTED 내용이 없습니다.");
++        PlayerReconnected?.Invoke(message.playerId);
++    }
++
+     private void ReportStateHash(long sequence, string serverHash)
+     {
+         string localHash = StateHasher.HashHex(gameState, turnManager);
+@@ -381,10 +412,16 @@ public sealed class RemoteGameSession : IGameSession, IDisposable
+         Reject($"서버 연결 오류: {message}");
+     }
+ 
++    private void OnConnected()
++    {
++        ConnectionAvailabilityChanged?.Invoke(true);
++    }
++
+     private void OnDisconnected(bool byUser)
+     {
+         commandPending = false;
+         ClearPendingMove();
++        ConnectionAvailabilityChanged?.Invoke(false);
+         if (!byUser) Reject("서버 연결이 끊어졌습니다.");
+     }
+ 
+diff --git a/Assets/Scripts/Presentation/UI/GameHudPanel.cs b/Assets/Scripts/Presentation/UI/GameHudPanel.cs
+index e7a2980..073b62a 100644
+--- a/Assets/Scripts/Presentation/UI/GameHudPanel.cs
++++ b/Assets/Scripts/Presentation/UI/GameHudPanel.cs
+@@ -15,6 +15,7 @@ public class GameHudPanel : UIBase
+     [SerializeField] private TMP_Text instructionText;
+     [SerializeField] private Button throwButton;
+     [SerializeField] private Button rethrowButton;
++    [SerializeField] private Button settingsButton;
+ 
+     [Header("P0 HUD")]
+     [SerializeField] private RectTransform storedResultRoot;
+@@ -50,6 +51,7 @@ public class GameHudPanel : UIBase
+     public event Action ThrowClicked;
+     public event Action RethrowClicked;
+     public event Action<int, int> WaitingPieceClicked;
++    public event Action SettingsClicked;
+ 
+     public override void Init()
+     {
+@@ -94,8 +96,12 @@ public class GameHudPanel : UIBase
+             rethrowButton.onClick.RemoveListener(RaiseRethrowClicked);
+             rethrowButton.onClick.AddListener(RaiseRethrowClicked);
+         }
++        settingsButton?.onClick.AddListener(RaiseSettingsClicked);
+     }
+ 
++    private void OnDestroy() => settingsButton?.onClick.RemoveListener(RaiseSettingsClicked);
++    private void RaiseSettingsClicked() => SettingsClicked?.Invoke();
++
+     private void RaiseThrowClicked()
+     {
+         if (CanSendCommand()) ThrowClicked?.Invoke();
+@@ -175,6 +181,14 @@ public class GameHudPanel : UIBase
+         playerView?.SetWaitingPieceAvailable(team, slotIndex, available);
+     }
+ 
++    public void SetPlayerConnectionState(
++        int team,
++        PlayerStatusView.ConnectionState state,
++        int graceSec = 0)
++    {
++        playerView?.SetConnectionState(team, state, graceSec);
++    }
++
+     public void MarkResultPending(int resultIndex, int team)
+     {
+         storedResultView?.MarkPending(resultIndex, team);
+diff --git a/Assets/Scripts/Presentation/UI/PlayerStatusView.cs b/Assets/Scripts/Presentation/UI/PlayerStatusView.cs
+index 419f562..f840ecc 100644
+--- a/Assets/Scripts/Presentation/UI/PlayerStatusView.cs
++++ b/Assets/Scripts/Presentation/UI/PlayerStatusView.cs
+@@ -10,6 +10,7 @@ using UnityEngine.UI;
+ /// </summary>
+ public sealed class PlayerStatusView : MonoBehaviour
+ {
++    public enum ConnectionState { Connected, Reconnecting, Removed }
+     private const int MaxTeamCount = 4;
+     private const int MaxPieceSlotCount = 4;
+     private const int AugmentSlotCount = 3;
+@@ -19,6 +20,20 @@ public sealed class PlayerStatusView : MonoBehaviour
+     private Action<int, int> waitingPieceClicked;
+     private IReadOnlyList<Sprite> teamPieceSprites;
+     private IReadOnlyList<Sprite> teamPieceGlowSprites;
++    private readonly Dictionary<int, float> reconnectDeadlines = new();
++
++    private void Update()
++    {
++        if (reconnectDeadlines.Count == 0) return;
++        foreach (KeyValuePair<int, float> pair in reconnectDeadlines)
++        {
++            TMP_Text label = GetConnectionLabel(pair.Key);
++            if (label == null) continue;
++            int seconds = Mathf.Max(0, Mathf.CeilToInt(pair.Value - Time.unscaledTime));
++            if (seconds > 0) label.SetText("재접속 대기 {0}초", seconds);
++            else label.text = "재접속 처리 중";
++        }
++    }
+ 
+     public void Configure(
+         int teamCount,
+@@ -179,6 +194,67 @@ public sealed class PlayerStatusView : MonoBehaviour
+         glow.gameObject.SetActive(available && image.sprite != null);
+     }
+ 
++    public void SetConnectionState(int team, ConnectionState state, int graceSec = 0)
++    {
++        TMP_Text label = GetConnectionLabel(team);
++        if (label == null) return;
++
++        reconnectDeadlines.Remove(team);
++        switch (state)
++        {
++            case ConnectionState.Connected:
++                label.gameObject.SetActive(false);
++                break;
++            case ConnectionState.Reconnecting:
++                reconnectDeadlines[team] = Time.unscaledTime + Mathf.Max(0, graceSec);
++                label.text = $"재접속 대기 {Mathf.Max(0, graceSec)}초";
++                label.color = new Color32(181, 94, 18, 255);
++                label.gameObject.SetActive(true);
++                break;
++            case ConnectionState.Removed:
++                label.text = "탈주";
++                label.color = new Color32(150, 140, 125, 255);
++                label.gameObject.SetActive(true);
++                SetTeamPiecesVisible(team, false);
++                break;
++        }
++    }
++
++    private TMP_Text GetConnectionLabel(int team)
++    {
++        Transform panel = FindPanel(team);
++        if (panel == null) return null;
++        TMP_Text existing = panel.Find("ConnectionStatus")?.GetComponent<TMP_Text>();
++        if (existing != null) return existing;
++
++        GameObject labelObject = new("ConnectionStatus", typeof(RectTransform), typeof(TextMeshProUGUI));
++        labelObject.transform.SetParent(panel, false);
++        RectTransform rect = labelObject.GetComponent<RectTransform>();
++        rect.anchorMin = rect.anchorMax = new Vector2(1f, 1f);
++        rect.pivot = new Vector2(1f, 1f);
++        rect.anchoredPosition = new Vector2(-18f, -58f);
++        rect.sizeDelta = new Vector2(170f, 30f);
++        TMP_Text label = labelObject.GetComponent<TMP_Text>();
++        label.alignment = TextAlignmentOptions.Right;
++        label.fontSize = 18f;
++        label.fontStyle = FontStyles.Bold;
++        label.raycastTarget = false;
++        return label;
++    }
++
++    private void SetTeamPiecesVisible(int team, bool visible)
++    {
++        Transform panel = FindPanel(team);
++        if (panel == null) return;
++        for (int slot = 0; slot < MaxPieceSlotCount; slot++)
++        {
++            Transform waiting = panel.Find($"PieceSlot_{slot}");
++            Transform finished = panel.Find($"FinishSlot_{slot}");
++            if (waiting != null) waiting.gameObject.SetActive(visible && slot < pieceSlotCount);
++            if (finished != null) finished.gameObject.SetActive(visible && slot < pieceSlotCount);
++        }
++    }
++
+     private Transform FindPanel(int team)
+     {
+         return team switch

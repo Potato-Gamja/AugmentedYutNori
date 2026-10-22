@@ -1,0 +1,92 @@
+From commit: 7f82be95979b065c06c240cec9e6b149f1b6a117
+Contributor: Potato-Gamja (Gamja)
+Subject: [fix] 게임 시작 씬과 로컬 플레이어 팀 배정 수정
+Original: https://github.com/Potato-Gamja/AugmentedYutNori/commit/7f82be95979b065c06c240cec9e6b149f1b6a117
+
+diff --git a/Assets/Scripts/Flow/LobbyController.cs b/Assets/Scripts/Flow/LobbyController.cs
+index 59a5130..40924e4 100644
+--- a/Assets/Scripts/Flow/LobbyController.cs
++++ b/Assets/Scripts/Flow/LobbyController.cs
+@@ -9,7 +9,7 @@ using UnityEngine.SceneManagement;
+ public class LobbyController : MonoBehaviour
+ {
+     [SerializeField] private UIManager uiManager;
+-    [SerializeField] private string gameSceneName = "LSU_Game_UI";
++    [SerializeField] private string gameSceneName = "Game";
+ 
+     private LobbyPanel lobbyPanel;
+     private MainMenuPanel mainMenuPanel;
+diff --git a/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs b/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
+index 217fcbf..fa98934 100644
+--- a/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
++++ b/Assets/Scripts/Flow/LobbyNetworkCoordinator.cs
+@@ -285,15 +285,6 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+         return playerIdentity.HasToken && (allowGuestLogin || playerIdentity.IsGoogleLogin);
+     }
+ 
+-    // 뽑기 1회. 서버 응답의 보유 골드를 PlayerIdentity 캐시에 반영한다
+-    public async System.Threading.Tasks.Task<GachaResultResponse> DrawGachaAsync()
+-    {
+-        await silentLoginTask;
+-        GachaResultResponse response = await gachaApi.DrawAsync();
+-        playerIdentity.ApplyGold(response.gold);
+-        return response;
+-    }
+-
+     private void OnUnauthorized()
+     {
+         playerIdentity.Clear();
+@@ -406,10 +397,18 @@ public class LobbyNetworkCoordinator : MonoBehaviour
+                     break;
+ 
+                 case MessageType.GAME_START:
++                    GameStartMessage started = MessageSerializer.ReadPayload<GameStartMessage>(envelope);
++                    if (started == null)
++                        throw new InvalidOperationException("GAME_START 내용이 비어 있습니다.");
++                    if (!playerTeams.TryGetValue(LocalPlayerId, out int localTeam) ||
++                        localTeam < 0 || localTeam >= started.teamCount)
++                        throw new InvalidOperationException("내 팀 정보를 찾을 수 없습니다. 대기방에 다시 참가해 주세요.");
++
++                    // 서버 공통 GameSetup에는 localTeam이 없으므로 최신 ROOM_STATE의 배정을 사용한다.
++                    started.localTeam = localTeam;
+                     rewardAppliedThisGame = false;
+                     GameInstaller.PreparePlayerProfiles(playerProfiles);
+-                    lobbyController?.ReceiveGameStart(
+-                        MessageSerializer.ReadPayload<GameStartMessage>(envelope));
++                    lobbyController?.ReceiveGameStart(started);
+                     break;
+ 
+                 case MessageType.GAME_ENDED:
+diff --git a/Assets/Scripts/Network/PlayerIdentity.cs b/Assets/Scripts/Network/PlayerIdentity.cs
+index 7863e16..b755a94 100644
+--- a/Assets/Scripts/Network/PlayerIdentity.cs
++++ b/Assets/Scripts/Network/PlayerIdentity.cs
+@@ -26,7 +26,6 @@ public class PlayerIdentity
+ 
+     public bool HasToken => !string.IsNullOrEmpty(Token);
+ 
+-    // 이번 실행에서 서버 로그인으로 받은 토큰. 로비 자동 재로그인이 같은 토큰을 다시 확인하지 않도록 한다
+     private static string verifiedTokenThisRun;
+ 
+     public static bool IsVerifiedThisRun(string token) =>
+@@ -103,7 +102,6 @@ public class PlayerIdentity
+         return 0;
+     }
+ 
+-    // 서버가 알려 준 보유 골드로 맞춘다 (뽑기 응답 등)
+     public void ApplyGold(int gold)
+     {
+         SetGoldInternal(gold);
+diff --git a/Assets/Scripts/Presentation/Yut/YutThrowView.cs b/Assets/Scripts/Presentation/Yut/YutThrowView.cs
+index 00c10f6..c5230cd 100644
+--- a/Assets/Scripts/Presentation/Yut/YutThrowView.cs
++++ b/Assets/Scripts/Presentation/Yut/YutThrowView.cs
+@@ -25,8 +25,6 @@ public class YutThrowView : MonoBehaviour
+     // 윷가락 결과를 보여준다. 현재 게임 HUD의 효과음은 YutResultRevealView에서 재생한다.
+     public void ShowSticks(bool[] sticks)
+     {
+-        SoundManager.Play(SoundId.YutThrow);
+-
+         for (int i = 0; i < stickImages.Length; i++)
+         {
+             bool hasStick = i < sticks.Length; //윷 개수 변경되면 유동적으로 체크하도록 변경

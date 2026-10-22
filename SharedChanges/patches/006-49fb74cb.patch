@@ -1,0 +1,22 @@
+From commit: 49fb74cbc7e50db8c630574b1d7b37bae70a5b01
+Contributor: Potato-Gamja (Gamja)
+Subject: Remove merge conflict markers from GameFlowController
+Original: https://github.com/Potato-Gamja/AugmentedYutNori/commit/49fb74cbc7e50db8c630574b1d7b37bae70a5b01
+
+diff --git a/Assets/Scripts/Flow/GameFlowController.cs b/Assets/Scripts/Flow/GameFlowController.cs
+index d34d76e..ffdb009 100644
+--- a/Assets/Scripts/Flow/GameFlowController.cs
++++ b/Assets/Scripts/Flow/GameFlowController.cs
+@@ -212,11 +212,9 @@ public class GameFlowController : MonoBehaviour
+             AugmentSelectPanel panel = uiManager.Get<AugmentSelectPanel>();
+             panel.Setup(augmentPool, currentTeam, OnAugmentSelected);
+             uiManager.Open<AugmentSelectPanel>();
+-//<<<<<<< HEAD
++            
+             hud?.SetThrowInteractable(false);
+             hud?.SetRethrowVisible(false);
+-//=======
+-//>>>>>>> dev
+         }
+     }
+ 

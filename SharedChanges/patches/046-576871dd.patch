@@ -1,0 +1,33 @@
+From commit: 576871ddff0a455ba4ad54fa475af1c28a68a576
+Contributor: Potato-Gamja (Gamja)
+Subject: [fix] 미설정 프로필 아이콘 통일 및 인게임 프레임 표시 수정
+Original: https://github.com/Potato-Gamja/AugmentedYutNori/commit/576871ddff0a455ba4ad54fa475af1c28a68a576
+
+diff --git a/Assets/Scripts/Presentation/UI/PlayerStatusView.cs b/Assets/Scripts/Presentation/UI/PlayerStatusView.cs
+index 3dcf305..d4d9a18 100644
+--- a/Assets/Scripts/Presentation/UI/PlayerStatusView.cs
++++ b/Assets/Scripts/Presentation/UI/PlayerStatusView.cs
+@@ -575,10 +575,22 @@ public sealed class PlayerStatusView : MonoBehaviour
+             headerLabel.text = DisplayName(team);
+ 
+         Image icon = (panel.Find("Header/ProfileIcon") ?? panel.Find("ProfileIcon"))?.GetComponent<Image>();
+-        if (icon == null) return;
++        Transform frame = panel.Find("Header/ProfileFrame") ?? panel.Find("ProfileFrame");
++        if (icon == null)
++        {
++            if (frame != null) frame.gameObject.SetActive(false);
++            return;
++        }
+         icon.sprite = PlayerProfileIconResolver.Resolve(profileIcons, profile?.iconId, team);
+         icon.enabled = team < activeTeamCount && icon.sprite != null;
+         icon.preserveAspect = true;
++        if (frame != null)
++        {
++            bool visible = icon.enabled && icon.gameObject.activeSelf;
++            Image frameImage = frame.GetComponent<Image>();
++            if (frameImage != null) frameImage.enabled = visible;
++            frame.gameObject.SetActive(visible);
++        }
+     }
+ 
+     private PlayerDisplayInfo FindProfile(int team)
